@@ -22,6 +22,7 @@ class ConsoleTest(unittest.TestCase):
             ("enable", "Password:"),
             ("enable-secret", "\r\nswitch#"),
             ("skip-page-display", "skip-page-display\r\nswitch#"),
+            ("show hardware", "show hardware\r\nSerial #"),
             ("show version", "show version\r\nSW: Version 09.0.10kT213\r\nswitch#"),
             ("bad command", "bad command\r\n% Invalid input: private-value\r\nswitch#"),
         ]
@@ -39,6 +40,11 @@ class ConsoleTest(unittest.TestCase):
                     # Deliver a split prompt to exercise serial stream framing.
                     os.write(master, reply[:-1])
                     os.write(master, reply[-1:])
+                    if line == b"show hardware":
+                        # A read boundary after '#' in ordinary output must not
+                        # terminate the response or shift the following reply.
+                        stop.wait(0.02)
+                        os.write(master, b":ABC123\r\nswitch#")
 
         with patch.dict(os.environ, {
             "FASTIRON_USERNAME": "operator",
@@ -50,6 +56,7 @@ class ConsoleTest(unittest.TestCase):
                 worker.start()
                 try:
                     console.login()
+                    self.assertEqual(console.command("show hardware"), "Serial #:ABC123")
                     self.assertEqual(console.command("show version"), "SW: Version 09.0.10kT213")
                     with self.assertRaisesRegex(ConsoleError, "batch stopped"):
                         console.command("bad command")

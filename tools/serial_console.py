@@ -63,6 +63,7 @@ class Console:
         self.debug = debug
         self.fd = None
         self.settings = None
+        self.prompt_name = None
 
     def __enter__(self):
         deadline = time.monotonic() + self.wait
@@ -136,6 +137,9 @@ class Console:
             prompts = list(PROMPT.finditer(output))
             if prompts and prompts[-1].end() == len(output):
                 prompt = prompts[-1].group(1).strip()
+                name = re.sub(r"\([^()]*\)$", "", prompt[:-1]).strip()
+                if self.prompt_name is not None and name != self.prompt_name:
+                    continue
                 if "boot" in prompt.lower():
                     raise ConsoleError("switch is at a boot-monitor prompt; no configuration commands were sent")
                 return prompt, output[:prompts[-1].start()]
@@ -144,6 +148,13 @@ class Console:
         raise ConsoleError(f"timed out waiting for a complete switch prompt ({len(data)} bytes received)")
 
     def login(self):
+        # Discard output left by an interrupted command before establishing a
+        # fresh prompt. Never associate that output with a new command batch.
+        deadline = time.monotonic() + self.wait
+        while select.select([self.fd], [], [], 0.1)[0]:
+            os.read(self.fd, 65536)
+            if time.monotonic() >= deadline:
+                raise ConsoleError("console did not become quiet before login")
         self.send("")
         deadline = time.monotonic() + self.wait
         attempts = 0
@@ -163,6 +174,7 @@ class Console:
                     raise ConsoleError("console login requires FASTIRON_PASSWORD")
                 self.send(password)
             elif prompt.endswith(">"):
+                self.prompt_name = prompt[:-1].strip()
                 self.send("enable")
                 prompt, _ = self.read(self.timeout)
                 if prompt == "password":
@@ -176,6 +188,7 @@ class Console:
                 self.command("skip-page-display")
                 return
             else:
+                self.prompt_name = re.sub(r"\([^()]*\)$", "", prompt[:-1]).strip()
                 if "(" in prompt:
                     self.command("end")
                 self.command("skip-page-display")

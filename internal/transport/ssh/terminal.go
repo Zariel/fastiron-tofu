@@ -19,9 +19,10 @@ type chunk struct {
 	err  error
 }
 type terminal struct {
-	input  io.Writer
-	chunks chan chunk
-	done   chan struct{}
+	input      io.Writer
+	chunks     chan chunk
+	done       chan struct{}
+	promptName string
 }
 
 func newTerminal(output io.Reader, input io.Writer) *terminal {
@@ -69,7 +70,14 @@ func (t *terminal) read(ctx context.Context, password bool) (string, string, err
 			if len(matches) > 0 {
 				m := matches[len(matches)-1]
 				if m[1] == len(output) {
-					return output[:m[0]], strings.TrimSpace(output[m[2]:m[3]]), nil
+					prompt := strings.TrimSpace(output[m[2]:m[3]])
+					name, _, _ := strings.Cut(prompt[:len(prompt)-1], "(")
+					// Ordinary output can end a transport chunk at a '#' character.
+					// After login, accept only this device's prompt in any CLI mode.
+					if t.promptName == "" || name == t.promptName {
+						t.promptName = name
+						return output[:m[0]], prompt, nil
+					}
 				}
 			}
 			if c.err != nil {

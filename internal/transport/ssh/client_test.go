@@ -86,6 +86,12 @@ func switchServer(t *testing.T) (Config, <-chan string) {
 								io.WriteString(channel, "\r\nSSH@switch#")
 							case "show version":
 								io.WriteString(channel, "show version\r\nSW: Version 09.0.10kT213\r\nSSH@switch#")
+							case "configure terminal":
+								io.WriteString(channel, "configure terminal\r\nSSH@switch(config)#")
+							case "show hardware":
+								io.WriteString(channel, "show hardware\r\nSerial #")
+								time.Sleep(20 * time.Millisecond)
+								io.WriteString(channel, ":ABC123\r\nSSH@switch(config)#")
 							case "bad command":
 								io.WriteString(channel, "bad command\r\n% Invalid input: secret-marker\r\nSSH@switch#")
 							case "stall":
@@ -133,6 +139,22 @@ func TestShell(t *testing.T) {
 		if got := <-commands; got != want {
 			t.Fatalf("command %q, want %q", got, want)
 		}
+	}
+}
+
+func TestPromptFraming(t *testing.T) {
+	cfg, _ := switchServer(t)
+	c, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := c.Run(context.Background(), true, "configure terminal", "show hardware", "end", "show version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 || got[0] != "" || got[1] != "Serial #:ABC123" || got[2] != "" || got[3] != "SW: Version 09.0.10kT213" {
+		t.Fatalf("responses lost their command boundaries: %#v", got)
 	}
 }
 
