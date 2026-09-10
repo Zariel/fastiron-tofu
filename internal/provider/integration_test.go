@@ -45,6 +45,7 @@ type testSwitch struct {
 	sshAddress, knownHosts          string
 	dns                             map[string]bool
 	lldp, lldpPort                  bool
+	poe                             bool
 }
 
 func newSwitch(t *testing.T) *testSwitch {
@@ -53,6 +54,7 @@ func newSwitch(t *testing.T) *testSwitch {
 	s.startupEthernet = maps.Clone(s.ethernet)
 	s.dns = map[string]bool{}
 	s.lldp, s.lldpPort = true, true
+	s.poe = true
 	s.server = httptest.NewTLSServer(http.HandlerFunc(s.restconf))
 	t.Cleanup(s.server.Close)
 	_, key, err := ed25519.GenerateKey(rand.Reader)
@@ -190,6 +192,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
+	if strings.HasSuffix(r.URL.EscapedPath(), "/ethernet/poe") {
+		s.poeREST(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/restconf/data/lldp") {
 		s.lldpREST(w, r)
 		return
@@ -216,7 +222,7 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/restconf/data/interfaces" {
 		if r.Method == "GET" {
-			json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet}}}})
+			json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet, "openconfig-if-ethernet:ethernet": map[string]any{"icx-openconfig-if-poe-aug:poe": map[string]any{"config": map[string]any{"enabled": s.poe}, "state": map[string]any{"power-used": "7000.0", "power-class": 4}}}}}}})
 			return
 		}
 		if r.Method == "PATCH" {
@@ -659,5 +665,51 @@ resource "fastiron_lldp_interface" "test" { interface = "ethernet 1/1/2" }
 	s.mu.Unlock()
 	if !global || !port {
 		t.Fatal("LLDP destroy did not reset to enabled")
+	}
+	write("poe.tf", `resource "fastiron_interface_poe" "test" {
+ interface = "ethernet 1/1/2"
+ enabled = false
+}
+data "fastiron_poe_interfaces" "test" { depends_on = [fastiron_interface_poe.test] }
+output "poe" { value = data.fastiron_poe_interfaces.test.interfaces }
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	if got := strings.TrimSpace(run(0, "output", "-json", "poe")); got != `{"ethernet 1/1/2":{"enabled":false,"power_class":4,"power_used_milliwatts":7000}}` {
+		t.Fatalf("PoE collection: %s", got)
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "state", "rm", "fastiron_interface_poe.test")
+	run(0, "import", "-no-color", "fastiron_interface_poe.test", "poe|ethernet 1/1/2")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.poe = true
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	poe := s.poe
+	s.mu.Unlock()
+	if poe {
+		t.Fatal("PoE drift was not corrected")
+	}
+	write("poe.tf", `resource "fastiron_interface_poe" "test" { interface = "ethernet 1/1/2" }
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	poe = s.poe
+	s.mu.Unlock()
+	if !poe {
+		t.Fatal("omitted PoE enable did not restore default")
+	}
+	s.mu.Lock()
+	s.poe = false
+	s.mu.Unlock()
+	write("poe.tf", "")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	poe = s.poe
+	s.mu.Unlock()
+	if !poe {
+		t.Fatal("PoE destroy did not restore default")
 	}
 }

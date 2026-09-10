@@ -22,9 +22,23 @@ func (p *fastironProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 }
 
 func (p *fastironProvider) Resources(context.Context) []func() resource.Resource {
-	return []func() resource.Resource{func() resource.Resource { return &saveResource{} }, func() resource.Resource { return &vlanResource{} }, func() resource.Resource { return &ethernetResource{} }, func() resource.Resource { return &membershipResource{} }, func() resource.Resource { return &dnsResource{} }, func() resource.Resource { return &lldpResource{} }, func() resource.Resource { return &lldpResource{perInterface: true} }}
+	return []func() resource.Resource{
+		func() resource.Resource { return &saveResource{} },
+		func() resource.Resource { return &vlanResource{} },
+		func() resource.Resource { return &ethernetResource{} },
+		func() resource.Resource { return &membershipResource{} },
+		func() resource.Resource { return &dnsResource{} },
+		func() resource.Resource { return &lldpResource{} },
+		func() resource.Resource { return &lldpResource{perInterface: true} },
+		func() resource.Resource { return &poeResource{} },
+	}
 }
 
 func (p *fastironProvider) DataSources(context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{func() datasource.DataSource { return &capabilitiesDataSource{} }, func() datasource.DataSource { return &dnsDataSource{} }, func() datasource.DataSource { return &lldpDataSource{} }}
+	return []func() datasource.DataSource{
+		func() datasource.DataSource { return &capabilitiesDataSource{} },
+		func() datasource.DataSource { return &dnsDataSource{} },
+		func() datasource.DataSource { return &lldpDataSource{} },
+		func() datasource.DataSource { return &poeDataSource{} },
+	}
 }
