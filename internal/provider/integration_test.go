@@ -32,6 +32,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
+	stp *stpSwitch
+
 	ospf *ospfSwitch
 
 	routes *routeSwitch
@@ -172,6 +174,10 @@ func (s *testSwitch) command(command string) string {
 				s.ospf.startup[id] = slices.Clone(names)
 			}
 		}
+		if s.stp != nil {
+			unchanged = unchanged && maps.Equal(s.stp.running, s.stp.startup)
+			s.stp.startup = maps.Clone(s.stp.running)
+		}
 		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
@@ -182,6 +188,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.stp != nil {
+			text = strings.TrimSuffix(text, "end") + stpConfiguration(s.stp.running, s.stp.extra) + "end"
+		}
 		if s.ospf != nil {
 			text = strings.TrimSuffix(text, "end") + ospfConfiguration(s.ospf.areas, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"
 		}
@@ -193,6 +202,9 @@ func (s *testSwitch) command(command string) string {
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.stp != nil {
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + stpConfiguration(s.stp.startup, s.stp.extra) + "end"
+		}
 		if s.ospf != nil {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + ospfConfiguration(s.ospf.startup, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"
 		}
@@ -265,6 +277,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.ospf != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/network-instances/network-instance=default-vrf/protocols") {
 		s.ospf.rest(w, r)
+		return
+	}
+	if s.stp != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/stp") {
+		s.stp.rest(w, r)
 		return
 	}
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
