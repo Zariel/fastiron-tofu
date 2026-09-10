@@ -44,6 +44,7 @@ type testSwitch struct {
 	server                          *httptest.Server
 	sshAddress, knownHosts          string
 	dns                             map[string]bool
+	lldp, lldpPort                  bool
 }
 
 func newSwitch(t *testing.T) *testSwitch {
@@ -51,6 +52,7 @@ func newSwitch(t *testing.T) *testSwitch {
 	s := &testSwitch{memberships: map[int]string{}, running: map[int]string{}, startup: map[int]string{}, ethernet: map[string]any{"name": "ethernet 1/1/2", "description": "manual port", "enabled": true, "mtu": float64(9000)}}
 	s.startupEthernet = maps.Clone(s.ethernet)
 	s.dns = map[string]bool{}
+	s.lldp, s.lldpPort = true, true
 	s.server = httptest.NewTLSServer(http.HandlerFunc(s.restconf))
 	t.Cleanup(s.server.Close)
 	_, key, err := ed25519.GenerateKey(rand.Reader)
@@ -188,6 +190,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
+	if strings.HasPrefix(r.URL.Path, "/restconf/data/lldp") {
+		s.lldpREST(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/restconf/data/system/dns") {
 		s.dnsREST(w, r)
 		return
@@ -603,4 +609,55 @@ output "dns" { value = data.fastiron_ip_dns_servers.test.addresses }
 		t.Fatal("DNS deletion changed an unrelated server")
 	}
 	s.mu.Unlock()
+	write("lldp.tf", `resource "fastiron_lldp" "test" { enabled = false }
+resource "fastiron_lldp_interface" "test" {
+ interface = "ethernet 1/1/2"
+ enabled = false
+}
+data "fastiron_lldp_interfaces" "test" { depends_on = [fastiron_lldp_interface.test] }
+output "lldp" { value = data.fastiron_lldp_interfaces.test.interfaces }
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	if got := strings.TrimSpace(run(0, "output", "-json", "lldp")); got != `{"ethernet 1/1/2":false,"ethernet 1/1/3":true}` {
+		t.Fatalf("LLDP collection: %s", got)
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "state", "rm", "fastiron_lldp.test", "fastiron_lldp_interface.test")
+	run(0, "import", "-no-color", "fastiron_lldp.test", "lldp")
+	run(0, "import", "-no-color", "fastiron_lldp_interface.test", "lldp|ethernet 1/1/2")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.lldp = true
+	s.lldpPort = true
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	global, port := s.lldp, s.lldpPort
+	s.mu.Unlock()
+	if global || port {
+		t.Fatal("LLDP drift was not corrected")
+	}
+	write("lldp.tf", `resource "fastiron_lldp" "test" {}
+resource "fastiron_lldp_interface" "test" { interface = "ethernet 1/1/2" }
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	global, port = s.lldp, s.lldpPort
+	s.mu.Unlock()
+	if !global || !port {
+		t.Fatal("omitted LLDP settings did not reset to enabled")
+	}
+	s.mu.Lock()
+	s.lldp = false
+	s.lldpPort = false
+	s.mu.Unlock()
+	write("lldp.tf", "")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	global, port = s.lldp, s.lldpPort
+	s.mu.Unlock()
+	if !global || !port {
+		t.Fatal("LLDP destroy did not reset to enabled")
+	}
 }
