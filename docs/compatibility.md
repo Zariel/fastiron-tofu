@@ -15,7 +15,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | LAG | Existence, name, dynamic/static mode, and Ethernet membership |
 | Ethernet | Port name and administrative enable state |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
-| Interface addresses | Individual IPv4/IPv6 addresses on VE interfaces |
+| Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
 | DNS | Individual server addresses |
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
