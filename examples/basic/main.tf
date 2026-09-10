@@ -56,3 +56,10 @@ resource "fastiron_interface_ethernet" "test" {
 output "firmware" {
   value = data.fastiron_capabilities.switch.firmware
 }
+
+# Each relationship owns only one membership; it preserves other VLANs on the port.
+resource "fastiron_vlan_membership" "test" {
+  vlan_id   = fastiron_vlan.test.vlan_id
+  interface = fastiron_interface_ethernet.test.name
+  tagging   = "tagged"
+}

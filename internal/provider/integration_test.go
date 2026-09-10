@@ -31,22 +31,23 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
-	mu                        sync.Mutex
-	running, startup          map[int]string
-	ethernet, startupEthernet map[string]any
-	child                     bool
-	failSave                  bool
-	falseSave                 bool
-	missingVLANEndpoint       bool
-	ambiguous                 bool
-	writes                    int
-	server                    *httptest.Server
-	sshAddress, knownHosts    string
+	mu                              sync.Mutex
+	running, startup                map[int]string
+	memberships, startupMemberships map[int]string
+	ethernet, startupEthernet       map[string]any
+	child                           bool
+	failSave                        bool
+	falseSave                       bool
+	missingVLANEndpoint             bool
+	ambiguous                       bool
+	writes                          int
+	server                          *httptest.Server
+	sshAddress, knownHosts          string
 }
 
 func newSwitch(t *testing.T) *testSwitch {
 	t.Helper()
-	s := &testSwitch{running: map[int]string{}, startup: map[int]string{}, ethernet: map[string]any{"name": "ethernet 1/1/2", "description": "manual port", "enabled": true, "mtu": float64(9000)}}
+	s := &testSwitch{memberships: map[int]string{}, running: map[int]string{}, startup: map[int]string{}, ethernet: map[string]any{"name": "ethernet 1/1/2", "description": "manual port", "enabled": true, "mtu": float64(9000)}}
 	s.startupEthernet = maps.Clone(s.ethernet)
 	s.server = httptest.NewTLSServer(http.HandlerFunc(s.restconf))
 	t.Cleanup(s.server.Close)
@@ -136,11 +137,12 @@ func (s *testSwitch) command(command string) string {
 		}
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
+		s.startupMemberships = maps.Clone(s.memberships)
 		return "Write startup-config done."
 	case "show running-config":
-		return s.configuration(s.running, s.ethernet)
+		return s.configuration(s.running, s.ethernet, s.memberships)
 	case "show configuration":
-		return s.configuration(s.startup, s.startupEthernet)
+		return s.configuration(s.startup, s.startupEthernet, s.startupMemberships)
 	case "skip-page-display":
 		return ""
 	default:
@@ -148,7 +150,7 @@ func (s *testSwitch) command(command string) string {
 	}
 }
 
-func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any) string {
+func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any, memberships map[int]string) string {
 	text := "ver 09.0.10kT213\n!\n"
 	ids := []int{}
 	for id := range vlans {
@@ -161,6 +163,9 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 			text += " name " + vlans[id]
 		}
 		text += " by port\n"
+		if memberships[id] != "" {
+			text += " " + memberships[id] + " ethe 1/1/2\n"
+		}
 		if s.child {
 			text += " tagged ethe 1/1/2\n"
 		}
@@ -181,6 +186,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
+	if strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=") {
+		s.membershipREST(w, r)
+		return
+	}
 	if s.missingVLANEndpoint && strings.HasPrefix(r.URL.Path, collection) {
 		w.WriteHeader(404)
 		return
@@ -465,6 +474,70 @@ output "firmware" { value = data.fastiron_capabilities.switch.firmware }
 	run(0, "destroy", "-auto-approve", "-no-color")
 	check("", false)
 	checkPort("", true)
+	config(&name)
+	s.mu.Lock()
+	s.running[54] = "NEIGHBOR"
+	s.memberships[54] = "tagged"
+	s.mu.Unlock()
+	membership := func(tagging string) {
+		write("membership.tf", fmt.Sprintf(`resource "fastiron_vlan_membership" "test" {
+ vlan_id = fastiron_vlan.test.vlan_id
+ interface = fastiron_interface_ethernet.test.name
+ tagging = %q
+}
+`, tagging))
+	}
+	checkMembership := func(want map[int]string) {
+		t.Helper()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if !maps.Equal(s.memberships, want) || !maps.Equal(s.startupMemberships, want) {
+			t.Fatalf("memberships: running=%v startup=%v want=%v", s.memberships, s.startupMemberships, want)
+		}
+	}
+	membership("tagged")
+	run(0, "apply", "-auto-approve", "-no-color")
+	checkMembership(map[int]string{53: "tagged", 54: "tagged"})
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "state", "rm", "fastiron_vlan_membership.test")
+	run(0, "import", "-no-color", "fastiron_vlan_membership.test", "vlan 53|ethernet 1/1/2|tagged")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	delete(s.memberships, 53)
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	checkMembership(map[int]string{53: "tagged", 54: "tagged"})
+	write("membership.tf", "")
+	s.mu.Lock()
+	s.failSave = true
+	s.mu.Unlock()
+	run(1, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	s.failSave = false
+	s.mu.Unlock()
+	run(0, "apply", "-auto-approve", "-no-color")
+	checkMembership(map[int]string{54: "tagged"})
+	membership("untagged")
+	s.mu.Lock()
+	s.memberships[54] = "untagged"
+	s.mu.Unlock()
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "another untagged VLAN") {
+		t.Fatalf("missing ownership diagnostic: %s", out)
+	}
+	s.mu.Lock()
+	if s.memberships[54] != "untagged" || len(s.memberships) != 1 {
+		t.Fatal("conflicting untagged membership was changed")
+	}
+	delete(s.memberships, 54)
+	s.mu.Unlock()
+	run(0, "apply", "-auto-approve", "-no-color")
+	checkMembership(map[int]string{53: "untagged"})
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	write("membership.tf", "")
+	run(0, "apply", "-auto-approve", "-no-color")
+	checkMembership(map[int]string{})
+	run(0, "destroy", "-auto-approve", "-no-color")
 	base = strings.Replace(base, `persistence_mode = "after_each_write"`, `persistence_mode = "manual"`, 1)
 	name = "MANUAL-SAVE"
 	config(&name)
