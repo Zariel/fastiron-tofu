@@ -31,6 +31,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
+	addresses                       map[string]int
+	addressChild                    bool
 	ve                              map[string]any
 	veChild                         bool
 	mu                              sync.Mutex
@@ -55,6 +57,7 @@ func newSwitch(t *testing.T) *testSwitch {
 	s := &testSwitch{memberships: map[int]string{}, running: map[int]string{}, startup: map[int]string{}, ethernet: map[string]any{"name": "ethernet 1/1/2", "description": "manual port", "enabled": true, "mtu": float64(9000)}}
 	s.startupEthernet = maps.Clone(s.ethernet)
 	s.dns = map[string]bool{}
+	s.addresses = map[string]int{}
 	s.lldp, s.lldpPort = true, true
 	s.poe = true
 	s.server = httptest.NewTLSServer(http.HandlerFunc(s.restconf))
@@ -196,6 +199,9 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 		if name, _ := s.ve["description"].(string); name != "" {
 			text += " port-name " + name + "\n"
 		}
+		for ip, bits := range s.addresses {
+			text += fmt.Sprintf(" ip address %s/%d\n", ip, bits)
+		}
 		if s.veChild {
 			text += " ip address 192.0.2.1 255.255.255.0\n"
 		}
@@ -208,6 +214,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
+	if strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=ve%2053/routed-vlan/") {
+		s.addressREST(w, r)
+		return
+	}
 	if (r.Method == "POST" && r.URL.Path == "/restconf/data/interfaces") || r.URL.EscapedPath() == "/restconf/data/interfaces/interface=ve%2053" {
 		s.veREST(w, r)
 		return
@@ -804,5 +814,80 @@ output "poe" { value = data.fastiron_poe_interfaces.test.interfaces }
 	s.mu.Unlock()
 	if exists || !vlanExists {
 		t.Fatal("VE destroy did not preserve parent VLAN")
+	}
+	veConfig := `resource "fastiron_interface_ve" "addresses" {
+ ve_id = 53
+ vlan_id = fastiron_vlan.test.vlan_id
+}
+`
+	addressConfig := func(cidr string) {
+		write("addresses.tf", veConfig+fmt.Sprintf(`resource "fastiron_interface_ipv4_address" "test" {
+ interface = fastiron_interface_ve.addresses.name
+ address = %q
+}
+resource "fastiron_interface_ipv6_address" "test" {
+ interface = fastiron_interface_ve.addresses.name
+ address = "2001:db8::1/64"
+}
+data "fastiron_interface_addresses" "test" {
+ interface = fastiron_interface_ve.addresses.name
+ depends_on = [fastiron_interface_ipv4_address.test,fastiron_interface_ipv6_address.test]
+}
+output "addresses" { value = data.fastiron_interface_addresses.test.addresses }
+`, cidr))
+	}
+	s.mu.Lock()
+	s.addresses["198.51.100.1"] = 30
+	s.mu.Unlock()
+	addressConfig("192.0.2.129/24")
+	run(0, "apply", "-auto-approve", "-no-color")
+	if got := strings.TrimSpace(run(0, "output", "-json", "addresses")); got != `["192.0.2.129/24","198.51.100.1/30","2001:db8::1/64"]` {
+		t.Fatalf("address collection: %s", got)
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "state", "rm", "fastiron_interface_ipv4_address.test", "fastiron_interface_ipv6_address.test")
+	run(0, "import", "-no-color", "fastiron_interface_ipv4_address.test", "ve 53|ipv4|192.0.2.129/24")
+	run(0, "import", "-no-color", "fastiron_interface_ipv6_address.test", "ve 53|ipv6|2001:db8::1/64")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.addresses["192.0.2.129"] = 25
+	delete(s.addresses, "2001:db8::1")
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	addresses := maps.Clone(s.addresses)
+	s.mu.Unlock()
+	if !maps.Equal(addresses, map[string]int{"192.0.2.129": 24, "198.51.100.1": 30, "2001:db8::1": 64}) {
+		t.Fatalf("address drift correction: %v", addresses)
+	}
+	addressConfig("192.0.2.129/25")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	addresses = maps.Clone(s.addresses)
+	s.mu.Unlock()
+	if !maps.Equal(addresses, map[string]int{"192.0.2.129": 25, "198.51.100.1": 30, "2001:db8::1": 64}) {
+		t.Fatalf("prefix replacement: %v", addresses)
+	}
+	s.mu.Lock()
+	s.addressChild = true
+	s.mu.Unlock()
+	write("addresses.tf", veConfig)
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "VRRP child configuration") {
+		t.Fatalf("missing VRRP guard: %s", out)
+	}
+	s.mu.Lock()
+	addresses = maps.Clone(s.addresses)
+	s.addressChild = false
+	s.mu.Unlock()
+	if len(addresses) != 3 {
+		t.Fatal("guarded address deletion removed entries")
+	}
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	addresses = maps.Clone(s.addresses)
+	s.mu.Unlock()
+	if !maps.Equal(addresses, map[string]int{"198.51.100.1": 30}) {
+		t.Fatalf("address cleanup changed neighbor: %v", addresses)
 	}
 }

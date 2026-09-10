@@ -14,12 +14,13 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | VLAN membership | One tagged or untagged Ethernet relationship |
 | Ethernet | Port name and administrative enable state |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
+| Interface addresses | Individual IPv4/IPv6 addresses on VE interfaces |
 | DNS | Individual server addresses |
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
-Data sources report active firmware, DNS servers, LLDP interface settings, and PoE interface configuration and measurements.
+Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, and interface IP addresses.
 
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
