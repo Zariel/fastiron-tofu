@@ -586,11 +586,12 @@ output "firmware" { value = data.fastiron_capabilities.switch.firmware }
 		t.Fatalf("missing ownership diagnostic: %s", out)
 	}
 	s.mu.Lock()
-	if s.memberships[54] != "untagged" || len(s.memberships) != 1 {
-		t.Fatal("conflicting untagged membership was changed")
-	}
+	conflictPreserved := s.memberships[54] == "untagged" && len(s.memberships) == 1
 	delete(s.memberships, 54)
 	s.mu.Unlock()
+	if !conflictPreserved {
+		t.Fatal("conflicting untagged membership was changed")
+	}
 	run(0, "apply", "-auto-approve", "-no-color")
 	checkMembership(map[int]string{53: "untagged"})
 	run(0, "plan", "-detailed-exitcode", "-no-color")
@@ -646,17 +647,19 @@ output "dns" { value = data.fastiron_ip_dns_servers.test.addresses }
 	run(2, "plan", "-detailed-exitcode", "-no-color")
 	run(0, "apply", "-auto-approve", "-no-color")
 	s.mu.Lock()
-	if !s.dns["192.0.2.53"] || !s.dns["192.0.2.54"] {
+	dnsPreserved := s.dns["192.0.2.53"] && s.dns["192.0.2.54"]
+	s.mu.Unlock()
+	if !dnsPreserved {
 		t.Fatal("DNS drift correction did not preserve both servers")
 	}
-	s.mu.Unlock()
 	write("dns.tf", "")
 	run(0, "apply", "-auto-approve", "-no-color")
 	s.mu.Lock()
-	if len(s.dns) != 1 || !s.dns["192.0.2.54"] {
+	dnsNeighborPreserved := len(s.dns) == 1 && s.dns["192.0.2.54"]
+	s.mu.Unlock()
+	if !dnsNeighborPreserved {
 		t.Fatal("DNS deletion changed an unrelated server")
 	}
-	s.mu.Unlock()
 	write("lldp.tf", `resource "fastiron_lldp" "test" { enabled = false }
 resource "fastiron_lldp_interface" "test" {
  interface = "ethernet 1/1/2"
