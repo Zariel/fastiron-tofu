@@ -22,7 +22,7 @@ func (p *fastironProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 }
 
 func (p *fastironProvider) Resources(context.Context) []func() resource.Resource {
-	return []func() resource.Resource{func() resource.Resource { return &saveResource{} }}
+	return []func() resource.Resource{func() resource.Resource { return &saveResource{} }, func() resource.Resource { return &vlanResource{} }}
 }
 
 func (p *fastironProvider) DataSources(context.Context) []func() datasource.DataSource {
