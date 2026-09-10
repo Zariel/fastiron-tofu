@@ -58,6 +58,9 @@ func (d *Device) VE(ctx context.Context, id int64) (VE, error) {
 	if response.Interfaces == nil {
 		return VE{}, errors.New("RESTCONF interface collection is missing its container")
 	}
+	if len(response.Interfaces.Interface) == 0 {
+		return VE{}, errors.New("RESTCONF interface collection is empty; cannot confirm VE state")
+	}
 	name := "ve " + strconv.FormatInt(id, 10)
 	for _, entry := range response.Interfaces.Interface {
 		if entry.Name != name {

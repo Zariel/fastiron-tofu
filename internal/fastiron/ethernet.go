@@ -58,6 +58,9 @@ func (d *Device) Ethernet(ctx context.Context, port string) (Ethernet, error) {
 	if response.Interfaces == nil {
 		return Ethernet{}, errors.New("RESTCONF interface response is missing its configuration container")
 	}
+	if len(response.Interfaces.Interface) == 0 {
+		return Ethernet{}, errors.New("RESTCONF interface collection is empty; cannot confirm Ethernet state")
+	}
 	for _, entry := range response.Interfaces.Interface {
 		if entry.Name != "ethernet "+port {
 			continue

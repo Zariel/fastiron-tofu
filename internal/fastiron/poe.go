@@ -89,6 +89,9 @@ func (d *Device) PoEInterfaces(ctx context.Context) ([]PoEInterface, error) {
 	if response.Interfaces == nil {
 		return nil, errors.New("RESTCONF interface response is missing its collection")
 	}
+	if len(response.Interfaces.Interface) == 0 {
+		return nil, errors.New("RESTCONF interface collection is empty; cannot confirm PoE state")
+	}
 	ports := []PoEInterface{}
 	for _, entry := range response.Interfaces.Interface {
 		if entry.Ethernet.PoE == nil {
