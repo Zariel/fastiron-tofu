@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +32,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
+	ospf *ospfSwitch
+
 	routes *routeSwitch
 
 	managementAddresses, startupManagementAddresses map[string]int
@@ -162,6 +165,13 @@ func (s *testSwitch) command(command string) string {
 			unchanged = unchanged && maps.Equal(s.routes.running, s.routes.startup)
 			s.routes.startup = maps.Clone(s.routes.running)
 		}
+		if s.ospf != nil {
+			unchanged = unchanged && maps.EqualFunc(s.ospf.areas, s.ospf.startup, slices.Equal[[]string])
+			s.ospf.startup = map[string][]string{}
+			for id, names := range s.ospf.areas {
+				s.ospf.startup[id] = slices.Clone(names)
+			}
+		}
 		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
@@ -172,6 +182,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.ospf != nil {
+			text = strings.TrimSuffix(text, "end") + ospfConfiguration(s.ospf.areas, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"
+		}
 		if s.routes != nil {
 			text = strings.TrimSuffix(text, "end") + routeConfiguration(s.routes.running, s.routes.extra) + "end"
 		}
@@ -180,6 +193,9 @@ func (s *testSwitch) command(command string) string {
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.ospf != nil {
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + ospfConfiguration(s.ospf.startup, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"
+		}
 		if s.routes != nil {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + routeConfiguration(s.routes.startup, s.routes.extra) + "end"
 		}
@@ -245,6 +261,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.routes != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/network-instances/network-instance=default-vrf/protocols") {
 		s.routes.rest(w, r)
+		return
+	}
+	if s.ospf != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/network-instances/network-instance=default-vrf/protocols") {
+		s.ospf.rest(w, r)
 		return
 	}
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"

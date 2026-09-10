@@ -36,6 +36,8 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &addressResource{ipv6: true} },
 		func() resource.Resource { return &lagResource{} },
 		func() resource.Resource { return &routeResource{} },
+		func() resource.Resource { return &ospfAreaResource{} },
+		func() resource.Resource { return &ospfInterfaceResource{} },
 	}
 }
 
@@ -48,5 +50,6 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &addressesDataSource{} },
 		func() datasource.DataSource { return &lagDataSource{} },
 		func() datasource.DataSource { return &routesDataSource{} },
+		func() datasource.DataSource { return &ospfDataSource{} },
 	}
 }
