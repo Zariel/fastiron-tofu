@@ -1,0 +1,182 @@
+package fastiron
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
+	"github.com/zariel/fastiron-tofu/internal/transport/ssh"
+)
+
+type Config struct {
+	Host, Transport, ExpectedFirmware, Persistence string
+	Timeout                                        time.Duration
+	RESTCONF                                       *restconf.Config
+	SSH                                            *ssh.Config
+}
+
+type Device struct {
+	rest   *restconf.Client
+	cli    *ssh.Client
+	config Config
+	gate   chan struct{}
+}
+
+var hosts sync.Map
+
+func New(cfg Config) (*Device, error) {
+	if cfg.Transport != "auto" && cfg.Transport != "restconf" && cfg.Transport != "ssh" {
+		return nil, errors.New("transport must be auto, restconf, or ssh")
+	}
+	if cfg.Persistence != "after_each_write" && cfg.Persistence != "manual" && cfg.Persistence != "never" {
+		return nil, errors.New("persistence_mode must be after_each_write, manual, or never")
+	}
+	d := &Device{config: cfg}
+	var err error
+	if cfg.RESTCONF != nil {
+		d.rest, err = restconf.New(*cfg.RESTCONF)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if cfg.SSH != nil {
+		d.cli, err = ssh.New(*cfg.SSH)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if cfg.Transport == "restconf" && d.rest == nil {
+		return nil, errors.New("RESTCONF transport is disabled")
+	}
+	if cfg.Transport == "ssh" && d.cli == nil {
+		return nil, errors.New("SSH transport is disabled")
+	}
+	if d.rest == nil && d.cli == nil {
+		return nil, errors.New("at least one transport must be enabled")
+	}
+	// Provider aliases in this process share the lock. DNS aliases and separate
+	// processes remain the operator's responsibility; OpenTofu owns state locking.
+	key := strings.ToLower(strings.TrimSuffix(cfg.Host, "."))
+	gate, _ := hosts.LoadOrStore(key, make(chan struct{}, 1))
+	d.gate = gate.(chan struct{})
+	return d, nil
+}
+
+func (d *Device) lock(ctx context.Context) (func(), error) {
+	select {
+	case d.gate <- struct{}{}:
+		return func() { <-d.gate }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+type Capabilities struct{ Firmware, BootImage string }
+
+var firmwarePattern = regexp.MustCompile(`(?m)\bSW:\s+Version\s+([0-9]+\.[0-9]+\.[0-9]+[a-z0-9]*)(?:T[0-9]+)?\b`)
+var imagePattern = regexp.MustCompile(`(?m)\blabeled as\s+([A-Z]{3}[0-9]+[a-z0-9]*)\b`)
+
+func parseVersion(output string) (Capabilities, error) {
+	m := firmwarePattern.FindStringSubmatch(output)
+	if len(m) != 2 {
+		return Capabilities{}, errors.New("cannot identify active FastIron firmware from show version")
+	}
+	c := Capabilities{Firmware: m[1]}
+	if image := imagePattern.FindStringSubmatch(output); len(image) == 2 {
+		c.BootImage = image[1]
+	}
+	return c, nil
+}
+
+func (d *Device) Discover(ctx context.Context) (Capabilities, error) {
+	if d.cli == nil {
+		return Capabilities{}, errors.New("SSH is required to verify active firmware; RESTCONF firmware discovery is not yet verified")
+	}
+	out, err := d.cli.Run(ctx, false, "show version")
+	if err != nil {
+		return Capabilities{}, err
+	}
+	c, err := parseVersion(out[0])
+	if err != nil {
+		return c, err
+	}
+	if !regexp.MustCompile(`^09\.0\.10[a-z0-9]*$`).MatchString(c.Firmware) {
+		return c, fmt.Errorf("FastIron firmware %s is unsupported; this provider targets 09.0.10", c.Firmware)
+	}
+	expected := strings.TrimSuffix(d.config.ExpectedFirmware, ".bin")
+	if expected != "" && expected != c.Firmware && expected != c.BootImage {
+		return c, fmt.Errorf("active firmware %s does not match expected_firmware", c.Firmware)
+	}
+	return c, nil
+}
+
+func (d *Device) Save(ctx context.Context) error {
+	if d.config.Persistence == "never" {
+		return errors.New("configuration saves are disabled by persistence_mode = never")
+	}
+	unlock, err := d.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if _, err = d.Discover(ctx); err != nil {
+		return err
+	}
+	return d.save(ctx)
+}
+
+func (d *Device) save(ctx context.Context) error {
+	if d.cli == nil {
+		return errors.New("SSH is required for configuration persistence")
+	}
+	out, err := d.cli.Run(ctx, true, "write memory")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(out[0], "Write startup-config done.") {
+		return errors.New("FastIron did not confirm startup configuration was saved")
+	}
+	// Verify persisted content independently of the save command's success text.
+	out, err = d.cli.Run(ctx, true, "show running-config", "show configuration")
+	if err != nil {
+		return err
+	}
+	running, err := configuration(out[0])
+	if err != nil {
+		return err
+	}
+	startup, err := configuration(out[1])
+	if err != nil {
+		return err
+	}
+	if running != startup {
+		return errors.New("startup configuration does not match running configuration after save")
+	}
+	return nil
+}
+
+func configuration(output string) (string, error) {
+	lines := strings.Split(strings.ReplaceAll(output, "\r", ""), "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, "ver ") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return "", errors.New("cannot identify complete FastIron configuration")
+	}
+	for i := start; i < len(lines); i++ {
+		lines[i] = strings.TrimRight(lines[i], " \t")
+		if lines[i] == "end" {
+			return strings.Join(lines[start:i+1], "\n"), nil
+		}
+	}
+	return "", errors.New("FastIron configuration output is incomplete")
+}
