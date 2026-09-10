@@ -31,6 +31,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &lldpResource{} },
 		func() resource.Resource { return &lldpResource{perInterface: true} },
 		func() resource.Resource { return &poeResource{} },
+		func() resource.Resource { return &veResource{} },
 	}
 }
 

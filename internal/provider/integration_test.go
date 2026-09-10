@@ -31,6 +31,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
+	ve                              map[string]any
+	veChild                         bool
 	mu                              sync.Mutex
 	running, startup                map[int]string
 	memberships, startupMemberships map[int]string
@@ -185,6 +187,16 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 		text += " disable\n"
 	}
 	text += " ip mtu 9000\n!\n"
+	if s.ve != nil {
+		text += "interface ve 53\n"
+		if name, _ := s.ve["description"].(string); name != "" {
+			text += " port-name " + name + "\n"
+		}
+		if s.veChild {
+			text += " ip address 192.0.2.1 255.255.255.0\n"
+		}
+		text += "!\n"
+	}
 	return text + "end"
 }
 
@@ -192,6 +204,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
+	if (r.Method == "POST" && r.URL.Path == "/restconf/data/interfaces") || r.URL.EscapedPath() == "/restconf/data/interfaces/interface=ve%2053" {
+		s.veREST(w, r)
+		return
+	}
 	if strings.HasSuffix(r.URL.EscapedPath(), "/ethernet/poe") {
 		s.poeREST(w, r)
 		return
@@ -222,7 +238,11 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/restconf/data/interfaces" {
 		if r.Method == "GET" {
-			json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet, "openconfig-if-ethernet:ethernet": map[string]any{"icx-openconfig-if-poe-aug:poe": map[string]any{"config": map[string]any{"enabled": s.poe}, "state": map[string]any{"power-used": "7000.0", "power-class": 4}}}}}}})
+			entries := []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet, "openconfig-if-ethernet:ethernet": map[string]any{"icx-openconfig-if-poe-aug:poe": map[string]any{"config": map[string]any{"enabled": s.poe}, "state": map[string]any{"power-used": "7000.0", "power-class": 4}}}}}
+			if s.ve != nil {
+				entries = append(entries, map[string]any{"name": "ve 53", "config": s.ve, "openconfig-vlan:routed-vlan": map[string]any{"config": map[string]any{"vlan": 53}}})
+			}
+			json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": entries}})
 			return
 		}
 		if r.Method == "PATCH" {
@@ -234,11 +254,19 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 					} `json:"interface"`
 				} `json:"interfaces"`
 			}
-			if json.NewDecoder(r.Body).Decode(&body) != nil || len(body.Interfaces.Interface) != 1 || body.Interfaces.Interface[0].Name != "ethernet 1/1/2" {
+			if json.NewDecoder(r.Body).Decode(&body) != nil || len(body.Interfaces.Interface) != 1 {
 				w.WriteHeader(400)
 				return
 			}
-			maps.Copy(s.ethernet, body.Interfaces.Interface[0].Config)
+			entry := body.Interfaces.Interface[0]
+			if entry.Name == "ve 53" && s.ve != nil {
+				maps.Copy(s.ve, entry.Config)
+			} else if entry.Name == "ethernet 1/1/2" {
+				maps.Copy(s.ethernet, entry.Config)
+			} else {
+				w.WriteHeader(400)
+				return
+			}
 			s.writes++
 			w.WriteHeader(204)
 			return
@@ -711,5 +739,66 @@ output "poe" { value = data.fastiron_poe_interfaces.test.interfaces }
 	s.mu.Unlock()
 	if !poe {
 		t.Fatal("PoE destroy did not restore default")
+	}
+	write("ve.tf", `resource "fastiron_interface_ve" "test" {
+ ve_id = 53
+ vlan_id = fastiron_vlan.test.vlan_id
+ port_name = "TRANSIT"
+}
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	veName := s.ve["description"]
+	s.mu.Unlock()
+	if veName != "TRANSIT" {
+		t.Fatal("VE creation did not set description")
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "state", "rm", "fastiron_interface_ve.test")
+	run(0, "import", "-no-color", "fastiron_interface_ve.test", "ve 53")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.ve["description"] = "DRIFT"
+	s.veChild = true
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	veName = s.ve["description"]
+	child := s.veChild
+	s.mu.Unlock()
+	if veName != "TRANSIT" || !child {
+		t.Fatal("VE update did not preserve child configuration")
+	}
+	write("ve.tf", `resource "fastiron_interface_ve" "test" {
+ ve_id = 53
+ vlan_id = fastiron_vlan.test.vlan_id
+}
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	veName = s.ve["description"]
+	s.mu.Unlock()
+	if veName != "" {
+		t.Fatal("VE name omission did not reset description")
+	}
+	write("ve.tf", "")
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "VE has child configuration") {
+		t.Fatalf("missing child guard: %s", out)
+	}
+	s.mu.Lock()
+	exists := s.ve != nil
+	s.veChild = false
+	s.mu.Unlock()
+	if !exists {
+		t.Fatal("VE child guard removed interface")
+	}
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	exists = s.ve != nil
+	_, vlanExists := s.running[53]
+	s.mu.Unlock()
+	if exists || !vlanExists {
+		t.Fatal("VE destroy did not preserve parent VLAN")
 	}
 }

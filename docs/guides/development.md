@@ -26,3 +26,4 @@ Provide the example's host, trusted CA, known_hosts contents, and disconnected t
 
 The provider currently requires SSH even for RESTCONF-backed resources to identify active firmware and verify configuration persistence. Firmware is reported as evidence, not checked against an expected version or allowlist. Omitted VLAN/port names plan a reset, and omitted Ethernet `enabled` plans `true`. Review imports with matching HCL before applying.
 
+See [supported features and tested compatibility](../compatibility.md).

@@ -18,10 +18,14 @@ func ValidateEthernet(v Ethernet) error {
 	if !portPattern.MatchString(v.Port) {
 		return errors.New("port must use stack/slot/port syntax with positive numbers and no leading zeros")
 	}
-	if len(v.PortName) > 64 {
+	return validatePortName(v.PortName)
+}
+
+func validatePortName(name string) error {
+	if len(name) > 64 {
 		return errors.New("port_name must contain at most 64 bytes")
 	}
-	for _, r := range v.PortName {
+	for _, r := range name {
 		if r < 32 || r == 127 {
 			return errors.New("port_name cannot contain control characters")
 		}
