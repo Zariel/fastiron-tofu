@@ -19,7 +19,7 @@ The `lags` map is keyed by canonical interface name, such as `lag 1`. Each entry
 
 Membership describes configuration, including disconnected members. It does not indicate link health or whether LACP has formed a working aggregate.
 
-Immediately after an external LAG change, RESTCONF may briefly report a member referencing a deleted LAG. Discovery reports an error until the switch synchronizes its interface configuration. Allow synchronization to finish, then rerun the plan.
+Immediately after an external LAG change, RESTCONF may briefly report a member referencing a deleted LAG. Discovery waits for this inconsistency to clear within `operation_timeout`. If synchronization does not finish, discovery reports an error; allow the switch to synchronize, then rerun the plan.
 
 ## VLAN membership
 

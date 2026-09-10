@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type LAG struct {
@@ -16,10 +17,32 @@ type LAG struct {
 	Members    []string
 }
 
+var errLAGSync = errors.New("RESTCONF LAG membership has not synchronized")
+
 func (d *Device) LAGs(ctx context.Context) ([]LAG, error) {
 	if d.config.Transport == "ssh" || d.rest == nil {
 		return nil, errors.New("LAG discovery currently requires RESTCONF")
 	}
+	ctx, cancel := context.WithTimeout(ctx, d.config.RESTCONF.Timeout)
+	defer cancel()
+	for {
+		lags, err := d.readLAGs(ctx)
+		if !errors.Is(err, errLAGSync) {
+			return lags, err
+		}
+		// Native deletion can remove the aggregate before member references clear.
+		// Retry only reads of this known inconsistent state, never the mutation.
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, errors.Join(err, ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
 	var response struct {
 		Interfaces *struct {
 			Interface []struct {
@@ -87,7 +110,7 @@ func (d *Device) LAGs(ctx context.Context) ([]LAG, error) {
 	for name, ports := range members {
 		lag, exists := lags[name]
 		if !exists {
-			return nil, fmt.Errorf("RESTCONF member references missing LAG %q", name)
+			return nil, fmt.Errorf("%w: member references missing LAG %q", errLAGSync, name)
 		}
 		sort.Strings(ports)
 		lag.Members = ports
