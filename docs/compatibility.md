@@ -16,17 +16,19 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Ethernet | Port name and administrative enable state |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
+| Static routing | One IPv4 prefix and gateway relationship in the default VRF |
 | DNS | Individual server addresses |
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
-Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, and LAG configuration with Ethernet membership.
+Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, and IPv4 static routes.
 
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits
 
+- Static routes currently support IPv4 gateways in the default VRF; see [route ownership and limits](guides/routes.md).
 - VE administrative enable state is not currently managed.
 - DNS IPv4 succeeded on the tested build; its endpoint rejected IPv6 DNS addresses.
 - PoE tests used a disconnected port. Reported power measurements under load have not been validated.
