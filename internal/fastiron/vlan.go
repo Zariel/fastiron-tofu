@@ -19,7 +19,7 @@ type VLAN struct {
 
 var ErrNotFound = errors.New("FastIron object not found")
 
-const vlanPath = "/network-instances/network-instance/default-vrf/vlans"
+const vlanPath = "/network-instances/network-instance=default-vrf/vlans"
 
 type vlanEntry struct {
 	ID     int64 `json:"vlan-id"`
@@ -52,8 +52,29 @@ func (d *Device) VLAN(ctx context.Context, id int64) (VLAN, error) {
 	var response struct {
 		VLANs []vlanEntry `json:"openconfig-network-instance:vlan"`
 	}
-	err := d.rest.Do(ctx, http.MethodGet, fmt.Sprintf("%s/vlan/%d", vlanPath, id), nil, &response)
+	err := d.rest.Do(ctx, http.MethodGet, fmt.Sprintf("%s/vlan=%d", vlanPath, id), nil, &response)
 	if errors.Is(err, restconf.ErrNotFound) {
+		// A missing item URL is also how unsupported endpoints can respond. Only
+		// a readable parent collection establishes that this identity is absent.
+		var collection struct {
+			VLANs *struct {
+				VLAN []vlanEntry `json:"vlan"`
+			} `json:"openconfig-network-instance:vlans"`
+		}
+		if err := d.rest.Do(ctx, http.MethodGet, vlanPath, nil, &collection); err != nil {
+			return VLAN{}, err
+		}
+		if collection.VLANs == nil {
+			return VLAN{}, errors.New("RESTCONF VLAN collection is missing its configuration container")
+		}
+		for _, entry := range collection.VLANs.VLAN {
+			if entry.ID == id {
+				if entry.Config.ID != id {
+					return VLAN{}, errors.New("RESTCONF VLAN collection contains an inconsistent identity")
+				}
+				return VLAN{ID: id, Name: entry.Config.Name}, nil
+			}
+		}
 		return VLAN{}, ErrNotFound
 	}
 	if err != nil {
@@ -153,7 +174,7 @@ func (d *Device) DeleteVLAN(ctx context.Context, id int64) error {
 		if err := vlanChildren(out[0], id); err != nil {
 			return err
 		}
-		writeErr := d.rest.Do(ctx, http.MethodDelete, fmt.Sprintf("%s/vlan/%d", vlanPath, id), nil, nil)
+		writeErr := d.rest.Do(ctx, http.MethodDelete, fmt.Sprintf("%s/vlan=%d", vlanPath, id), nil, nil)
 		_, readErr := d.VLAN(ctx, id)
 		if !errors.Is(readErr, ErrNotFound) {
 			return errors.Join(writeErr, readErr, errors.New("VLAN absence could not be verified"))

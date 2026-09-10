@@ -19,11 +19,14 @@ const maxResponse = 8 << 20
 
 var ErrNotFound = errors.New("RESTCONF object not found")
 
-type HTTPError struct{ Status int }
+type HTTPError struct {
+	Status  int
+	missing bool
+}
 
 func (e *HTTPError) Error() string { return fmt.Sprintf("RESTCONF returned HTTP %d", e.Status) }
 func (e *HTTPError) Is(target error) bool {
-	return target == ErrNotFound && e.Status == http.StatusNotFound
+	return target == ErrNotFound && (e.Status == http.StatusNotFound || e.missing)
 }
 
 type Config struct {
@@ -121,7 +124,28 @@ func (c *Client) Do(ctx context.Context, method, path string, body, result any) 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &HTTPError{Status: resp.StatusCode}
+		failure := &HTTPError{Status: resp.StatusCode}
+		if resp.StatusCode == http.StatusBadRequest {
+			// FastIron reports an absent list instance as HTTP 400 with protocol
+			// error 388. Other validation errors must never become absence.
+			var details struct {
+				Errors struct {
+					Error []struct {
+						Tag    string `json:"error-tag"`
+						AppTag string `json:"error-app-tag"`
+						Info   struct {
+							Number int `json:"error-number"`
+						} `json:"error-info"`
+					} `json:"error"`
+				} `json:"ietf-restconf:errors"`
+			}
+			raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+			if readErr == nil && json.Unmarshal(raw, &details) == nil && len(details.Errors.Error) == 1 {
+				e := details.Errors.Error[0]
+				failure.missing = e.Tag == "invalid-value" && e.AppTag == "data-invalid" && e.Info.Number == 388
+			}
+		}
+		return failure
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
 	if err != nil {
