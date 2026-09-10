@@ -19,6 +19,7 @@ type (
 	stpSwitch struct {
 		running, startup         map[int64]stpSetting
 		extra, failClassicDelete bool
+		hiddenReads              int
 	}
 )
 
@@ -49,6 +50,10 @@ func (s *stpSwitch) rest(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" && r.URL.Path == "/restconf/data/stp" {
 		classic, rapid := []any{}, []any{}
 		for id, v := range s.running {
+			if id == 53 && s.hiddenReads > 0 {
+				s.hiddenReads--
+				continue
+			}
 			if v.mode == "rstp" {
 				rapid = append(rapid, map[string]any{"vlan-id": id, "config": map[string]any{"vlan-id": id, "bridge-priority": v.priority}})
 			} else {
@@ -73,6 +78,7 @@ func (s *stpSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		}
 		if mode == "rstp" {
 			s.running[id] = stpSetting{mode: "stp", priority: 32768}
+			s.hiddenReads = 1
 		} else {
 			if s.failClassicDelete {
 				http.Error(w, "cannot remove classic entry", 500)

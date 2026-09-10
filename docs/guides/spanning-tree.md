@@ -22,7 +22,7 @@ tofu import fastiron_spanning_tree_vlan.servers 53
 
 The data source returns a `vlans` map keyed by VLAN ID, with `mode` and `priority` for each enabled configuration. It includes the default VLAN. Managing spanning-tree settings does not create or delete the VLAN itself.
 
-On the tested firmware, removing RSTP leaves classic STP enabled. Resource deletion verifies the resulting mode and removes the remaining classic entry so that spanning tree is fully disabled. Other VLANs retain their settings. If deletion fails partway through, a subsequent apply resumes from the observed configuration.
+On the tested firmware, removing RSTP leaves classic STP enabled. Resource deletion waits for RESTCONF and native configuration to agree, then removes the remaining classic entry and verifies native absence. Other VLANs retain their settings. If deletion fails partway through, a subsequent apply resumes from the observed configuration.
 
 Deletion refuses to erase additional native spanning-tree settings, such as timers or per-VLAN port costs. Remove those settings before destroying or replacing this resource.
 

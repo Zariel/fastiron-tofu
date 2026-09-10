@@ -3,11 +3,13 @@ package fastiron
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"path"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*STPVLAN, error) {
@@ -22,7 +24,12 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	vlans, err := d.STPVLANs(ctx)
+	var vlans []STPVLAN
+	if present {
+		vlans, err = d.STPVLANs(ctx)
+	} else {
+		vlans, err = d.waitSTPVLAN(ctx, v.VLANID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -40,15 +47,7 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 			return nil, errors.New("VLAN uses another spanning-tree mode; import its configuration before replacing the mode")
 		}
 	}
-	if current != nil && !present {
-		output, err := d.cli.Run(ctx, true, "show running-config")
-		if err != nil {
-			return current, err
-		}
-		if err := stpVLANChildren(output[0], *current); err != nil {
-			return current, err
-		}
-	}
+
 	// Removing RSTP can leave classic STP enabled. Derive that remaining state
 	// and remove it once; never repeat a deletion against an unchanged mode.
 	removed := map[string]bool{}
@@ -79,7 +78,13 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 			endpoint = path.Join(stpVLANPath(current.Mode), "vlan="+strconv.FormatInt(v.VLANID, 10))
 		}
 		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.STPVLANs(ctx)
+		var observed []STPVLAN
+		var readErr error
+		if present {
+			observed, readErr = d.STPVLANs(ctx)
+		} else {
+			observed, readErr = d.waitSTPVLAN(ctx, v.VLANID)
+		}
 		if readErr != nil {
 			return current, errors.Join(writeErr, readErr)
 		}
@@ -108,19 +113,56 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 	return current, nil
 }
 
-func stpVLANChildren(config string, v STPVLAN) error {
+func (d *Device) waitSTPVLAN(ctx context.Context, id int64) ([]STPVLAN, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.config.RESTCONF.Timeout)
+	defer cancel()
+
+	for {
+		vlans, err := d.STPVLANs(ctx)
+		if err != nil {
+			return nil, err
+		}
+		output, err := d.cli.Run(ctx, true, "show running-config")
+		if err != nil {
+			return vlans, err
+		}
+		native, err := nativeSTPVLAN(output[0], id)
+		if err != nil {
+			return vlans, err
+		}
+		var current *STPVLAN
+		for _, entry := range vlans {
+			if entry.VLANID == id {
+				current = &entry
+			}
+		}
+		if current == nil && native == nil || current != nil && native != nil && *current == *native {
+			return vlans, nil
+		}
+
+		// RSTP removal can briefly hide its classic fallback in RESTCONF. Only
+		// agreeing native and RESTCONF observations establish the next mutation.
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return vlans, fmt.Errorf("native and RESTCONF spanning-tree state did not converge: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func nativeSTPVLAN(config string, id int64) (*STPVLAN, error) {
 	if _, err := configuration(config); err != nil {
-		return err
+		return nil, err
 	}
-	inside, found := false, false
-	mode := "spanning-tree"
-	if v.Mode == "rstp" {
-		mode += " 802-1w"
-	}
+	inside := false
+	var current *STPVLAN
+
 	for _, line := range strings.Split(config, "\n") {
 		fields := strings.Fields(line)
 		if !strings.HasPrefix(line, " ") && len(fields) > 1 && fields[0] == "vlan" {
-			inside = fields[1] == strconv.FormatInt(v.VLANID, 10)
+			inside = fields[1] == strconv.FormatInt(id, 10)
 			continue
 		}
 		if line != "" && line != "!" && !strings.HasPrefix(line, " ") {
@@ -129,19 +171,29 @@ func stpVLANChildren(config string, v STPVLAN) error {
 		if !inside || len(fields) == 0 || fields[0] != "spanning-tree" {
 			continue
 		}
-		command := strings.Join(fields, " ")
-		if command == mode {
-			found = true
+
+		fields = fields[1:]
+		mode := "stp"
+		if len(fields) > 0 && fields[0] == "802-1w" {
+			mode = "rstp"
+			fields = fields[1:]
+		}
+		if current == nil {
+			current = &STPVLAN{VLANID: id, Mode: mode, Priority: 32768}
+		} else if current.Mode != mode {
+			return nil, errors.New("native VLAN contains conflicting spanning-tree modes")
+		}
+		if len(fields) == 0 {
 			continue
 		}
-		if command == mode+" priority "+strconv.FormatInt(v.Priority, 10) {
-			found = true
-			continue
+		if len(fields) != 2 || fields[0] != "priority" {
+			return nil, errors.New("VLAN has additional spanning-tree settings; remove them before destroying its spanning-tree configuration")
 		}
-		return errors.New("VLAN has additional spanning-tree settings; remove them before destroying its spanning-tree configuration")
+		priority, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil || priority < 0 || priority > 65535 {
+			return nil, errors.New("invalid native spanning-tree bridge priority")
+		}
+		current.Priority = priority
 	}
-	if !found {
-		return errors.New("spanning-tree mode was not found in native VLAN configuration")
-	}
-	return nil
+	return current, nil
 }
