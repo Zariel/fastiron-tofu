@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -164,7 +165,7 @@ func (d *Device) DeleteVE(ctx context.Context, id int64) error {
 		if err := veChildren(output[0], name); err != nil {
 			return err
 		}
-		writeErr := d.rest.Do(ctx, http.MethodDelete, "/interfaces/interface="+url.PathEscape(name), nil, nil)
+		writeErr := d.rest.Do(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
 		_, readErr := d.VE(ctx, id)
 		if !errors.Is(readErr, ErrNotFound) {
 			return errors.Join(writeErr, readErr, errors.New("VE absence could not be verified"))

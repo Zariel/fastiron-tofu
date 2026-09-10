@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -38,9 +39,9 @@ func ValidateVLANMembership(v VLANMembership) error {
 
 func membershipPath(name string) string {
 	if lagPattern.MatchString(name) {
-		return "/interfaces/interface=" + url.PathEscape(name) + "/aggregation/switched-vlan"
+		return path.Join("/interfaces", "interface="+url.PathEscape(name), "aggregation/switched-vlan")
 	}
-	return "/interfaces/interface=" + url.PathEscape(name) + "/ethernet/switched-vlan"
+	return path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/switched-vlan")
 }
 
 func (d *Device) switchport(ctx context.Context, name string) (switchport, error) {
@@ -116,7 +117,7 @@ func (d *Device) ApplyVLANMembership(ctx context.Context, v VLANMembership, pres
 				return exists, errors.New("interface already belongs to this VLAN with different tagging; remove that membership first")
 			}
 		}
-		path := membershipPath(v.Interface)
+		endpoint := membershipPath(v.Interface)
 		method := http.MethodDelete
 		var body any
 		if present {
@@ -129,11 +130,11 @@ func (d *Device) ApplyVLANMembership(ctx context.Context, v VLANMembership, pres
 			// relationship, avoiding ownership of neighboring memberships.
 			body = map[string]any{"openconfig-vlan:switched-vlan": map[string]any{"config": config}}
 		} else if v.Tagging == "tagged" {
-			path += fmt.Sprintf("/config/trunk-vlans=%d", v.VLANID)
+			endpoint = path.Join(endpoint, "config", fmt.Sprintf("trunk-vlans=%d", v.VLANID))
 		} else {
-			path += "/config/access-vlan"
+			endpoint = path.Join(endpoint, "config/access-vlan")
 		}
-		writeErr := d.rest.Do(ctx, method, path, body, nil)
+		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
 		observed, readErr := d.switchport(ctx, v.Interface)
 		if readErr != nil {
 			return exists, errors.Join(writeErr, readErr)

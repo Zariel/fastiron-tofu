@@ -102,9 +102,7 @@ func (c *Client) Do(ctx context.Context, method, path string, body, result any) 
 			return errors.New("cannot encode RESTCONF request")
 		}
 	}
-	u := *c.base
-	u.Path = strings.TrimRight(c.base.Path, "/") + decoded
-	u.RawPath = strings.TrimRight(c.base.EscapedPath(), "/") + path
+	u := c.base.JoinPath(path)
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), bytes.NewReader(data))
 	if err != nil {
 		return errors.New("cannot construct RESTCONF request")

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -46,7 +47,7 @@ func (d *Device) LLDP(ctx context.Context, name string) (bool, error) {
 				Config *lldpConfig `json:"config"`
 			} `json:"openconfig-lldp:interface"`
 		}
-		if err := d.rest.Do(ctx, http.MethodGet, "/lldp/interfaces/interface="+url.PathEscape(name), nil, &response); err != nil {
+		if err := d.rest.Do(ctx, http.MethodGet, path.Join("/lldp/interfaces", "interface="+url.PathEscape(name)), nil, &response); err != nil {
 			return false, err
 		}
 		if len(response.Interfaces) != 1 || response.Interfaces[0].Name != name {
@@ -79,13 +80,13 @@ func (d *Device) ApplyLLDP(ctx context.Context, name string, enabled bool) (*boo
 		return nil, err
 	}
 	if current != enabled {
-		path := "/lldp/config"
+		endpoint := "/lldp/config"
 		body := map[string]any{"config": map[string]any{"enabled": enabled}}
 		if name != "" {
-			path = "/lldp/interfaces"
+			endpoint = "/lldp/interfaces"
 			body = map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": enabled}}}}}
 		}
-		writeErr := d.rest.Do(ctx, http.MethodPatch, path, body, nil)
+		writeErr := d.rest.Do(ctx, http.MethodPatch, endpoint, body, nil)
 		observed, readErr := d.LLDP(ctx, name)
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -52,7 +53,7 @@ func (d *Device) VLAN(ctx context.Context, id int64) (VLAN, error) {
 	var response struct {
 		VLANs []vlanEntry `json:"openconfig-network-instance:vlan"`
 	}
-	err := d.rest.Do(ctx, http.MethodGet, fmt.Sprintf("%s/vlan=%d", vlanPath, id), nil, &response)
+	err := d.rest.Do(ctx, http.MethodGet, path.Join(vlanPath, "vlan="+strconv.FormatInt(id, 10)), nil, &response)
 	if errors.Is(err, restconf.ErrNotFound) {
 		// A missing item URL is also how unsupported endpoints can respond. Only
 		// a readable parent collection establishes that this identity is absent.
@@ -174,7 +175,7 @@ func (d *Device) DeleteVLAN(ctx context.Context, id int64) error {
 		if err := vlanChildren(out[0], id); err != nil {
 			return err
 		}
-		writeErr := d.rest.Do(ctx, http.MethodDelete, fmt.Sprintf("%s/vlan=%d", vlanPath, id), nil, nil)
+		writeErr := d.rest.Do(ctx, http.MethodDelete, path.Join(vlanPath, "vlan="+strconv.FormatInt(id, 10)), nil, nil)
 		_, readErr := d.VLAN(ctx, id)
 		if !errors.Is(readErr, ErrNotFound) {
 			return errors.Join(writeErr, readErr, errors.New("VLAN absence could not be verified"))

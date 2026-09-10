@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"path"
 	"slices"
 )
 
@@ -71,15 +72,15 @@ func (d *Device) ApplyDNSServer(ctx context.Context, address string, present boo
 	}
 	exists := slices.Contains(servers, address)
 	if exists != present {
-		path := "/system/dns/servers/server=" + url.PathEscape(address)
+		endpoint := path.Join("/system/dns/servers", "server="+url.PathEscape(address))
 		method := http.MethodDelete
 		var body any
 		if present {
-			path = "/system/dns/servers"
+			endpoint = "/system/dns/servers"
 			method = http.MethodPost
 			body = map[string]any{"server": []any{map[string]any{"address": address, "config": map[string]any{"address": address}}}}
 		}
-		writeErr := d.rest.Do(ctx, method, path, body, nil)
+		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
 		observed, readErr := d.DNSServers(ctx)
 		if readErr != nil {
 			return exists, errors.Join(writeErr, readErr)

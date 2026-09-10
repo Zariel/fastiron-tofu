@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -183,9 +184,9 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 		if slices.Contains(lag.Members, name) {
 			continue
 		}
-		path := "/interfaces/interface=" + url.PathEscape(name) + "/ethernet/config"
+		endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/config")
 		body := map[string]any{"config": map[string]any{"openconfig-if-aggregate:aggregate-id": "lag " + strconv.FormatInt(v.ID, 10)}}
-		writeErr := d.rest.Do(ctx, http.MethodPatch, path, body, nil)
+		writeErr := d.rest.Do(ctx, http.MethodPatch, endpoint, body, nil)
 		observed, readErr := d.waitLAG(ctx, v.ID, func(lag *LAG) bool { return lag != nil && slices.Contains(lag.Members, name) })
 		if readErr != nil {
 			return observed, errors.Join(writeErr, readErr)
@@ -211,8 +212,8 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 func (d *Device) detachLAGPort(ctx context.Context, id int64, name string) error {
 	// Native removal disables the detached port. Administrative configuration
 	// belongs to the Ethernet resource; do not restore it as a LAG side effect.
-	path := "/interfaces/interface=" + url.PathEscape(name) + "/ethernet/config/aggregate-id"
-	writeErr := d.rest.Do(ctx, http.MethodDelete, path, nil, nil)
+	endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/config/aggregate-id")
+	writeErr := d.rest.Do(ctx, http.MethodDelete, endpoint, nil, nil)
 	_, readErr := d.waitLAG(ctx, id, func(lag *LAG) bool { return lag == nil || !slices.Contains(lag.Members, name) })
 	if readErr != nil {
 		return errors.Join(writeErr, readErr)
@@ -255,7 +256,7 @@ func (d *Device) DeleteLAG(ctx context.Context, id int64) error {
 		if err := lagChildren(output[0], current); err != nil {
 			return err
 		}
-		writeErr := d.rest.Do(ctx, http.MethodDelete, "/interfaces/interface="+url.PathEscape(name), nil, nil)
+		writeErr := d.rest.Do(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
 		_, readErr := d.waitLAG(ctx, id, func(lag *LAG) bool { return lag == nil })
 		if readErr != nil {
 			return errors.Join(writeErr, readErr)

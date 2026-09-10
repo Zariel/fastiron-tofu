@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -60,7 +61,7 @@ func (d *Device) PoE(ctx context.Context, name string) (PoEInterface, error) {
 	var response struct {
 		PoE *poeEntry `json:"icx-openconfig-if-poe-aug:poe"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/interfaces/interface="+url.PathEscape(name)+"/ethernet/poe", nil, &response); err != nil {
+	if err := d.rest.Do(ctx, http.MethodGet, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), nil, &response); err != nil {
 		return PoEInterface{}, err
 	}
 	if response.PoE == nil {
@@ -124,7 +125,7 @@ func (d *Device) ApplyPoE(ctx context.Context, name string, enabled bool) (*PoEI
 	}
 	if current.Enabled != enabled {
 		body := map[string]any{"poe": map[string]any{"config": map[string]any{"enabled": enabled}}}
-		writeErr := d.rest.Do(ctx, http.MethodPatch, "/interfaces/interface="+url.PathEscape(name)+"/ethernet/poe", body, nil)
+		writeErr := d.rest.Do(ctx, http.MethodPatch, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), body, nil)
 		observed, readErr := d.PoE(ctx, name)
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)
