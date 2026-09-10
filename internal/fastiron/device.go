@@ -3,21 +3,18 @@ package fastiron
 import (
 	"context"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 	"github.com/zariel/fastiron-tofu/internal/transport/ssh"
 )
 
 type Config struct {
-	Host, Transport, ExpectedFirmware, Persistence string
-	Timeout                                        time.Duration
-	RESTCONF                                       *restconf.Config
-	SSH                                            *ssh.Config
+	Host, Transport, Persistence string
+	RESTCONF                     *restconf.Config
+	SSH                          *ssh.Config
 }
 
 type Device struct {
@@ -106,13 +103,6 @@ func (d *Device) Discover(ctx context.Context) (Capabilities, error) {
 	c, err := parseVersion(out[0])
 	if err != nil {
 		return c, err
-	}
-	if !regexp.MustCompile(`^09\.0\.10[a-z0-9]*$`).MatchString(c.Firmware) {
-		return c, fmt.Errorf("FastIron firmware %s is unsupported; this provider targets 09.0.10", c.Firmware)
-	}
-	expected := strings.TrimSuffix(d.config.ExpectedFirmware, ".bin")
-	if expected != "" && expected != c.Firmware && expected != c.BootImage {
-		return c, fmt.Errorf("active firmware %s does not match expected_firmware", c.Firmware)
 	}
 	return c, nil
 }

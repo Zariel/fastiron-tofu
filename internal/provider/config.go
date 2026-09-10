@@ -22,7 +22,6 @@ type providerModel struct {
 	Username         types.String   `tfsdk:"username"`
 	Password         types.String   `tfsdk:"password"`
 	Transport        types.String   `tfsdk:"transport"`
-	ExpectedFirmware types.String   `tfsdk:"expected_firmware"`
 	OperationTimeout types.String   `tfsdk:"operation_timeout"`
 	PersistenceMode  types.String   `tfsdk:"persistence_mode"`
 	RESTCONF         *restconfModel `tfsdk:"restconf"`
@@ -48,13 +47,12 @@ type sshModel struct {
 
 func providerSchema() schema.Schema {
 	return schema.Schema{
-		Description: "Manage FastIron 09.0.10 switch configuration. SSH verifies firmware and persists writes; RESTCONF is preferred for supported configuration operations.",
+		Description: "Manage FastIron switch configuration. SSH discovers firmware and persists writes; RESTCONF is preferred for supported configuration operations.",
 		Attributes: map[string]schema.Attribute{
 			"host":              schema.StringAttribute{Optional: true, Description: "Switch hostname or IP address, without scheme or port. Defaults to FASTIRON_HOST."},
 			"username":          schema.StringAttribute{Optional: true, Description: "Automation username. Defaults to FASTIRON_USERNAME."},
 			"password":          schema.StringAttribute{Optional: true, Sensitive: true, Description: "Authentication password. Defaults to FASTIRON_PASSWORD."},
 			"transport":         schema.StringAttribute{Optional: true, Description: "auto (default), restconf, or ssh. Unsupported operations fail before mutation."},
-			"expected_firmware": schema.StringAttribute{Optional: true, Description: "Optional exact active firmware or image guard, for example 09.0.10k or SPR09010k."},
 			"operation_timeout": schema.StringAttribute{Optional: true, Description: "Maximum duration of one transport operation. Defaults to 30s."},
 			"persistence_mode":  schema.StringAttribute{Optional: true, Description: "after_each_write (default), manual, or never. Manual mode requires an explicit configuration_save resource."},
 		},
@@ -151,7 +149,7 @@ func (m providerModel) config() (fastiron.Config, error) {
 	if parseErr != nil || timeout <= 0 {
 		return fastiron.Config{}, errors.New("operation_timeout must be a positive duration")
 	}
-	cfg := fastiron.Config{Host: host, Transport: str(m.Transport, "", "auto"), ExpectedFirmware: str(m.ExpectedFirmware, "", ""), Persistence: str(m.PersistenceMode, "", "after_each_write"), Timeout: timeout}
+	cfg := fastiron.Config{Host: host, Transport: str(m.Transport, "", "auto"), Persistence: str(m.PersistenceMode, "", "after_each_write")}
 	r := m.RESTCONF
 	if r == nil {
 		r = &restconfModel{}
