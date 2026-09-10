@@ -65,4 +65,13 @@ cluster.yaml
 kubeconfig
 docs/internal
 
+# Local provider installation and OpenTofu state
+/.provider-mirror/
+/.tofurc
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
 __pycache__/
