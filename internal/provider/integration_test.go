@@ -1,0 +1,495 @@
+package provider
+
+import (
+	"bufio"
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"maps"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
+)
+
+// This simulator exercises the real plugin protocol, not hardware compatibility.
+// Its running and startup maps provide an independent observation path.
+type testSwitch struct {
+	mu                        sync.Mutex
+	running, startup          map[int]string
+	ethernet, startupEthernet map[string]any
+	child                     bool
+	failSave                  bool
+	falseSave                 bool
+	missingVLANEndpoint       bool
+	ambiguous                 bool
+	writes                    int
+	server                    *httptest.Server
+	sshAddress, knownHosts    string
+}
+
+func newSwitch(t *testing.T) *testSwitch {
+	t.Helper()
+	s := &testSwitch{running: map[int]string{}, startup: map[int]string{}, ethernet: map[string]any{"name": "ethernet 1/1/2", "description": "manual port", "enabled": true, "mtu": float64(9000)}}
+	s.startupEthernet = maps.Clone(s.ethernet)
+	s.server = httptest.NewTLSServer(http.HandlerFunc(s.restconf))
+	t.Cleanup(s.server.Close)
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &ssh.ServerConfig{PasswordCallback: func(ssh.ConnMetadata, []byte) (*ssh.Permissions, error) { return nil, nil }}
+	cfg.AddHostKey(signer)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.sshAddress = listener.Addr().String()
+	s.knownHosts = knownhosts.Line([]string{s.sshAddress}, signer.PublicKey())
+	var connections sync.Map
+	var workers sync.WaitGroup
+	workers.Go(func() {
+		for {
+			raw, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			connections.Store(raw, true)
+			workers.Go(func() {
+				defer connections.Delete(raw)
+				defer raw.Close()
+				conn, chans, reqs, err := ssh.NewServerConn(raw, cfg)
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+				go ssh.DiscardRequests(reqs)
+				for request := range chans {
+					channel, reqs, err := request.Accept()
+					if err != nil {
+						return
+					}
+					for req := range reqs {
+						if req.Type == "pty-req" {
+							req.Reply(true, nil)
+							continue
+						}
+						if req.Type != "shell" {
+							req.Reply(false, nil)
+							continue
+						}
+						req.Reply(true, nil)
+						go ssh.DiscardRequests(reqs)
+						io.WriteString(channel, "switch#")
+						scanner := bufio.NewScanner(channel)
+						for scanner.Scan() {
+							command := scanner.Text()
+							output := s.command(command)
+							fmt.Fprintf(channel, "%s\r\n%s\r\nswitch#", command, strings.ReplaceAll(output, "\n", "\r\n"))
+						}
+						return
+					}
+				}
+			})
+		}
+	})
+	t.Cleanup(func() {
+		listener.Close()
+		connections.Range(func(k, v any) bool { k.(net.Conn).Close(); return true })
+		workers.Wait()
+	})
+	return s
+}
+
+func (s *testSwitch) command(command string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch command {
+	case "show version":
+		return "UNIT 1: compiled on Sep 10 2026 labeled as SPR09010k\nSW: Version 09.0.10kT213\nHW: ICX7150-C12P"
+	case "write memory":
+		if s.failSave {
+			return "Error: failed to create startup-config"
+		}
+		if s.falseSave {
+			return "Write startup-config done."
+		}
+		s.startup = maps.Clone(s.running)
+		s.startupEthernet = maps.Clone(s.ethernet)
+		return "Write startup-config done."
+	case "show running-config":
+		return s.configuration(s.running, s.ethernet)
+	case "show configuration":
+		return s.configuration(s.startup, s.startupEthernet)
+	case "skip-page-display":
+		return ""
+	default:
+		return "% Invalid command"
+	}
+}
+
+func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any) string {
+	text := "ver 09.0.10kT213\n!\n"
+	ids := []int{}
+	for id := range vlans {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	for _, id := range ids {
+		text += fmt.Sprintf("vlan %d", id)
+		if vlans[id] != "" {
+			text += " name " + vlans[id]
+		}
+		text += " by port\n"
+		if s.child {
+			text += " tagged ethe 1/1/2\n"
+		}
+		text += "!\n"
+	}
+	text += "interface ethernet 1/1/2\n"
+	if ethernet["description"] != "" {
+		text += " port-name " + ethernet["description"].(string) + "\n"
+	}
+	if ethernet["enabled"] == false {
+		text += " disable\n"
+	}
+	text += " ip mtu 9000\n!\n"
+	return text + "end"
+}
+
+func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
+	if s.missingVLANEndpoint && strings.HasPrefix(r.URL.Path, collection) {
+		w.WriteHeader(404)
+		return
+	}
+	if r.Method == "GET" && r.URL.Path == collection {
+		entries := []any{}
+		for id, name := range s.running {
+			entries = append(entries, map[string]any{"vlan-id": id, "config": map[string]any{"vlan-id": id, "name": name}})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"openconfig-network-instance:vlans": map[string]any{"vlan": entries}})
+		return
+	}
+	if r.URL.Path == "/restconf/data/interfaces" {
+		if r.Method == "GET" {
+			json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet}}}})
+			return
+		}
+		if r.Method == "PATCH" {
+			var body struct {
+				Interfaces struct {
+					Interface []struct {
+						Name   string         `json:"name"`
+						Config map[string]any `json:"config"`
+					} `json:"interface"`
+				} `json:"interfaces"`
+			}
+			if json.NewDecoder(r.Body).Decode(&body) != nil || len(body.Interfaces.Interface) != 1 || body.Interfaces.Interface[0].Name != "ethernet 1/1/2" {
+				w.WriteHeader(400)
+				return
+			}
+			maps.Copy(s.ethernet, body.Interfaces.Interface[0].Config)
+			s.writes++
+			w.WriteHeader(204)
+			return
+		}
+		w.WriteHeader(400)
+		return
+	}
+	if r.Method == "GET" && strings.HasPrefix(r.URL.Path, collection+"/vlan=") {
+		id, _ := strconv.Atoi(strings.TrimPrefix(r.URL.Path, collection+"/vlan="))
+		name, ok := s.running[id]
+		if !ok {
+			w.WriteHeader(400)
+			fmt.Fprint(w, `{"ietf-restconf:errors":{"error":[{"error-tag":"invalid-value","error-app-tag":"data-invalid","error-info":{"error-number":388}}]}}`)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"openconfig-network-instance:vlan": []any{map[string]any{"vlan-id": id, "config": map[string]any{"vlan-id": id, "name": name}}}})
+		return
+	}
+	if r.URL.Path == collection && (r.Method == "POST" || r.Method == "PATCH") {
+		var payload map[string]json.RawMessage
+		if json.NewDecoder(r.Body).Decode(&payload) != nil {
+			w.WriteHeader(400)
+			return
+		}
+		if r.Method == "PATCH" {
+			if json.Unmarshal(payload["vlans"], &payload) != nil {
+				w.WriteHeader(400)
+				return
+			}
+		}
+		var entries []struct {
+			ID     int `json:"vlan-id"`
+			Config struct {
+				ID   int    `json:"vlan-id"`
+				Name string `json:"name"`
+			} `json:"config"`
+		}
+		if json.Unmarshal(payload["vlan"], &entries) != nil || len(entries) != 1 || entries[0].ID != entries[0].Config.ID {
+			w.WriteHeader(400)
+			return
+		}
+		s.running[entries[0].ID] = entries[0].Config.Name
+		s.writes++
+		if s.ambiguous {
+			w.WriteHeader(500)
+			return
+		}
+		w.WriteHeader(204)
+		return
+	}
+	if r.Method == "DELETE" && strings.HasPrefix(r.URL.Path, collection+"/vlan=") {
+		id, _ := strconv.Atoi(strings.TrimPrefix(r.URL.Path, collection+"/vlan="))
+		delete(s.running, id)
+		s.writes++
+		w.WriteHeader(204)
+		return
+	}
+	w.WriteHeader(400)
+}
+
+func TestOpenTofu(t *testing.T) {
+	tofu := os.Getenv("TOFU_BINARY")
+	if tofu == "" {
+		var err error
+		tofu, err = exec.LookPath("tofu")
+		if err != nil {
+			t.Skip("OpenTofu is required; run inside nix develop")
+		}
+	}
+	s := newSwitch(t)
+	dir := t.TempDir()
+	mirror := filepath.Join(dir, "mirror")
+	plugins := filepath.Join(mirror, "registry.opentofu.org", "zariel", "fastiron", "0.0.1", runtime.GOOS+"_"+runtime.GOARCH)
+	if err := os.MkdirAll(plugins, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command("go", "build", "-o", filepath.Join(plugins, "terraform-provider-fastiron"), "../../cmd/terraform-provider-fastiron")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	write := func(name, text string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("tofurc", fmt.Sprintf("provider_installation { filesystem_mirror { path = %q } }\n", mirror))
+	_, httpPort, _ := net.SplitHostPort(strings.TrimPrefix(s.server.URL, "https://"))
+	_, sshPort, _ := net.SplitHostPort(s.sshAddress)
+	write("ca.pem", string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: s.server.Certificate().Raw})))
+	write("known_hosts", s.knownHosts)
+	base := fmt.Sprintf(`terraform {
+  required_providers {
+    fastiron = { source = "zariel/fastiron", version = "0.0.1" }
+  }
+}
+provider "fastiron" {
+  host = "127.0.0.1"
+  username = "automation"
+  password = "test-password"
+  persistence_mode = "after_each_write"
+  restconf {
+    port = %s
+    ca_certificate = file("${path.module}/ca.pem")
+  }
+  ssh {
+    port = %s
+    known_hosts = file("${path.module}/known_hosts")
+  }
+}
+data "fastiron_capabilities" "switch" {}
+output "firmware" { value = data.fastiron_capabilities.switch.firmware }
+`, httpPort, sshPort)
+	resetPort := false
+	config := func(name *string) {
+		resource := "resource \"fastiron_vlan\" \"test\" {\n vlan_id = 53\n"
+		if name != nil {
+			resource += fmt.Sprintf(" name = %q\n", *name)
+		}
+		port := "resource \"fastiron_interface_ethernet\" \"test\" {\n port = \"1/1/2\"\n"
+		if !resetPort {
+			port += " port_name = \"UPLINK\"\n enabled = false\n"
+		}
+		write("main.tf", base+resource+"}\n"+port+"}\n")
+	}
+	run := func(want int, args ...string) string {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, tofu, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "TF_CLI_CONFIG_FILE="+filepath.Join(dir, "tofurc"), "TF_IN_AUTOMATION=1", "CHECKPOINT_DISABLE=1")
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if err != nil {
+			if exit, ok := err.(*exec.ExitError); ok {
+				code = exit.ExitCode()
+			} else {
+				t.Fatal(err)
+			}
+		}
+		if code != want {
+			t.Fatalf("tofu %v: exit %d, want %d\n%s", args, code, want, out)
+		}
+		return string(out)
+	}
+	check := func(name string, exists bool) {
+		t.Helper()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for label, vlans := range map[string]map[int]string{"running": s.running, "startup": s.startup} {
+			got, ok := vlans[53]
+			if ok != exists || (exists && got != name) {
+				t.Fatalf("%s VLAN = %q, exists %v; want %q, exists %v", label, got, ok, name, exists)
+			}
+		}
+	}
+	checkPort := func(name string, enabled bool) {
+		t.Helper()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for label, port := range map[string]map[string]any{"running": s.ethernet, "startup": s.startupEthernet} {
+			if port["description"] != name || port["enabled"] != enabled || port["mtu"] != float64(9000) {
+				t.Fatalf("%s port: %#v", label, port)
+			}
+		}
+	}
+	name := "INFRA"
+	config(&name)
+	run(0, "init", "-no-color")
+	run(0, "validate", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	check("INFRA", true)
+	checkPort("UPLINK", false)
+	if got := strings.TrimSpace(run(0, "output", "-json", "firmware")); got != `"09.0.10k"` {
+		t.Fatalf("firmware output: %s", got)
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.missingVLANEndpoint = true
+	s.mu.Unlock()
+	run(1, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.missingVLANEndpoint = false
+	s.mu.Unlock()
+	s.mu.Lock()
+	s.running[53] = "MANUAL"
+	s.ethernet["description"] = "MANUAL PORT"
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	check("INFRA", true)
+	checkPort("UPLINK", false)
+	run(0, "state", "rm", "fastiron_vlan.test")
+	run(0, "import", "-no-color", "fastiron_vlan.test", "vlan 53")
+	run(0, "state", "rm", "fastiron_interface_ethernet.test")
+	run(0, "import", "-no-color", "fastiron_interface_ethernet.test", "ethernet 1/1/2")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	resetPort = true
+	config(nil)
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	check("", true)
+	checkPort("", true)
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	name = "AFTER-TIMEOUT"
+	config(&name)
+	s.mu.Lock()
+	s.ambiguous = true
+	s.mu.Unlock()
+	run(0, "apply", "-auto-approve", "-no-color")
+	check(name, true)
+	s.mu.Lock()
+	s.ambiguous = false
+	s.failSave = true
+	s.mu.Unlock()
+	name = "SAVE-RETRY"
+	config(&name)
+	run(1, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	s.failSave = false
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	check(name, true)
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	name = "VERIFY-SAVE"
+	config(&name)
+	s.mu.Lock()
+	s.falseSave = true
+	s.mu.Unlock()
+	run(1, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	s.falseSave = false
+	s.mu.Unlock()
+	run(0, "apply", "-auto-approve", "-no-color")
+	check(name, true)
+	s.mu.Lock()
+	s.child = true
+	s.mu.Unlock()
+	run(1, "destroy", "-auto-approve", "-no-color")
+	check(name, true)
+	s.mu.Lock()
+	s.child = false
+	s.failSave = true
+	s.mu.Unlock()
+	run(1, "destroy", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	s.failSave = false
+	s.mu.Unlock()
+	run(0, "destroy", "-auto-approve", "-no-color")
+	check("", false)
+	checkPort("", true)
+	base = strings.Replace(base, `persistence_mode = "after_each_write"`, `persistence_mode = "manual"`, 1)
+	name = "MANUAL-SAVE"
+	config(&name)
+	write("save.tf", `resource "fastiron_configuration_save" "test" {
+  revision = "first"
+  depends_on = [fastiron_vlan.test, fastiron_interface_ethernet.test]
+}
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	check(name, true)
+	name = "NEXT-REVISION"
+	config(&name)
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	running, saved := s.running[53], s.startup[53]
+	s.mu.Unlock()
+	if running != "NEXT-REVISION" || saved != "MANUAL-SAVE" {
+		t.Fatalf("manual persistence: running=%q, startup=%q", running, saved)
+	}
+	write("save.tf", `resource "fastiron_configuration_save" "test" {
+  revision = "second"
+  depends_on = [fastiron_vlan.test, fastiron_interface_ethernet.test]
+}
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	check(name, true)
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+}
