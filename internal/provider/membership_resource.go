@@ -32,10 +32,10 @@ func (r *membershipResource) Metadata(_ context.Context, req resource.MetadataRe
 }
 
 func (r *membershipResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Owns one tagged or untagged VLAN-to-interface relationship. Other memberships remain independently managed. Removing an untagged membership restores the default VLAN. Import with vlan <id>|ethernet <stack>/<slot>/<port>|<tagging>.", Attributes: map[string]schema.Attribute{
+	resp.Schema = schema.Schema{Description: "Owns one tagged or untagged VLAN-to-interface relationship. Other memberships remain independently managed. Removing an untagged membership restores the default VLAN. Import with vlan <id>|<interface>|<tagging>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"vlan_id":             schema.Int64Attribute{Required: true, Description: "VLAN identifier, 2 through 4094.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
-		"interface":           schema.StringAttribute{Required: true, Description: "Canonical interface name. Currently supports Ethernet switchports.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet or LAG interface name, such as ethernet 1/1/2 or lag 5.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"tagging":             schema.StringAttribute{Required: true, Description: "tagged or untagged. A different existing untagged VLAN must be removed first.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
@@ -158,13 +158,13 @@ func (r *membershipResource) Delete(ctx context.Context, req resource.DeleteRequ
 func (r *membershipResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts := strings.Split(req.ID, "|")
 	if len(parts) != 3 {
-		resp.Diagnostics.AddError("Invalid membership identity", "Use vlan <id>|ethernet <stack>/<slot>/<port>|<tagging>.")
+		resp.Diagnostics.AddError("Invalid membership identity", "Use vlan <id>|<interface>|<tagging>, with an Ethernet or LAG interface name.")
 		return
 	}
 	id, err := strconv.ParseInt(strings.TrimPrefix(parts[0], "vlan "), 10, 64)
 	v := fastiron.VLANMembership{VLANID: id, Interface: parts[1], Tagging: parts[2]}
 	if err != nil || parts[0] != fmt.Sprintf("vlan %d", id) || fastiron.ValidateVLANMembership(v) != nil {
-		resp.Diagnostics.AddError("Invalid membership identity", "Use vlan <id>|ethernet <stack>/<slot>/<port>|<tagging>.")
+		resp.Diagnostics.AddError("Invalid membership identity", "Use vlan <id>|<interface>|<tagging>, with an Ethernet or LAG interface name.")
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, membershipModel{ID: types.StringValue(req.ID), VLANID: types.Int64Value(id), Interface: types.StringValue(v.Interface), Tagging: types.StringValue(v.Tagging), PersistencePending: types.BoolValue(false)})...)

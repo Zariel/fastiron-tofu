@@ -11,7 +11,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Area | Supported configuration |
 |---|---|
 | VLAN | Existence and name |
-| VLAN membership | One tagged or untagged Ethernet relationship |
+| VLAN membership | One tagged or untagged Ethernet or LAG relationship |
 | Ethernet | Port name and administrative enable state |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE interfaces |

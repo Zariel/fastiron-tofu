@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -20,12 +21,14 @@ type switchport struct {
 	Trunks []int64 `json:"trunk-vlans"`
 }
 
+var lagPattern = regexp.MustCompile(`^lag [1-9][0-9]*$`)
+
 func ValidateVLANMembership(v VLANMembership) error {
 	if err := ValidateVLAN(VLAN{ID: v.VLANID}); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(v.Interface, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(v.Interface, "ethernet ")) {
-		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
+	if !lagPattern.MatchString(v.Interface) && (!strings.HasPrefix(v.Interface, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(v.Interface, "ethernet "))) {
+		return errors.New("interface must be a canonical Ethernet or LAG name: ethernet <stack>/<slot>/<port> or lag <id>")
 	}
 	if v.Tagging != "tagged" && v.Tagging != "untagged" {
 		return errors.New("tagging must be tagged or untagged")
@@ -34,6 +37,9 @@ func ValidateVLANMembership(v VLANMembership) error {
 }
 
 func membershipPath(name string) string {
+	if lagPattern.MatchString(name) {
+		return "/interfaces/interface=" + url.PathEscape(name) + "/aggregation/switched-vlan"
+	}
 	return "/interfaces/interface=" + url.PathEscape(name) + "/ethernet/switched-vlan"
 }
 
