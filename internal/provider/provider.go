@@ -44,5 +44,6 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &lldpDataSource{} },
 		func() datasource.DataSource { return &poeDataSource{} },
 		func() datasource.DataSource { return &addressesDataSource{} },
+		func() datasource.DataSource { return &lagDataSource{} },
 	}
 }
