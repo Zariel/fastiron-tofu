@@ -164,10 +164,17 @@ func configuration(output string) (string, error) {
 	if start < 0 {
 		return "", errors.New("cannot identify complete FastIron configuration")
 	}
+	var commands []string
 	for i := start; i < len(lines); i++ {
 		lines[i] = strings.TrimRight(lines[i], " \t")
+		// Running and startup displays insert different blank/comment separators.
+		// Preserve command order and indentation, which carry configuration meaning.
+		if strings.TrimSpace(lines[i]) == "" || strings.TrimSpace(lines[i]) == "!" {
+			continue
+		}
+		commands = append(commands, lines[i])
 		if lines[i] == "end" {
-			return strings.Join(lines[start:i+1], "\n"), nil
+			return strings.Join(commands, "\n"), nil
 		}
 	}
 	return "", errors.New("FastIron configuration output is incomplete")

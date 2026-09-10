@@ -35,7 +35,7 @@ func TestConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "ver 09.0.10kT213\nvlan 53 name INFRA by port\n!\nend" {
+	if got != "ver 09.0.10kT213\nvlan 53 name INFRA by port\nend" {
 		t.Fatalf("configuration: %q", got)
 	}
 	if _, err = configuration("ver 09.0.10kT213\nvlan 53"); err == nil {
