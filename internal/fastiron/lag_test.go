@@ -97,7 +97,9 @@ func TestLAGCollection(t *testing.T) {
 		name, body string
 		failure    bool
 	}{
-		{"empty", `{"openconfig-interfaces:interfaces":{}}`, false},
+		{"rebuilding database", `{"openconfig-interfaces:interfaces":{}}`, true},
+		{"empty interface list", `{"openconfig-interfaces:interfaces":{"interface":[]}}`, true},
+		{"no aggregates", `{"openconfig-interfaces:interfaces":{"interface":[{"name":"ethernet 1/1/1","config":{"name":"ethernet 1/1/1","type":"iana-if-type:ethernetCsmacd"}}]}}`, false},
 		{"unsupported", `{}`, true},
 		{"missing configuration", `{"openconfig-interfaces:interfaces":{"interface":[{"name":"lag 1"}]}}`, true},
 		{"dangling member", `{"openconfig-interfaces:interfaces":{"interface":[{"name":"ethernet 1/1/1","config":{"name":"ethernet 1/1/1","type":"iana-if-type:ethernetCsmacd"},"openconfig-if-ethernet:ethernet":{"config":{"openconfig-if-aggregate:aggregate-id":"lag 1"}}}]}}`, true},

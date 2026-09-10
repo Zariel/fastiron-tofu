@@ -71,6 +71,11 @@ func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
 	if response.Interfaces == nil {
 		return nil, errors.New("RESTCONF interface collection is missing its container")
 	}
+	// Physical interfaces remain present even when no LAGs are configured.
+	// FastIron can return an empty container while its database is rebuilding.
+	if len(response.Interfaces.Interface) == 0 {
+		return nil, errors.New("RESTCONF interface collection is empty; cannot confirm LAG state")
+	}
 	lags := map[string]LAG{}
 	members := map[string][]string{}
 	seen := map[string]bool{}
