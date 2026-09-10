@@ -16,19 +16,22 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type ethernetResource struct{ device *fastiron.Device }
-type ethernetModel struct {
-	ID                 types.String `tfsdk:"id"`
-	Name               types.String `tfsdk:"name"`
-	Port               types.String `tfsdk:"port"`
-	PortName           types.String `tfsdk:"port_name"`
-	Enabled            types.Bool   `tfsdk:"enabled"`
-	PersistencePending types.Bool   `tfsdk:"persistence_pending"`
-}
+type (
+	ethernetResource struct{ device *fastiron.Device }
+	ethernetModel    struct {
+		ID                 types.String `tfsdk:"id"`
+		Name               types.String `tfsdk:"name"`
+		Port               types.String `tfsdk:"port"`
+		PortName           types.String `tfsdk:"port_name"`
+		Enabled            types.Bool   `tfsdk:"enabled"`
+		PersistencePending types.Bool   `tfsdk:"persistence_pending"`
+	}
+)
 
 func (r *ethernetResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_interface_ethernet"
 }
+
 func (r *ethernetResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Manages a physical Ethernet port's name and administrative enable state. Destroy clears the name and enables the port; it does not delete or broadly reset the interface.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: ethernet <stack>/<slot>/<port>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -39,6 +42,7 @@ func (r *ethernetResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
 }
+
 func (r *ethernetResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -49,6 +53,7 @@ func (r *ethernetResource) Configure(_ context.Context, req resource.ConfigureRe
 		resp.Diagnostics.AddError("Invalid provider client", "Expected a FastIron device client.")
 	}
 }
+
 func (r *ethernetResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var model ethernetModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
@@ -59,6 +64,7 @@ func (r *ethernetResource) ValidateConfig(ctx context.Context, req resource.Vali
 		resp.Diagnostics.AddError("Invalid Ethernet configuration", err.Error())
 	}
 }
+
 func (r *ethernetResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() || r.device == nil {
 		return
@@ -73,6 +79,7 @@ func (r *ethernetResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 		resp.Diagnostics.AddError("Ethernet configuration is not supported by the configured switch", err.Error())
 	}
 }
+
 func (r *ethernetResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan ethernetModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -89,6 +96,7 @@ func (r *ethernetResource) Create(ctx context.Context, req resource.CreateReques
 		resp.Diagnostics.AddError("Cannot apply Ethernet configuration", err.Error())
 	}
 }
+
 func (r *ethernetResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan ethernetModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -105,6 +113,7 @@ func (r *ethernetResource) Update(ctx context.Context, req resource.UpdateReques
 		resp.Diagnostics.AddError("Cannot update Ethernet configuration", err.Error())
 	}
 }
+
 func (r *ethernetResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state ethernetModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -126,6 +135,7 @@ func (r *ethernetResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, current)...)
 }
+
 func (r *ethernetResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state ethernetModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -141,6 +151,7 @@ func (r *ethernetResource) Delete(ctx context.Context, req resource.DeleteReques
 		resp.Diagnostics.AddError("Cannot reset Ethernet configuration", err.Error())
 	}
 }
+
 func (r *ethernetResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	port := strings.TrimPrefix(req.ID, "ethernet ")
 	if req.ID != "ethernet "+port || fastiron.ValidateEthernet(fastiron.Ethernet{Port: port}) != nil {
@@ -150,9 +161,11 @@ func (r *ethernetResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("port"), port)...)
 }
+
 func (m ethernetModel) desired() fastiron.Ethernet {
 	return fastiron.Ethernet{Port: m.Port.ValueString(), PortName: m.PortName.ValueString(), Enabled: m.Enabled.ValueBool()}
 }
+
 func ethernetState(v fastiron.Ethernet) ethernetModel {
 	return ethernetModel{ID: types.StringValue("ethernet " + v.Port), Name: types.StringValue("ethernet " + v.Port), Port: types.StringValue(v.Port), PortName: types.StringValue(v.PortName), Enabled: types.BoolValue(v.Enabled), PersistencePending: types.BoolValue(false)}
 }

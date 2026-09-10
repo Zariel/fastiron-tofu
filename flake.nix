@@ -24,6 +24,7 @@
             packages = with pkgs; [
               go_1_26
               gopls
+              gofumpt
               gnumake
               opentofu
               git

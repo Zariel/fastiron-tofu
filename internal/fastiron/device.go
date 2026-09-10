@@ -78,8 +78,10 @@ func (d *Device) lock(ctx context.Context) (func(), error) {
 
 type Capabilities struct{ Firmware, BootImage string }
 
-var firmwarePattern = regexp.MustCompile(`(?m)\bSW:\s+Version\s+([0-9]+\.[0-9]+\.[0-9]+[a-z0-9]*)(?:T[0-9]+)?\b`)
-var imagePattern = regexp.MustCompile(`(?m)\blabeled as\s+([A-Z]{3}[0-9]+[a-z0-9]*)\b`)
+var (
+	firmwarePattern = regexp.MustCompile(`(?m)\bSW:\s+Version\s+([0-9]+\.[0-9]+\.[0-9]+[a-z0-9]*)(?:T[0-9]+)?\b`)
+	imagePattern    = regexp.MustCompile(`(?m)\blabeled as\s+([A-Z]{3}[0-9]+[a-z0-9]*)\b`)
+)
 
 func parseVersion(output string) (Capabilities, error) {
 	m := firmwarePattern.FindStringSubmatch(output)

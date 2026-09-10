@@ -9,7 +9,7 @@ Implementation targets FastIron 09.0.10 across ICX models. Feature availability 
 
 ## Development
 
-Enter the pinned tool environment with `nix develop`. It includes Go, gopls, OpenTofu, Make, Jujutsu, Git, curl, jq, Python, OpenSSH, picocom, socat, and nixfmt.
+Enter the pinned tool environment with `nix develop`. It includes Go, gofumpt, gopls, OpenTofu, Make, Jujutsu, Git, curl, jq, Python, OpenSSH, picocom, socat, and nixfmt.
 
 ```sh
 nix develop
@@ -17,4 +17,4 @@ make check
 make build
 ```
 
-Use `nix fmt` to format the flake. To access a serial console, run `picocom --baud 9600 /dev/serial/by-id/<adapter>` with the switch's actual console baud rate and device path. Exit picocom with Ctrl-A, Ctrl-X. Serial device permissions are managed by the host operating system.
+Use `gofumpt -w .` to format Go files. Use `nix fmt` to format the flake. To access a serial console, run `picocom --baud 9600 /dev/serial/by-id/<adapter>` with the switch's actual console baud rate and device path. Exit picocom with Ctrl-A, Ctrl-X. Serial device permissions are managed by the host operating system.

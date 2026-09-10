@@ -11,21 +11,25 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type saveResource struct{ device *fastiron.Device }
-type saveModel struct {
-	ID       types.String `tfsdk:"id"`
-	Revision types.String `tfsdk:"revision"`
-}
+type (
+	saveResource struct{ device *fastiron.Device }
+	saveModel    struct {
+		ID       types.String `tfsdk:"id"`
+		Revision types.String `tfsdk:"revision"`
+	}
+)
 
 func (r *saveResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_configuration_save"
 }
+
 func (r *saveResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Saves running configuration on create and revision changes. Use depends_on to order after the resources being persisted. Destroy has no remote effect. This action resource does not represent an importable remote object.", Attributes: map[string]schema.Attribute{
 		"id":       schema.StringAttribute{Computed: true, Description: "Local save action identity.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"revision": schema.StringAttribute{Required: true, Description: "Changing this value requests another save."},
 	}}
 }
+
 func (r *saveResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -36,6 +40,7 @@ func (r *saveResource) Configure(_ context.Context, req resource.ConfigureReques
 		resp.Diagnostics.AddError("Invalid provider client", "Expected a FastIron device client.")
 	}
 }
+
 func (r *saveResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan saveModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -49,6 +54,7 @@ func (r *saveResource) Create(ctx context.Context, req resource.CreateRequest, r
 	plan.ID = types.StringValue("configuration-save")
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
+
 func (r *saveResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan saveModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)

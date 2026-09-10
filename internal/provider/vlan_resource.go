@@ -17,13 +17,15 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type vlanResource struct{ device *fastiron.Device }
-type vlanModel struct {
-	ID                 types.String `tfsdk:"id"`
-	VLANID             types.Int64  `tfsdk:"vlan_id"`
-	Name               types.String `tfsdk:"name"`
-	PersistencePending types.Bool   `tfsdk:"persistence_pending"`
-}
+type (
+	vlanResource struct{ device *fastiron.Device }
+	vlanModel    struct {
+		ID                 types.String `tfsdk:"id"`
+		VLANID             types.Int64  `tfsdk:"vlan_id"`
+		Name               types.String `tfsdk:"name"`
+		PersistencePending types.Bool   `tfsdk:"persistence_pending"`
+	}
+)
 
 var (
 	_ resource.ResourceWithConfigure      = (*vlanResource)(nil)
@@ -35,6 +37,7 @@ var (
 func (r *vlanResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_vlan"
 }
+
 func (r *vlanResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns VLAN existence and its name. Membership, spanning tree, and routed interfaces are separate domains. Import with vlan <id>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: vlan <id>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
@@ -101,6 +104,7 @@ func (r *vlanResource) Create(ctx context.Context, req resource.CreateRequest, r
 		resp.Diagnostics.AddError("Cannot apply VLAN", err.Error())
 	}
 }
+
 func (r *vlanResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan vlanModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -117,6 +121,7 @@ func (r *vlanResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		resp.Diagnostics.AddError("Cannot update VLAN", err.Error())
 	}
 }
+
 func (r *vlanResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state vlanModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -143,6 +148,7 @@ func (r *vlanResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, observed)...)
 }
+
 func (r *vlanResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state vlanModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -154,6 +160,7 @@ func (r *vlanResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		resp.Diagnostics.AddError("Cannot delete VLAN", err.Error())
 	}
 }
+
 func (r *vlanResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id, err := strconv.ParseInt(strings.TrimPrefix(req.ID, "vlan "), 10, 64)
 	if err != nil || req.ID != "vlan "+strconv.FormatInt(id, 10) || fastiron.ValidateVLAN(fastiron.VLAN{ID: id}) != nil {
