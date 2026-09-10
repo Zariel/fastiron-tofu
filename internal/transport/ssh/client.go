@@ -3,6 +3,7 @@ package ssh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -149,13 +150,13 @@ func (c *Client) Run(ctx context.Context, privileged bool, commands ...string) (
 		}
 	}
 	if _, err = terminal.command(ctx, "skip-page-display"); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("disable SSH pagination: %w", err)
 	}
 	outputs := make([]string, 0, len(commands))
-	for _, command := range commands {
+	for i, command := range commands {
 		output, err := terminal.command(ctx, command)
 		if err != nil {
-			return outputs, err
+			return outputs, fmt.Errorf("SSH command %d: %w", i+1, err)
 		}
 		outputs = append(outputs, output)
 	}

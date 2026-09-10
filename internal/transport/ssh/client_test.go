@@ -74,7 +74,7 @@ func switchServer(t *testing.T) (Config, <-chan string) {
 						}
 						req.Reply(true, nil)
 						go gossh.DiscardRequests(reqs)
-						io.WriteString(channel, "FastIron\r\nswitch>")
+						io.WriteString(channel, "FastIron\r\nSSH@switch>")
 						scanner := bufio.NewScanner(channel)
 						for scanner.Scan() {
 							line := scanner.Text()
@@ -83,16 +83,16 @@ func switchServer(t *testing.T) (Config, <-chan string) {
 							case "enable":
 								io.WriteString(channel, "Password:")
 							case "enable-marker":
-								io.WriteString(channel, "\r\nswitch#")
+								io.WriteString(channel, "\r\nSSH@switch#")
 							case "show version":
-								io.WriteString(channel, "show version\r\nSW: Version 09.0.10kT213\r\nswitch#")
+								io.WriteString(channel, "show version\r\nSW: Version 09.0.10kT213\r\nSSH@switch#")
 							case "bad command":
-								io.WriteString(channel, "bad command\r\n% Invalid input: secret-marker\r\nswitch#")
+								io.WriteString(channel, "bad command\r\n% Invalid input: secret-marker\r\nSSH@switch#")
 							case "stall":
 								<-channelDone(channel)
 								return
 							default:
-								fmt.Fprintf(channel, "%s\r\nswitch#", line)
+								fmt.Fprintf(channel, "%s\r\nSSH@switch#", line)
 							}
 						}
 						return

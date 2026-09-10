@@ -96,7 +96,7 @@ func (d *Device) Discover(ctx context.Context) (Capabilities, error) {
 	if d.cli == nil {
 		return Capabilities{}, errors.New("SSH is required to verify active firmware; RESTCONF firmware discovery is not yet verified")
 	}
-	out, err := d.cli.Run(ctx, false, "show version")
+	out, err := d.cli.Run(ctx, true, "show version")
 	if err != nil {
 		return Capabilities{}, err
 	}
