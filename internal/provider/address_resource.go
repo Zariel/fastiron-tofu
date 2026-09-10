@@ -40,9 +40,9 @@ func (r *addressResource) Metadata(_ context.Context, req resource.MetadataReque
 }
 
 func (r *addressResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Owns one interface IP address and prefix. Address or prefix changes replace this relationship; other addresses remain independently managed. Currently supports VE interfaces.", Attributes: map[string]schema.Attribute{
+	resp.Schema = schema.Schema{Description: "Owns one interface IP address and prefix. Address or prefix changes replace this relationship; other addresses remain independently managed. Supports VE and management interfaces.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"interface":           schema.StringAttribute{Required: true, Description: "Canonical VE interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+		"interface":           schema.StringAttribute{Required: true, Description: "Canonical VE or management interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"address":             schema.StringAttribute{Required: true, Description: "Canonical " + r.family() + " address and prefix length in CIDR syntax, preserving the host address.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}

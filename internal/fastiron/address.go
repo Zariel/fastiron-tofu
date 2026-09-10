@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,9 +27,10 @@ type (
 )
 
 func ValidateAddressInterface(name string) error {
-	id, err := strconv.ParseInt(strings.TrimPrefix(name, "ve "), 10, 64)
-	if err != nil || id < 1 || id > 4094 || name != "ve "+strconv.FormatInt(id, 10) {
-		return errors.New("address resources currently require a canonical VE interface name: ve <id>")
+	kind, number, ok := strings.Cut(name, " ")
+	id, err := strconv.ParseInt(number, 10, 64)
+	if !ok || err != nil || id < 1 || number != strconv.FormatInt(id, 10) || (kind != "ve" && kind != "management") || (kind == "ve" && id > 4094) {
+		return errors.New("address resources require a canonical VE or management interface name: ve <id> or management <id>")
 	}
 	return nil
 }
@@ -48,7 +50,11 @@ func addressPath(name string, ipv6 bool) string {
 	if ipv6 {
 		family = "ipv6"
 	}
-	return "/interfaces/interface=" + url.PathEscape(name) + "/routed-vlan/" + family + "/addresses"
+	container := "routed-vlan"
+	if strings.HasPrefix(name, "management ") {
+		container = "subinterfaces/subinterface=0"
+	}
+	return path.Join("/interfaces", "interface="+url.PathEscape(name), container, family, "addresses")
 }
 
 func (d *Device) readAddresses(ctx context.Context, name string, ipv6 bool) (map[netip.Addr]addressState, error) {
@@ -71,7 +77,7 @@ func (d *Device) readAddresses(ctx context.Context, name string, ipv6 bool) (map
 		} `json:"openconfig-if-ip:addresses"`
 	}
 	err := d.rest.Do(ctx, http.MethodGet, addressPath(name, ipv6), nil, &response)
-	if errors.Is(err, restconf.ErrNotFound) {
+	if errors.Is(err, restconf.ErrNotFound) && strings.HasPrefix(name, "ve ") {
 		id, _ := strconv.ParseInt(strings.TrimPrefix(name, "ve "), 10, 64)
 		// A missing address endpoint is not absence unless the parent is absent too.
 		if _, parentErr := d.VE(ctx, id); errors.Is(parentErr, ErrNotFound) {
@@ -146,15 +152,15 @@ func (d *Device) ApplyInterfaceAddress(ctx context.Context, v InterfaceAddress, 
 		if !present && entry.HasChildren {
 			return &entry.Prefix, errors.New("address has VRRP child configuration; remove it before destroying the address")
 		}
-		path := addressPath(v.Interface, v.Address.Addr().Is6())
+		endpoint := addressPath(v.Interface, v.Address.Addr().Is6())
 		method := http.MethodPost
 		var body any = map[string]any{"address": []any{map[string]any{"ip": v.Address.Addr().String(), "config": map[string]any{"ip": v.Address.Addr().String(), "prefix-length": v.Address.Bits()}}}}
 		if !present {
 			method = http.MethodDelete
-			path += "/address=" + url.PathEscape(v.Address.Addr().String())
+			endpoint = path.Join(endpoint, "address="+url.PathEscape(v.Address.Addr().String()))
 			body = nil
 		}
-		writeErr := d.rest.Do(ctx, method, path, body, nil)
+		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
 		observed, readErr := d.readAddresses(ctx, v.Interface, v.Address.Addr().Is6())
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)

@@ -7,7 +7,8 @@ import (
 )
 
 func (s *testSwitch) addressREST(w http.ResponseWriter, r *http.Request) {
-	if s.ve == nil {
+	management := strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=management%201/")
+	if (!management && s.ve == nil) || (management && s.managementAddresses == nil) {
 		w.WriteHeader(404)
 		return
 	}
@@ -17,9 +18,14 @@ func (s *testSwitch) addressREST(w http.ResponseWriter, r *http.Request) {
 	if ipv6 {
 		base = "/restconf/data/interfaces/interface=ve%2053/routed-vlan/ipv6/addresses"
 	}
+	addresses := s.addresses
+	if management {
+		addresses = s.managementAddresses
+		base = strings.Replace(base, "interface=ve%2053/routed-vlan", "interface=management%201/subinterfaces/subinterface=0", 1)
+	}
 	if r.Method == "GET" && path == base {
 		entries := []any{}
-		for ip, bits := range s.addresses {
+		for ip, bits := range addresses {
 			if strings.Contains(ip, ":") != ipv6 {
 				continue
 			}
@@ -51,14 +57,14 @@ func (s *testSwitch) addressREST(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(400)
 			return
 		}
-		s.addresses[entry.IP] = entry.Config.Bits
+		addresses[entry.IP] = entry.Config.Bits
 		s.writes++
 		w.WriteHeader(201)
 		return
 	}
 	if r.Method == "DELETE" && strings.HasPrefix(path, base+"/address=") {
 		ip := strings.TrimPrefix(path, base+"/address=")
-		delete(s.addresses, ip)
+		delete(addresses, ip)
 		s.writes++
 		w.WriteHeader(204)
 		return

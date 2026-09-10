@@ -31,6 +31,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
+	managementAddresses, startupManagementAddresses map[string]int
+
 	lags                            *lagSwitch
 	startupLAG                      string
 	addresses                       map[string]int
@@ -148,10 +150,13 @@ func (s *testSwitch) command(command string) string {
 		if s.falseSave {
 			return "Write startup-config done."
 		}
-		unchanged := maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships)
+		unchanged := maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
 		if s.lags != nil {
-			s.startupLAG = s.lags.configuration()
+			lagConfig := s.lags.configuration()
+			unchanged = unchanged && lagConfig == s.startupLAG
+			s.startupLAG = lagConfig
 		}
+		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
 		s.startupMemberships = maps.Clone(s.memberships)
@@ -164,9 +169,9 @@ func (s *testSwitch) command(command string) string {
 		if s.lags != nil {
 			text = strings.TrimSuffix(text, "end") + s.lags.configuration() + "end"
 		}
-		return text
+		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
-		return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + s.startupLAG + "end"
+		return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + s.startupLAG + managementConfiguration(s.startupManagementAddresses) + "end"
 	case "skip-page-display":
 		return ""
 	default:
@@ -227,7 +232,7 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
-	if strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=ve%2053/routed-vlan/") {
+	if strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=ve%2053/routed-vlan/") || strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=management%201/subinterfaces/subinterface=0/") {
 		s.addressREST(w, r)
 		return
 	}

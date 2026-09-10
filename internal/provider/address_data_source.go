@@ -22,8 +22,8 @@ func (d *addressesDataSource) Metadata(_ context.Context, req datasource.Metadat
 }
 
 func (d *addressesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Reads configured IPv4 and IPv6 addresses on a VE interface without taking ownership.", Attributes: map[string]schema.Attribute{
-		"interface": schema.StringAttribute{Required: true, Description: "Canonical VE interface name."},
+	resp.Schema = schema.Schema{Description: "Reads configured IPv4 and IPv6 addresses on a VE or management interface without taking ownership.", Attributes: map[string]schema.Attribute{
+		"interface": schema.StringAttribute{Required: true, Description: "Canonical VE or management interface name."},
 		"addresses": schema.SetAttribute{Computed: true, ElementType: types.StringType, Description: "Configured host addresses and prefix lengths in CIDR syntax."},
 	}}
 }
