@@ -31,6 +31,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
+	lags                            *lagSwitch
+	startupLAG                      string
 	addresses                       map[string]int
 	addressChild                    bool
 	ve                              map[string]any
@@ -147,6 +149,9 @@ func (s *testSwitch) command(command string) string {
 			return "Write startup-config done."
 		}
 		unchanged := maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships)
+		if s.lags != nil {
+			s.startupLAG = s.lags.configuration()
+		}
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
 		s.startupMemberships = maps.Clone(s.memberships)
@@ -155,9 +160,13 @@ func (s *testSwitch) command(command string) string {
 		}
 		return "Write startup-config done."
 	case "show running-config":
-		return s.configuration(s.running, s.ethernet, s.memberships)
+		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.lags != nil {
+			text = strings.TrimSuffix(text, "end") + s.lags.configuration() + "end"
+		}
+		return text
 	case "show configuration":
-		return s.configuration(s.startup, s.startupEthernet, s.startupMemberships)
+		return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + s.startupLAG + "end"
 	case "skip-page-display":
 		return ""
 	default:
@@ -213,6 +222,10 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.lags != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/interfaces") {
+		s.lags.rest(w, r)
+		return
+	}
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
 	if strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=ve%2053/routed-vlan/") {
 		s.addressREST(w, r)
@@ -341,7 +354,8 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(400)
 }
 
-func TestOpenTofu(t *testing.T) {
+func tofuFixture(t *testing.T, s *testSwitch) (func(string, string), func(int, ...string) string, string) {
+	t.Helper()
 	tofu := os.Getenv("TOFU_BINARY")
 	if tofu == "" {
 		var err error
@@ -350,7 +364,6 @@ func TestOpenTofu(t *testing.T) {
 			t.Skip("OpenTofu is required; run inside nix develop")
 		}
 	}
-	s := newSwitch(t)
 	dir := t.TempDir()
 	mirror := filepath.Join(dir, "mirror")
 	plugins := filepath.Join(mirror, "registry.opentofu.org", "zariel", "fastiron", "0.0.1", runtime.GOOS+"_"+runtime.GOARCH)
@@ -394,18 +407,6 @@ provider "fastiron" {
 data "fastiron_capabilities" "switch" {}
 output "firmware" { value = data.fastiron_capabilities.switch.firmware }
 `, httpPort, sshPort)
-	resetPort := false
-	config := func(name *string) {
-		resource := "resource \"fastiron_vlan\" \"test\" {\n vlan_id = 53\n"
-		if name != nil {
-			resource += fmt.Sprintf(" name = %q\n", *name)
-		}
-		port := "resource \"fastiron_interface_ethernet\" \"test\" {\n port = \"1/1/2\"\n"
-		if !resetPort {
-			port += " port_name = \"UPLINK\"\n enabled = false\n"
-		}
-		write("main.tf", base+resource+"}\n"+port+"}\n")
-	}
 	run := func(want int, args ...string) string {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -426,6 +427,24 @@ output "firmware" { value = data.fastiron_capabilities.switch.firmware }
 			t.Fatalf("tofu %v: exit %d, want %d\n%s", args, code, want, out)
 		}
 		return string(out)
+	}
+	return write, run, base
+}
+
+func TestOpenTofu(t *testing.T) {
+	s := newSwitch(t)
+	write, run, base := tofuFixture(t, s)
+	resetPort := false
+	config := func(name *string) {
+		resource := "resource \"fastiron_vlan\" \"test\" {\n vlan_id = 53\n"
+		if name != nil {
+			resource += fmt.Sprintf(" name = %q\n", *name)
+		}
+		port := "resource \"fastiron_interface_ethernet\" \"test\" {\n port = \"1/1/2\"\n"
+		if !resetPort {
+			port += " port_name = \"UPLINK\"\n enabled = false\n"
+		}
+		write("main.tf", base+resource+"}\n"+port+"}\n")
 	}
 	check := func(name string, exists bool) {
 		t.Helper()

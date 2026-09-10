@@ -34,6 +34,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &veResource{} },
 		func() resource.Resource { return &addressResource{} },
 		func() resource.Resource { return &addressResource{ipv6: true} },
+		func() resource.Resource { return &lagResource{} },
 	}
 }
 
