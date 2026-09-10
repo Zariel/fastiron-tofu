@@ -11,7 +11,7 @@ The current implementation includes VLAN names/existence, individual Ethernet an
 
 ## Development
 
-Enter the pinned tool environment with `nix develop`. It includes Go, gofumpt, gopls, OpenTofu, Make, Jujutsu, Git, curl, jq, Python, OpenSSH, picocom, socat, and nixfmt.
+Enter the pinned tool environment with `nix develop`. It includes Go, gofumpt, gopls, OpenTofu, Make, Jujutsu, Git, curl, jq, Python, Poppler PDF utilities, OpenSSH, picocom, socat, and nixfmt.
 
 ```sh
 nix develop

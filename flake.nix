@@ -32,6 +32,7 @@
               curl
               jq
               python3
+              poppler-utils
               openssh
               picocom
               socat
