@@ -144,7 +144,7 @@ func (d *Device) save(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(out[0], "Write startup-config done.") {
+	if !strings.Contains(out[0], "Write startup-config done.") && !strings.Contains(out[0], "write memory completed. No new config is added.") {
 		return errors.New("FastIron did not confirm startup configuration was saved")
 	}
 	// Verify persisted content independently of the save command's success text.

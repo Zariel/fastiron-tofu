@@ -143,9 +143,13 @@ func (s *testSwitch) command(command string) string {
 		if s.falseSave {
 			return "Write startup-config done."
 		}
+		unchanged := maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
 		s.startupMemberships = maps.Clone(s.memberships)
+		if unchanged {
+			return "write memory completed. No new config is added."
+		}
 		return "Write startup-config done."
 	case "show running-config":
 		return s.configuration(s.running, s.ethernet, s.memberships)
