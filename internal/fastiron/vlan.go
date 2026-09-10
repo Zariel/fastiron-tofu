@@ -41,9 +41,10 @@ func ValidateVLAN(v VLAN) error {
 }
 
 func (d *Device) VLAN(ctx context.Context, id int64) (VLAN, error) {
-	if err := ValidateVLAN(VLAN{ID: id}); err != nil {
-		return VLAN{}, err
+	if id < 1 || id > 4094 {
+		return VLAN{}, errors.New("vlan_id must be between 1 and 4094")
 	}
+
 	if d.config.Transport == "ssh" {
 		return VLAN{}, errors.New("SSH VLAN support awaits verified firmware transcripts")
 	}

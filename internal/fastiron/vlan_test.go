@@ -1,6 +1,15 @@
 package fastiron
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
+)
 
 func TestVLANChildren(t *testing.T) {
 	for _, tc := range []struct {
@@ -19,5 +28,24 @@ func TestVLANChildren(t *testing.T) {
 				t.Fatalf("child check: %v", err)
 			}
 		})
+	}
+}
+
+func TestReadDefaultVLAN(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+		fmt.Fprint(w, `{"openconfig-network-instance:vlan":[{"vlan-id":1,"config":{"vlan-id":1,"name":"DEFAULT-VLAN"}}]}`)
+	}))
+	defer server.Close()
+	d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vlan, err := d.VLAN(context.Background(), 1)
+	if err != nil || vlan.ID != 1 || vlan.Name != "DEFAULT-VLAN" {
+		t.Fatalf("default VLAN=%v error=%v", vlan, err)
 	}
 }
