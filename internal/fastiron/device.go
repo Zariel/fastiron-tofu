@@ -18,10 +18,12 @@ type Config struct {
 }
 
 type Device struct {
-	rest   *restconf.Client
-	cli    *ssh.Client
-	config Config
-	gate   chan struct{}
+	rest          *restconf.Client
+	cli           *ssh.Client
+	config        Config
+	gate          chan struct{}
+	discoveryGate chan struct{}
+	capabilities  *Capabilities
 }
 
 var hosts sync.Map
@@ -33,7 +35,7 @@ func New(cfg Config) (*Device, error) {
 	if cfg.Persistence != "after_each_write" && cfg.Persistence != "manual" && cfg.Persistence != "never" {
 		return nil, errors.New("persistence_mode must be after_each_write, manual, or never")
 	}
-	d := &Device{config: cfg}
+	d := &Device{config: cfg, discoveryGate: make(chan struct{}, 1)}
 	var err error
 	if cfg.RESTCONF != nil {
 		d.rest, err = restconf.New(*cfg.RESTCONF)
@@ -93,6 +95,17 @@ func parseVersion(output string) (Capabilities, error) {
 }
 
 func (d *Device) Discover(ctx context.Context) (Capabilities, error) {
+	select {
+	case d.discoveryGate <- struct{}{}:
+		defer func() { <-d.discoveryGate }()
+	case <-ctx.Done():
+		return Capabilities{}, ctx.Err()
+	}
+	// Firmware metadata is sampled once per configured provider. Resource reads
+	// still obtain current configuration for every refresh and mutation.
+	if d.capabilities != nil {
+		return *d.capabilities, nil
+	}
 	if d.cli == nil {
 		return Capabilities{}, errors.New("SSH is required to verify active firmware; RESTCONF firmware discovery is not yet verified")
 	}
@@ -104,6 +117,7 @@ func (d *Device) Discover(ctx context.Context) (Capabilities, error) {
 	if err != nil {
 		return c, err
 	}
+	d.capabilities = &c
 	return c, nil
 }
 
