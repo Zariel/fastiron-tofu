@@ -43,12 +43,14 @@ type testSwitch struct {
 	writes                          int
 	server                          *httptest.Server
 	sshAddress, knownHosts          string
+	dns                             map[string]bool
 }
 
 func newSwitch(t *testing.T) *testSwitch {
 	t.Helper()
 	s := &testSwitch{memberships: map[int]string{}, running: map[int]string{}, startup: map[int]string{}, ethernet: map[string]any{"name": "ethernet 1/1/2", "description": "manual port", "enabled": true, "mtu": float64(9000)}}
 	s.startupEthernet = maps.Clone(s.ethernet)
+	s.dns = map[string]bool{}
 	s.server = httptest.NewTLSServer(http.HandlerFunc(s.restconf))
 	t.Cleanup(s.server.Close)
 	_, key, err := ed25519.GenerateKey(rand.Reader)
@@ -186,6 +188,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
+	if strings.HasPrefix(r.URL.Path, "/restconf/data/system/dns") {
+		s.dnsREST(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.EscapedPath(), "/restconf/data/interfaces/interface=") {
 		s.membershipREST(w, r)
 		return
@@ -565,4 +571,36 @@ output "firmware" { value = data.fastiron_capabilities.switch.firmware }
 	run(0, "apply", "-auto-approve", "-no-color")
 	check(name, true)
 	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.dns["192.0.2.54"] = true
+	s.mu.Unlock()
+	write("dns.tf", `resource "fastiron_ip_dns_server" "test" { address = "192.0.2.53" }
+data "fastiron_ip_dns_servers" "test" { depends_on = [fastiron_ip_dns_server.test] }
+output "dns" { value = data.fastiron_ip_dns_servers.test.addresses }
+`)
+	run(0, "apply", "-auto-approve", "-no-color")
+	if got := strings.TrimSpace(run(0, "output", "-json", "dns")); got != `["192.0.2.53","192.0.2.54"]` {
+		t.Fatalf("DNS collection: %s", got)
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "state", "rm", "fastiron_ip_dns_server.test")
+	run(0, "import", "-no-color", "fastiron_ip_dns_server.test", "ip dns server-address 192.0.2.53")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	delete(s.dns, "192.0.2.53")
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	if !s.dns["192.0.2.53"] || !s.dns["192.0.2.54"] {
+		t.Fatal("DNS drift correction did not preserve both servers")
+	}
+	s.mu.Unlock()
+	write("dns.tf", "")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	if len(s.dns) != 1 || !s.dns["192.0.2.54"] {
+		t.Fatal("DNS deletion changed an unrelated server")
+	}
+	s.mu.Unlock()
 }
