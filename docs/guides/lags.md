@@ -1,4 +1,27 @@
-# Read LAG configuration
+# Link aggregation groups
+
+`fastiron_lag` owns an aggregate's existence, name, mode, and complete Ethernet member set:
+
+```hcl
+resource "fastiron_lag" "storage" {
+  lag_id  = 5
+  name    = "storage"
+  mode    = "dynamic"
+  members = ["ethernet 1/1/7", "ethernet 1/1/8"]
+}
+```
+
+Use `dynamic` for LACP or `static` for a static aggregate. Changing `mode` or `lag_id` requires replacement; renaming updates the existing aggregate. An explicit empty `members` set creates an empty aggregate. Import with `tofu import fastiron_lag.storage 'lag 5'`.
+
+Members must satisfy FastIron's LAG formation rules, including matching speeds and compatible port attributes. Remove independent VLAN memberships and routed configuration before adding a port. The provider rejects members already belonging to another LAG.
+
+Removing a member or deleting a LAG disables its detached Ethernet ports, following FastIron's native behavior. This also applies during LAG replacement. The provider does not restore prior port settings. A separately managed Ethernet resource can re-enable a port on a subsequent apply; do not assume this happens within the same apply that detaches it.
+
+If saving fails, `persistence_pending` remains true so a subsequent apply can finish saving the observed configuration.
+
+Remove VLAN relationships and independent interface or protocol settings before destroying the LAG. Deletion rejects remaining child configuration.
+
+## Discovery
 
 `fastiron_lags` reports configured link aggregation groups and their Ethernet members through RESTCONF.
 
@@ -33,7 +56,7 @@ resource "fastiron_vlan" "storage" {
 
 resource "fastiron_vlan_membership" "storage_lag" {
   vlan_id   = fastiron_vlan.storage.vlan_id
-  interface = "lag 5"
+  interface = fastiron_lag.storage.id
   tagging   = "tagged"
 }
 ```

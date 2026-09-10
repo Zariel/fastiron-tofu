@@ -7,7 +7,7 @@ Plugin binary: `terraform-provider-fastiron`.
 
 The provider supports FastIron across ICX models without firmware or model allowlists. Feature availability depends on the switch's actual capabilities. Testing starts with FastIron 09.0.10 on an ICX 7150, with ICX 7250 testing to follow. Versions are documented as tested, not required from users.
 
-The current implementation includes VLAN names/existence, individual Ethernet and LAG VLAN memberships, LAG discovery, Ethernet port names/enable state, DNS servers and discovery, LLDP, PoE, routed VLAN interfaces and their IPv4/IPv6 addresses, configuration saves, and firmware discovery. See [supported features and tested compatibility](docs/compatibility.md).
+The current implementation includes VLAN names/existence, individual Ethernet and LAG VLAN memberships, LAG configuration and discovery, Ethernet port names/enable state, DNS servers and discovery, LLDP, PoE, routed VLAN interfaces and their IPv4/IPv6 addresses, configuration saves, and firmware discovery. See [supported features and tested compatibility](docs/compatibility.md).
 
 ## Development
 
