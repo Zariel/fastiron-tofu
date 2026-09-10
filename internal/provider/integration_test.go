@@ -31,6 +31,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
+	routes *routeSwitch
+
 	managementAddresses, startupManagementAddresses map[string]int
 
 	lags                            *lagSwitch
@@ -156,6 +158,10 @@ func (s *testSwitch) command(command string) string {
 			unchanged = unchanged && lagConfig == s.startupLAG
 			s.startupLAG = lagConfig
 		}
+		if s.routes != nil {
+			unchanged = unchanged && maps.Equal(s.routes.running, s.routes.startup)
+			s.routes.startup = maps.Clone(s.routes.running)
+		}
 		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
@@ -166,11 +172,17 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.routes != nil {
+			text = strings.TrimSuffix(text, "end") + routeConfiguration(s.routes.running, s.routes.extra) + "end"
+		}
 		if s.lags != nil {
 			text = strings.TrimSuffix(text, "end") + s.lags.configuration() + "end"
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.routes != nil {
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + routeConfiguration(s.routes.startup, s.routes.extra) + "end"
+		}
 		return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + s.startupLAG + managementConfiguration(s.startupManagementAddresses) + "end"
 	case "skip-page-display":
 		return ""
@@ -229,6 +241,10 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	if s.lags != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/interfaces") {
 		s.lags.rest(w, r)
+		return
+	}
+	if s.routes != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/network-instances/network-instance=default-vrf/protocols") {
+		s.routes.rest(w, r)
 		return
 	}
 	const collection = "/restconf/data/network-instances/network-instance=default-vrf/vlans"
