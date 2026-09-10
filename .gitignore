@@ -64,3 +64,5 @@ Thumbs.db
 cluster.yaml
 kubeconfig
 docs/internal
+
+__pycache__/
