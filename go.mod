@@ -2,7 +2,10 @@ module github.com/zariel/fastiron-tofu
 
 go 1.26.7
 
-require github.com/hashicorp/terraform-plugin-framework v1.19.0
+require (
+	github.com/hashicorp/terraform-plugin-framework v1.19.0
+	golang.org/x/crypto v0.57.0
+)
 
 require (
 	github.com/fatih/color v1.18.0 // indirect
