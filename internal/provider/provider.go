@@ -44,6 +44,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &ospfInterfaceResource{} },
 		func() resource.Resource { return &stpVLANResource{} },
 		func() resource.Resource { return &stpInterfaceResource{} },
+		func() resource.Resource { return &authenticationInterfaceResource{} },
 	}
 }
 

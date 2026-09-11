@@ -35,6 +35,7 @@ type testSwitch struct {
 	stp            *stpSwitch
 	stpPorts       *stpPortSwitch
 	authInterfaces string
+	auth           *authenticationSwitch
 	policy         *policySwitch
 	aaaPolicy      string
 	aaaServers     string
@@ -202,6 +203,10 @@ func (s *testSwitch) command(command string) string {
 			unchanged = unchanged && maps.Equal(s.stpPorts.running, s.stpPorts.startup)
 			s.stpPorts.startup = maps.Clone(s.stpPorts.running)
 		}
+		if s.auth != nil {
+			unchanged = unchanged && maps.Equal(s.auth.running, s.auth.startup)
+			s.auth.startup = maps.Clone(s.auth.running)
+		}
 		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
@@ -212,6 +217,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.auth != nil {
+			text = strings.TrimSuffix(text, "end") + authenticationConfig(s.auth.running, s.auth.extra) + "end"
+		}
 		if s.authInterfaces != "" {
 			text = strings.TrimSuffix(text, "end") + s.authInterfaces + "end"
 		}
@@ -241,6 +249,9 @@ func (s *testSwitch) command(command string) string {
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.auth != nil {
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + authenticationConfig(s.auth.startup, s.auth.extra) + "end"
+		}
 		if s.policy != nil {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + s.policy.startup.native() + s.policy.extra + "end"
 		}
@@ -318,6 +329,10 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.auth != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/authentication/config/") {
+		s.auth.rest(w, r)
+		return
+	}
 	if s.policy != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/system/aaa") {
 		s.policy.rest(w, r)
 		return
@@ -407,6 +422,9 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 			}
 			if s.stpPorts != nil {
 				entries = append(entries, map[string]any{"name": "ethernet 1/1/3", "config": map[string]any{"name": "ethernet 1/1/3", "description": "NEIGHBOR", "enabled": true}})
+			}
+			if s.auth != nil {
+				entries = append(entries, map[string]any{"name": "ethernet 1/1/4", "config": map[string]any{"name": "ethernet 1/1/4", "description": "", "enabled": true}})
 			}
 			json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": entries}})
 			return
