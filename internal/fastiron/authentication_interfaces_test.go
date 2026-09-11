@@ -19,7 +19,7 @@ authentication
  mac-authentication enable ethe 1/1/9
 !
 `
-	got, err := authenticationInterfaces(input)
+	got, _, err := nativeAuthenticationInterfaces(input)
 	want := map[string]AuthenticationInterface{
 		"ethernet 1/1/9":  {Dot1XEnabled: true, MACEnabled: true, PortControl: "force-authorized"},
 		"ethernet 1/1/10": {Dot1XEnabled: true, PortControl: "auto"},
@@ -30,7 +30,7 @@ authentication
 }
 
 func TestAuthenticationPortControl(t *testing.T) {
-	got, err := authenticationInterfaces("dot1x port-control force-unauthorized ethernet 2/1/3 2/1/5\n")
+	got, _, err := nativeAuthenticationInterfaces("dot1x port-control force-unauthorized ethernet 2/1/3 2/1/5\n")
 	want := map[string]AuthenticationInterface{
 		"ethernet 2/1/3": {PortControl: "force-unauthorized"},
 		"ethernet 2/1/5": {PortControl: "force-unauthorized"},
@@ -50,7 +50,7 @@ func TestAuthenticationPortErrors(t *testing.T) {
 		"excessive range":   "dot1x port-control auto ethe 1/1/1 to 1/1/9999999",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := authenticationInterfaces(line); err == nil {
+			if _, _, err := nativeAuthenticationInterfaces(line); err == nil {
 				t.Fatal("accepted malformed native authentication configuration")
 			}
 		})

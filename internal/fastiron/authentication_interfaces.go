@@ -24,10 +24,12 @@ func (d *Device) AuthenticationInterfaces(ctx context.Context) (map[string]Authe
 	if err != nil {
 		return nil, err
 	}
-	return authenticationInterfaces(output[0])
+	interfaces, _, err := nativeAuthenticationInterfaces(output[0])
+	return interfaces, err
 }
 
-func authenticationInterfaces(output string) (map[string]AuthenticationInterface, error) {
+func nativeAuthenticationInterfaces(output string) (map[string]AuthenticationInterface, []string, error) {
+	var unowned []string
 	interfaces := map[string]AuthenticationInterface{}
 	controls := map[string]string{}
 	active := false
@@ -38,6 +40,7 @@ func authenticationInterfaces(output string) (map[string]AuthenticationInterface
 		}
 		if len(f) == 1 && f[0] == "authentication" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
 			active = true
+			unowned = append(unowned, "authentication")
 			continue
 		}
 		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
@@ -47,10 +50,10 @@ func authenticationInterfaces(output string) (map[string]AuthenticationInterface
 		kind, mode := "", ""
 		var ports []string
 		switch {
-		case len(f) >= 3 && f[0] == "dot1x" && f[1] == "port-control":
+		case (active || line[0] != ' ' && line[0] != '\t') && len(f) >= 3 && f[0] == "dot1x" && f[1] == "port-control":
 			kind, mode = "control", f[2]
 			if mode != "auto" && mode != "force-authorized" && mode != "force-unauthorized" {
-				return nil, errors.New("unsupported native authentication port-control mode")
+				return nil, nil, errors.New("unsupported native authentication port-control mode")
 			}
 			ports = f[3:]
 		case active && len(f) > 2 && f[0] == "dot1x" && f[1] == "enable":
@@ -58,11 +61,12 @@ func authenticationInterfaces(output string) (map[string]AuthenticationInterface
 		case active && len(f) > 2 && f[0] == "mac-authentication" && f[1] == "enable":
 			kind, ports = "mac", f[2:]
 		default:
+			unowned = append(unowned, strings.Join(f, " "))
 			continue
 		}
 		names, err := authenticationPorts(ports)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, name := range names {
 			current, ok := interfaces[name]
@@ -76,7 +80,7 @@ func authenticationInterfaces(output string) (map[string]AuthenticationInterface
 				current.MACEnabled = true
 			case "control":
 				if previous, ok := controls[name]; ok && previous != mode {
-					return nil, errors.New("native authentication contains conflicting port-control modes")
+					return nil, nil, errors.New("native authentication contains conflicting port-control modes")
 				}
 				controls[name] = mode
 				current.PortControl = mode
@@ -84,7 +88,7 @@ func authenticationInterfaces(output string) (map[string]AuthenticationInterface
 			interfaces[name] = current
 		}
 	}
-	return interfaces, nil
+	return interfaces, unowned, nil
 }
 
 func authenticationPorts(fields []string) ([]string, error) {
