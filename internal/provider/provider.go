@@ -5,6 +5,7 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
 	"github.com/zariel/fastiron-tofu/internal/features/lldp"
+	"github.com/zariel/fastiron-tofu/internal/features/poe"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -37,7 +38,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &dns.Resource{} },
 		func() resource.Resource { return lldp.NewGlobalResource() },
 		func() resource.Resource { return lldp.NewInterfaceResource() },
-		func() resource.Resource { return &poeResource{} },
+		func() resource.Resource { return &poe.Resource{} },
 		func() resource.Resource { return &veResource{} },
 		func() resource.Resource { return &addressResource{} },
 		func() resource.Resource { return &addressResource{ipv6: true} },
@@ -56,7 +57,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &capabilitiesDataSource{} },
 		func() datasource.DataSource { return &dns.DataSource{} },
 		func() datasource.DataSource { return &lldp.DataSource{} },
-		func() datasource.DataSource { return &poeDataSource{} },
+		func() datasource.DataSource { return &poe.DataSource{} },
 		func() datasource.DataSource { return &addressesDataSource{} },
 		func() datasource.DataSource { return &lagDataSource{} },
 		func() datasource.DataSource { return &routesDataSource{} },

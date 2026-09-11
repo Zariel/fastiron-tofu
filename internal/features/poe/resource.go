@@ -1,4 +1,4 @@
-package provider
+package poe
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 )
 
 type (
-	poeResource struct{ device *fastiron.Device }
-	poeModel    struct {
+	Resource struct{ device *fastiron.Device }
+	model    struct {
 		ID                 types.String `tfsdk:"id"`
 		Interface          types.String `tfsdk:"interface"`
 		Enabled            types.Bool   `tfsdk:"enabled"`
@@ -24,11 +24,11 @@ type (
 	}
 )
 
-func (r *poeResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *Resource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_interface_poe"
 }
 
-func (r *poeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *Resource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns PoE enable state on one Ethernet interface. Omission and destroy restore enabled=true. Power measurements are available from the PoE data source and do not cause configuration drift.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: poe|ethernet <stack>/<slot>/<port>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
@@ -37,7 +37,7 @@ func (r *poeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 	}}
 }
 
-func (r *poeResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *Resource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -48,41 +48,41 @@ func (r *poeResource) Configure(_ context.Context, req resource.ConfigureRequest
 	}
 }
 
-func (r *poeResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
-	var model poeModel
+func (r *Resource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var model model
 	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
 	if resp.Diagnostics.HasError() || model.Interface.IsUnknown() || model.Interface.IsNull() {
 		return
 	}
-	if err := fastiron.ValidatePoEInterface(model.Interface.ValueString()); err != nil {
+	if err := validateInterface(model.Interface.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Invalid PoE configuration", err.Error())
 	}
 }
 
-func (r *poeResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *Resource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() || r.device == nil {
 		return
 	}
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("persistence_pending"), false)...)
-	var plan poeModel
+	var plan model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() || plan.Interface.IsUnknown() || plan.Enabled.IsUnknown() {
 		return
 	}
-	if _, err := r.device.PoE(ctx, plan.Interface.ValueString()); err != nil {
+	if _, err := readPort(ctx, r.device, plan.Interface.ValueString()); err != nil {
 		resp.Diagnostics.AddError("PoE configuration is not supported by the configured switch", err.Error())
 	}
 }
 
-func (r *poeResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan poeModel
+func (r *Resource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var plan model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyPoE(ctx, plan.Interface.ValueString(), plan.Enabled.ValueBool())
+	observed, err := applyPort(ctx, r.device, plan.Interface.ValueString(), plan.Enabled.ValueBool())
 	if observed != nil {
-		state := poeState(*observed)
+		state := resourceState(*observed)
 		state.PersistencePending = types.BoolValue(err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	}
@@ -91,15 +91,15 @@ func (r *poeResource) Create(ctx context.Context, req resource.CreateRequest, re
 	}
 }
 
-func (r *poeResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan poeModel
+func (r *Resource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyPoE(ctx, plan.Interface.ValueString(), plan.Enabled.ValueBool())
+	observed, err := applyPort(ctx, r.device, plan.Interface.ValueString(), plan.Enabled.ValueBool())
 	if observed != nil {
-		state := poeState(*observed)
+		state := resourceState(*observed)
 		state.PersistencePending = types.BoolValue(err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	}
@@ -108,40 +108,40 @@ func (r *poeResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	}
 }
 
-func (r *poeResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state poeModel
+func (r *Resource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state model
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.PoE(ctx, state.Interface.ValueString())
+	observed, err := readPort(ctx, r.device, state.Interface.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read PoE configuration", err.Error())
 		return
 	}
-	current := poeState(observed)
+	current := resourceState(observed)
 	if !state.PersistencePending.IsNull() {
 		current.PersistencePending = state.PersistencePending
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, current)...)
 }
 
-func (r *poeResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state poeModel
+func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state model
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.device.ApplyPoE(ctx, state.Interface.ValueString(), true)
+	_, err := applyPort(ctx, r.device, state.Interface.ValueString(), true)
 	if err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot reset PoE configuration", err.Error())
 	}
 }
 
-func (r *poeResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *Resource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	name := strings.TrimPrefix(req.ID, "poe|")
-	if req.ID != "poe|"+name || fastiron.ValidatePoEInterface(name) != nil {
+	if req.ID != "poe|"+name || validateInterface(name) != nil {
 		resp.Diagnostics.AddError("Invalid PoE identity", "Use poe|ethernet <stack>/<slot>/<port>.")
 		return
 	}
@@ -149,6 +149,6 @@ func (r *poeResource) ImportState(ctx context.Context, req resource.ImportStateR
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("interface"), name)...)
 }
 
-func poeState(p fastiron.PoEInterface) poeModel {
-	return poeModel{ID: types.StringValue("poe|" + p.Name), Interface: types.StringValue(p.Name), Enabled: types.BoolValue(p.Enabled), PersistencePending: types.BoolValue(false)}
+func resourceState(p port) model {
+	return model{ID: types.StringValue("poe|" + p.Name), Interface: types.StringValue(p.Name), Enabled: types.BoolValue(p.Enabled), PersistencePending: types.BoolValue(false)}
 }

@@ -31,7 +31,6 @@ func TestEmptyInterfaceDatabase(t *testing.T) {
 		for name, read := range map[string]func() error{
 			"Ethernet": func() error { _, err := device.Ethernet(context.Background(), "1/1/7"); return err },
 			"VE":       func() error { _, err := device.VE(context.Background(), 53); return err },
-			"PoE":      func() error { _, err := device.PoEInterfaces(context.Background()); return err },
 		} {
 			t.Run(name, func(t *testing.T) {
 				if err := read(); err == nil || errors.Is(err, ErrNotFound) {

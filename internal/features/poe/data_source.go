@@ -1,4 +1,4 @@
-package provider
+package poe
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	poeDataSource      struct{ device *fastiron.Device }
+	DataSource         struct{ device *fastiron.Device }
 	poeInterfacesModel struct {
 		Interfaces map[string]poeStatusModel `tfsdk:"interfaces"`
 	}
@@ -21,11 +21,11 @@ type (
 	}
 )
 
-func (d *poeDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_poe_interfaces"
 }
 
-func (d *poeDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured PoE enable state and reported power measurements for interfaces that expose PoE.", Attributes: map[string]schema.Attribute{
 		"interfaces": schema.MapNestedAttribute{Computed: true, Description: "PoE interface names mapped to configuration and reported operational measurements.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"enabled":               schema.BoolAttribute{Computed: true, Description: "Configured PoE enable state."},
@@ -35,7 +35,7 @@ func (d *poeDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, re
 	}}
 }
 
-func (d *poeDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -46,8 +46,8 @@ func (d *poeDataSource) Configure(_ context.Context, req datasource.ConfigureReq
 	}
 }
 
-func (d *poeDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	ports, err := d.device.PoEInterfaces(ctx)
+func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	ports, err := readPorts(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read PoE interfaces", err.Error())
 		return
