@@ -12,6 +12,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/poe"
 	"github.com/zariel/fastiron-tofu/internal/features/route"
 	"github.com/zariel/fastiron-tofu/internal/features/stp"
+	"github.com/zariel/fastiron-tofu/internal/features/ve"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -45,7 +46,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return lldp.NewGlobalResource() },
 		func() resource.Resource { return lldp.NewInterfaceResource() },
 		func() resource.Resource { return &poe.Resource{} },
-		func() resource.Resource { return &veResource{} },
+		func() resource.Resource { return &ve.Resource{} },
 		func() resource.Resource { return address.NewIPv4Resource() },
 		func() resource.Resource { return address.NewIPv6Resource() },
 		func() resource.Resource { return &lagResource{} },

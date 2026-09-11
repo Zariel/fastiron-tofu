@@ -17,19 +17,7 @@ func ValidateEthernet(v Ethernet) error {
 	if !interfaceid.EthernetPort(v.Port) {
 		return errors.New("port must use stack/slot/port syntax with positive numbers and no leading zeros")
 	}
-	return validatePortName(v.PortName)
-}
-
-func validatePortName(name string) error {
-	if len(name) > 64 {
-		return errors.New("port_name must contain at most 64 bytes")
-	}
-	for _, r := range name {
-		if r < 32 || r == 127 {
-			return errors.New("port_name cannot contain control characters")
-		}
-	}
-	return nil
+	return interfaceid.ValidatePortName(v.PortName)
 }
 
 func (d *Device) Ethernet(ctx context.Context, port string) (Ethernet, error) {

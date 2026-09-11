@@ -31,14 +31,14 @@ func TestFirmware(t *testing.T) {
 }
 
 func TestConfiguration(t *testing.T) {
-	got, err := configuration("Current configuration:\r\n!\r\nver 09.0.10kT213\r\nvlan 53 name INFRA by port\r\n!\r\nend\r\n")
+	got, err := NormalizeConfiguration("Current configuration:\r\n!\r\nver 09.0.10kT213\r\nvlan 53 name INFRA by port\r\n!\r\nend\r\n")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != "ver 09.0.10kT213\nvlan 53 name INFRA by port\nend" {
 		t.Fatalf("configuration: %q", got)
 	}
-	if _, err = configuration("ver 09.0.10kT213\nvlan 53"); err == nil {
+	if _, err = NormalizeConfiguration("ver 09.0.10kT213\nvlan 53"); err == nil {
 		t.Fatal("accepted truncated output")
 	}
 }

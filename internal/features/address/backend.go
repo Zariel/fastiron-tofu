@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/features/ve"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -81,7 +82,7 @@ func configuredAddresses(ctx context.Context, d *fastiron.Device, name string, i
 	if errors.Is(err, restconf.ErrNotFound) && strings.HasPrefix(name, "ve ") {
 		id, _ := strconv.ParseInt(strings.TrimPrefix(name, "ve "), 10, 64)
 		// A missing address endpoint is not absence unless the parent is absent too.
-		if _, parentErr := d.VE(ctx, id); errors.Is(parentErr, fastiron.ErrNotFound) {
+		if _, parentErr := ve.Read(ctx, d, id); errors.Is(parentErr, fastiron.ErrNotFound) {
 			return nil, fastiron.ErrNotFound
 		}
 	}

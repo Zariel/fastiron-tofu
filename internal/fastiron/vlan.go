@@ -189,7 +189,7 @@ func (d *Device) DeleteVLAN(ctx context.Context, id int64) error {
 }
 
 func vlanChildren(config string, id int64) error {
-	if _, err := configuration(config); err != nil {
+	if _, err := NormalizeConfiguration(config); err != nil {
 		return errors.New("cannot verify VLAN children in running configuration")
 	}
 	inside := false

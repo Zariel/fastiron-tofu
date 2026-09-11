@@ -272,7 +272,7 @@ func (d *Device) DeleteLAG(ctx context.Context, id int64) error {
 }
 
 func lagChildren(config string, lag LAG) error {
-	if _, err := configuration(config); err != nil {
+	if _, err := NormalizeConfiguration(config); err != nil {
 		return err
 	}
 

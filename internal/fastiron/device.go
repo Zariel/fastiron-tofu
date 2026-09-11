@@ -155,11 +155,11 @@ func (d *Device) save(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	running, err := configuration(out[0])
+	running, err := NormalizeConfiguration(out[0])
 	if err != nil {
 		return err
 	}
-	startup, err := configuration(out[1])
+	startup, err := NormalizeConfiguration(out[1])
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,8 @@ func (d *Device) save(ctx context.Context) error {
 	return nil
 }
 
-func configuration(output string) (string, error) {
+// NormalizeConfiguration validates complete native output and removes display separators.
+func NormalizeConfiguration(output string) (string, error) {
 	lines := strings.Split(strings.ReplaceAll(output, "\r", ""), "\n")
 	start := -1
 	for i, line := range lines {
@@ -228,7 +229,7 @@ func (d *Device) RunningConfig(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := configuration(output[0]); err != nil {
+	if _, err := NormalizeConfiguration(output[0]); err != nil {
 		return "", err
 	}
 	return output[0], nil

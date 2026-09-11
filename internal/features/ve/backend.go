@@ -1,4 +1,4 @@
-package fastiron
+package ve
 
 import (
 	"context"
@@ -9,32 +9,35 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
-type VE struct {
+type config struct {
 	ID, VLANID int64
 	PortName   string
 }
 
-func ValidateVE(v VE) error {
-	if err := ValidateVLAN(VLAN{ID: v.ID}); err != nil {
+func validate(v config) error {
+	if err := fastiron.ValidateVLAN(fastiron.VLAN{ID: v.ID}); err != nil {
 		return err
 	}
 	if v.ID != v.VLANID {
 		return errors.New("ve_id and vlan_id must match the FastIron routed VLAN identity")
 	}
-	if err := validatePortName(v.PortName); err != nil {
+	if err := interfaceid.ValidatePortName(v.PortName); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (d *Device) VE(ctx context.Context, id int64) (VE, error) {
-	if err := ValidateVE(VE{ID: id, VLANID: id}); err != nil {
-		return VE{}, err
+func Read(ctx context.Context, d *fastiron.Device, id int64) (config, error) {
+	if err := validate(config{ID: id, VLANID: id}); err != nil {
+		return config{}, err
 	}
-	if d.config.Transport == "ssh" || d.rest == nil {
-		return VE{}, errors.New("VE configuration currently requires RESTCONF")
+	if !d.RESTCONFEnabled() {
+		return config{}, errors.New("VE configuration currently requires RESTCONF")
 	}
 	var response struct {
 		Interfaces *struct {
@@ -53,14 +56,14 @@ func (d *Device) VE(ctx context.Context, id int64) (VE, error) {
 			} `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
-		return VE{}, err
+	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+		return config{}, err
 	}
 	if response.Interfaces == nil {
-		return VE{}, errors.New("RESTCONF interface collection is missing its container")
+		return config{}, errors.New("RESTCONF interface collection is missing its container")
 	}
 	if len(response.Interfaces.Interface) == 0 {
-		return VE{}, errors.New("RESTCONF interface collection is empty; cannot confirm VE state")
+		return config{}, errors.New("RESTCONF interface collection is empty; cannot confirm VE state")
 	}
 	name := "ve " + strconv.FormatInt(id, 10)
 	for _, entry := range response.Interfaces.Interface {
@@ -68,29 +71,29 @@ func (d *Device) VE(ctx context.Context, id int64) (VE, error) {
 			continue
 		}
 		if entry.Config == nil || entry.Config.Name != name || entry.Config.Type != "iana-if-type:l3ipvlan" || entry.Routed == nil || entry.Routed.Config == nil {
-			return VE{}, errors.New("RESTCONF VE response is missing its identity or VLAN binding")
+			return config{}, errors.New("RESTCONF VE response is missing its identity or VLAN binding")
 		}
-		return VE{ID: id, VLANID: entry.Routed.Config.VLAN, PortName: entry.Config.Description}, nil
+		return config{ID: id, VLANID: entry.Routed.Config.VLAN, PortName: entry.Config.Description}, nil
 	}
-	return VE{}, ErrNotFound
+	return config{}, fastiron.ErrNotFound
 }
 
-func (d *Device) CheckVE(ctx context.Context, v VE) error {
-	if err := ValidateVE(v); err != nil {
+func check(ctx context.Context, d *fastiron.Device, v config) error {
+	if err := validate(v); err != nil {
 		return err
 	}
 	if _, err := d.Discover(ctx); err != nil {
 		return err
 	}
-	_, err := d.VE(ctx, v.ID)
-	if errors.Is(err, ErrNotFound) {
+	_, err := Read(ctx, d, v.ID)
+	if errors.Is(err, fastiron.ErrNotFound) {
 		return nil
 	}
 	return err
 }
 
-func (d *Device) ApplyVE(ctx context.Context, v VE) (*VE, error) {
-	if err := ValidateVE(v); err != nil {
+func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
+	if err := validate(v); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -104,11 +107,11 @@ func (d *Device) ApplyVE(ctx context.Context, v VE) (*VE, error) {
 	if _, err := d.VLAN(ctx, v.VLANID); err != nil {
 		return nil, fmt.Errorf("VE requires an existing VLAN: %w", err)
 	}
-	current, err := d.VE(ctx, v.ID)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	current, err := Read(ctx, d, v.ID)
+	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
 		return nil, err
 	}
-	absent := errors.Is(err, ErrNotFound)
+	absent := errors.Is(err, fastiron.ErrNotFound)
 	if !absent && current.VLANID != v.VLANID {
 		return &current, errors.New("existing VE belongs to a different VLAN")
 	}
@@ -122,8 +125,8 @@ func (d *Device) ApplyVE(ctx context.Context, v VE) (*VE, error) {
 			entry["openconfig-vlan:routed-vlan"] = map[string]any{"config": map[string]any{"vlan": v.VLANID}}
 			body = map[string]any{"interface": []any{entry}}
 		}
-		writeErr := d.rest.Do(ctx, method, "/interfaces", body, nil)
-		observed, readErr := d.VE(ctx, v.ID)
+		writeErr := d.DoREST(ctx, method, "/interfaces", body, nil)
+		observed, readErr := Read(ctx, d, v.ID)
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)
 		}
@@ -132,14 +135,11 @@ func (d *Device) ApplyVE(ctx context.Context, v VE) (*VE, error) {
 		}
 		current = observed
 	}
-	if d.config.Persistence == "after_each_write" {
-		return &current, d.save(ctx)
-	}
-	return &current, nil
+	return &current, d.Persist(ctx)
 }
 
-func (d *Device) DeleteVE(ctx context.Context, id int64) error {
-	if err := ValidateVE(VE{ID: id, VLANID: id}); err != nil {
+func remove(ctx context.Context, d *fastiron.Device, id int64) error {
+	if err := validate(config{ID: id, VLANID: id}); err != nil {
 		return err
 	}
 	unlock, err := d.Lock(ctx)
@@ -150,35 +150,32 @@ func (d *Device) DeleteVE(ctx context.Context, id int64) error {
 	if _, err := d.Discover(ctx); err != nil {
 		return err
 	}
-	_, err = d.VE(ctx, id)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	_, err = Read(ctx, d, id)
+	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
 		return err
 	}
 	if err == nil {
 		// Removing a logical interface can erase addresses, protocol bindings, and
 		// other independent configuration. Verify children before deleting the parent.
-		output, err := d.cli.Run(ctx, true, "show running-config")
+		output, err := d.RunningConfig(ctx)
 		if err != nil {
 			return err
 		}
 		name := "ve " + strconv.FormatInt(id, 10)
-		if err := veChildren(output[0], name); err != nil {
+		if err := veChildren(output, name); err != nil {
 			return err
 		}
-		writeErr := d.rest.Do(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
-		_, readErr := d.VE(ctx, id)
-		if !errors.Is(readErr, ErrNotFound) {
+		writeErr := d.DoREST(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
+		_, readErr := Read(ctx, d, id)
+		if !errors.Is(readErr, fastiron.ErrNotFound) {
 			return errors.Join(writeErr, readErr, errors.New("VE absence could not be verified"))
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return d.save(ctx)
-	}
-	return nil
+	return d.Persist(ctx)
 }
 
 func veChildren(config, name string) error {
-	if _, err := configuration(config); err != nil {
+	if _, err := fastiron.NormalizeConfiguration(config); err != nil {
 		return err
 	}
 	inside := false
