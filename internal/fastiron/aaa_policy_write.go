@@ -108,7 +108,7 @@ func (d *Device) aaaConfiguration(ctx context.Context) (*AAAPolicy, []string, er
 		return nil, nil, err
 	}
 	comparable := *native
-	if comparable.Dot1XDefault == "" {
+	if comparable.Dot1XDefault == "" && projected.Dot1XDefault == "none" {
 		comparable.Dot1XDefault = "none"
 	}
 	if !sameAAAPolicy(comparable, *projected) {

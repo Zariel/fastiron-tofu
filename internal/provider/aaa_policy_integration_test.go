@@ -23,6 +23,10 @@ output "aaa" { value=data.fastiron_aaa.test }
 		t.Fatal("AAA secrets reached policy state")
 	}
 	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.aaaPolicy = strings.Replace(s.aaaPolicy, `,"icx-openconfig-aaa-aug:dot1x":{"default":"none"}`, "", 1)
+	s.mu.Unlock()
+	run(0, "plan", "-detailed-exitcode", "-no-color")
 
 	s.mu.Lock()
 	s.aaaPolicy = `{"openconfig-system:aaa":{"authentication":{},"authorization":{}}}`

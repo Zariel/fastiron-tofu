@@ -43,7 +43,7 @@ func (d *Device) AAAPolicy(ctx context.Context) (*AAAPolicy, error) {
 		return nil, errors.New("RESTCONF AAA response is missing its policy containers")
 	}
 	auth, coa := response.AAA.Authentication, response.AAA.Authorization.CoA
-	if auth.Login == nil || auth.Login.Default == nil || auth.Dot1X == nil || auth.Dot1X.Default == nil || coa == nil || coa.Enable == nil || coa.Ignore == nil {
+	if auth.Login == nil || auth.Login.Default == nil || auth.Dot1X != nil && auth.Dot1X.Default == nil || coa == nil || coa.Enable == nil || coa.Ignore == nil {
 		return nil, errors.New("RESTCONF AAA response is missing policy settings")
 	}
 	for _, action := range []string{"disable-port", "dm-request", "flip-port", "modify-acl", "reauth-host"} {
@@ -51,7 +51,12 @@ func (d *Device) AAAPolicy(ctx context.Context) (*AAAPolicy, error) {
 			return nil, errors.New("RESTCONF AAA response is missing a CoA ignore setting")
 		}
 	}
-	policy := &AAAPolicy{LoginMethods: []string{}, Dot1XDefault: *auth.Dot1X.Default, CoAEnabled: *coa.Enable, CoAIgnore: []string{}}
+	policy := &AAAPolicy{LoginMethods: []string{}, CoAEnabled: *coa.Enable, CoAIgnore: []string{}}
+	// A scoped dot1x DELETE omits this container until default projection is
+	// rebuilt. Keep absence distinct from an explicit reported mode.
+	if auth.Dot1X != nil {
+		policy.Dot1XDefault = *auth.Dot1X.Default
+	}
 	policy.LoginMethods = append(policy.LoginMethods, (*auth.Login.Default)...)
 	for action, ignored := range coa.Ignore {
 		if ignored == nil {

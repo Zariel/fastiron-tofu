@@ -41,3 +41,22 @@ func TestAAAPolicyIncomplete(t *testing.T) {
 		})
 	}
 }
+
+func TestAAAPolicyWithoutDot1X(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"openconfig-system:aaa":{"authentication":{"icx-openconfig-aaa-aug:login":{"default":["local"]}},"authorization":{"icx-openconfig-aaa-aug:coa":{"enable":false,"ignore":{"disable-port":false,"dm-request":false,"flip-port":false,"modify-acl":false,"reauth-host":false}}}}}`)
+	}))
+	defer server.Close()
+	d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	policy, err := d.AAAPolicy(context.Background())
+	if err != nil || policy == nil {
+		t.Fatalf("deleted dot1x policy was not readable: %v", err)
+	}
+	if policy.Dot1XDefault != "" {
+		t.Fatal("absent dot1x policy was reported as explicitly configured")
+	}
+}
