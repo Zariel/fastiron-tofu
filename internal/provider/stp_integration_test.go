@@ -47,6 +47,10 @@ func stpConfiguration(vlans map[int64]stpSetting, extra bool) string {
 }
 
 func (s *stpSwitch) rest(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" && r.URL.Path == "/restconf/data/stp/interfaces" {
+		fmt.Fprint(w, `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","bpdu-guard":true,"guard":"ROOT"}}]}}`)
+		return
+	}
 	if r.Method == "GET" && r.URL.Path == "/restconf/data/stp" {
 		classic, rapid := []any{}, []any{}
 		for id, v := range s.running {
@@ -142,6 +146,7 @@ func TestOpenTofuSTP(t *testing.T) {
 }
 data "fastiron_spanning_tree" "test" { depends_on = [fastiron_spanning_tree_vlan.test] }
 output "vlans" { value = data.fastiron_spanning_tree.test.vlans }
+output "interfaces" { value = data.fastiron_spanning_tree.test.interfaces }
 `, mode, priority))
 	}
 	check := func(want map[int64]stpSetting) {
@@ -161,6 +166,9 @@ output "vlans" { value = data.fastiron_spanning_tree.test.vlans }
 	check(map[int64]stpSetting{1: {mode: "stp", priority: 32768}, 53: {mode: "rstp", priority: 12345}})
 	if output := strings.TrimSpace(run(0, "output", "-json", "vlans")); output != `{"1":{"mode":"stp","priority":32768},"53":{"mode":"rstp","priority":12345}}` {
 		t.Fatalf("STP discovery=%s", output)
+	}
+	if output := strings.TrimSpace(run(0, "output", "-json", "interfaces")); output != `{"ethernet 1/1/12":{"admin_edge":false,"bpdu_guard":true,"root_guard":true}}` {
+		t.Fatalf("STP interface discovery=%s", output)
 	}
 	run(0, "state", "rm", "fastiron_spanning_tree_vlan.test")
 	run(0, "import", "-no-color", "fastiron_spanning_tree_vlan.test", "53")

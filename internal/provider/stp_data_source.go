@@ -13,7 +13,13 @@ import (
 type (
 	stpDataSource struct{ device *fastiron.Device }
 	stpModel      struct {
-		VLANs map[string]stpVLANStatusModel `tfsdk:"vlans"`
+		VLANs      map[string]stpVLANStatusModel      `tfsdk:"vlans"`
+		Interfaces map[string]stpInterfaceStatusModel `tfsdk:"interfaces"`
+	}
+	stpInterfaceStatusModel struct {
+		AdminEdge types.Bool `tfsdk:"admin_edge"`
+		BPDUGuard types.Bool `tfsdk:"bpdu_guard"`
+		RootGuard types.Bool `tfsdk:"root_guard"`
 	}
 	stpVLANStatusModel struct {
 		Mode     types.String `tfsdk:"mode"`
@@ -26,7 +32,12 @@ func (d *stpDataSource) Metadata(_ context.Context, req datasource.MetadataReque
 }
 
 func (d *stpDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Reads configured per-VLAN spanning-tree modes and bridge priorities.", Attributes: map[string]schema.Attribute{
+	resp.Schema = schema.Schema{Description: "Reads configured VLAN and interface spanning-tree settings.", Attributes: map[string]schema.Attribute{
+		"interfaces": schema.MapNestedAttribute{Computed: true, Description: "Interface entries reported by RESTCONF, keyed by canonical interface name. Interfaces with no explicit settings may be omitted.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
+			"admin_edge": schema.BoolAttribute{Computed: true, Description: "Configured RSTP edge-port setting."},
+			"bpdu_guard": schema.BoolAttribute{Computed: true, Description: "Configured BPDU guard setting."},
+			"root_guard": schema.BoolAttribute{Computed: true, Description: "Configured root protection setting."},
+		}}},
 		"vlans": schema.MapNestedAttribute{Computed: true, Description: "Enabled spanning-tree configurations keyed by VLAN ID.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"mode":     schema.StringAttribute{Computed: true, Description: "stp or rstp."},
 			"priority": schema.Int64Attribute{Computed: true, Description: "Configured bridge priority."},
@@ -51,9 +62,18 @@ func (d *stpDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp
 		resp.Diagnostics.AddError("Cannot read spanning-tree configuration", err.Error())
 		return
 	}
-	m := stpModel{VLANs: map[string]stpVLANStatusModel{}}
+	interfaces, err := d.device.STPInterfaces(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Cannot read spanning-tree interfaces", err.Error())
+		return
+	}
+
+	m := stpModel{VLANs: map[string]stpVLANStatusModel{}, Interfaces: map[string]stpInterfaceStatusModel{}}
 	for _, vlan := range vlans {
 		m.VLANs[strconv.FormatInt(vlan.VLANID, 10)] = stpVLANStatusModel{Mode: types.StringValue(vlan.Mode), Priority: types.Int64Value(vlan.Priority)}
+	}
+	for name, settings := range interfaces {
+		m.Interfaces[name] = stpInterfaceStatusModel{AdminEdge: types.BoolValue(settings.AdminEdge), BPDUGuard: types.BoolValue(settings.BPDUGuard), RootGuard: types.BoolValue(settings.RootGuard)}
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
 }
