@@ -92,7 +92,7 @@ func (d *Device) ApplyVLANMembership(ctx context.Context, v VLANMembership, pres
 	if err := ValidateVLANMembership(v); err != nil {
 		return false, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return false, err
 	}

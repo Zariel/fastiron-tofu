@@ -143,7 +143,7 @@ func (d *Device) ApplyStaticRoute(ctx context.Context, v StaticRoute, present bo
 	if err := ValidateStaticRoute(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

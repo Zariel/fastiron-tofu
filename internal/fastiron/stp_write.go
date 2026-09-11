@@ -16,7 +16,7 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 	if err := ValidateSTPVLAN(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

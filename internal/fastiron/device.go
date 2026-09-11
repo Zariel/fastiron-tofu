@@ -67,7 +67,8 @@ func New(cfg Config) (*Device, error) {
 	return d, nil
 }
 
-func (d *Device) lock(ctx context.Context) (func(), error) {
+// Lock serializes a complete mutation workflow for this device.
+func (d *Device) Lock(ctx context.Context) (func(), error) {
 	select {
 	case d.gate <- struct{}{}:
 		return func() { <-d.gate }, nil
@@ -126,7 +127,7 @@ func (d *Device) Save(ctx context.Context) error {
 	if d.config.Persistence == "never" {
 		return errors.New("configuration saves are disabled by persistence_mode = never")
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return err
 	}
@@ -193,4 +194,26 @@ func configuration(output string) (string, error) {
 		}
 	}
 	return "", errors.New("FastIron configuration output is incomplete")
+}
+
+// RESTCONFEnabled reports whether RESTCONF is available under the selected transport.
+func (d *Device) RESTCONFEnabled() bool {
+	return d.config.Transport != "ssh" && d.rest != nil
+}
+
+// DoREST uses the device's configured RESTCONF connection and transport policy.
+func (d *Device) DoREST(ctx context.Context, method, endpoint string, body, response any) error {
+	if !d.RESTCONFEnabled() {
+		return errors.New("RESTCONF transport is unavailable")
+	}
+	return d.rest.Do(ctx, method, endpoint, body, response)
+}
+
+// Persist saves a verified mutation when automatic persistence is configured.
+// The caller holds the device lock across mutation, verification and persistence.
+func (d *Device) Persist(ctx context.Context) error {
+	if d.config.Persistence == "after_each_write" {
+		return d.save(ctx)
+	}
+	return nil
 }

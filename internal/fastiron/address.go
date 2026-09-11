@@ -126,7 +126,7 @@ func (d *Device) ApplyInterfaceAddress(ctx context.Context, v InterfaceAddress, 
 	if err := ValidateInterfaceAddress(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

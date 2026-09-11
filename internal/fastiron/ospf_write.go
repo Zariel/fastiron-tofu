@@ -15,7 +15,7 @@ func (d *Device) ApplyOSPFArea(ctx context.Context, id string, present bool) (*O
 	if err := ValidateOSPFAreaID(id); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (d *Device) ApplyOSPFInterface(ctx context.Context, id, name string, presen
 	if err := ValidateOSPFInterface(name); err != nil {
 		return false, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return false, err
 	}

@@ -1,4 +1,4 @@
-package fastiron
+package dns
 
 import (
 	"context"
@@ -8,9 +8,11 @@ import (
 	"net/url"
 	"path"
 	"slices"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-func ValidateDNSAddress(address string) error {
+func validateAddress(address string) error {
 	ip, err := netip.ParseAddr(address)
 	if err != nil || ip.Zone() != "" || ip.Is4In6() || ip.String() != address || ip.IsUnspecified() || ip.IsMulticast() {
 		return errors.New("address must be a canonical unicast IPv4 or IPv6 address without a zone")
@@ -18,8 +20,8 @@ func ValidateDNSAddress(address string) error {
 	return nil
 }
 
-func (d *Device) DNSServers(ctx context.Context) ([]string, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func readServers(ctx context.Context, d *fastiron.Device) ([]string, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("DNS configuration currently requires RESTCONF")
 	}
 	var response struct {
@@ -34,7 +36,7 @@ func (d *Device) DNSServers(ctx context.Context) ([]string, error) {
 			} `json:"servers"`
 		} `json:"openconfig-system:dns"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/system/dns", nil, &response); err != nil {
+	if err := d.DoREST(ctx, http.MethodGet, "/system/dns", nil, &response); err != nil {
 		return nil, err
 	}
 	if response.DNS == nil || response.DNS.Servers == nil {
@@ -53,12 +55,12 @@ func (d *Device) DNSServers(ctx context.Context) ([]string, error) {
 	return servers, nil
 }
 
-// ApplyDNSServer owns one address, preserving server entries outside this resource.
-func (d *Device) ApplyDNSServer(ctx context.Context, address string, present bool) (bool, error) {
-	if err := ValidateDNSAddress(address); err != nil {
+// applyServer owns one address, preserving server entries outside this resource.
+func applyServer(ctx context.Context, d *fastiron.Device, address string, present bool) (bool, error) {
+	if err := validateAddress(address); err != nil {
 		return false, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -66,7 +68,7 @@ func (d *Device) ApplyDNSServer(ctx context.Context, address string, present boo
 	if _, err := d.Discover(ctx); err != nil {
 		return false, err
 	}
-	servers, err := d.DNSServers(ctx)
+	servers, err := readServers(ctx, d)
 	if err != nil {
 		return false, err
 	}
@@ -80,8 +82,8 @@ func (d *Device) ApplyDNSServer(ctx context.Context, address string, present boo
 			method = http.MethodPost
 			body = map[string]any{"server": []any{map[string]any{"address": address, "config": map[string]any{"address": address}}}}
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.DNSServers(ctx)
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, readErr := readServers(ctx, d)
 		if readErr != nil {
 			return exists, errors.Join(writeErr, readErr)
 		}
@@ -95,8 +97,5 @@ func (d *Device) ApplyDNSServer(ctx context.Context, address string, present boo
 			}
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return exists, d.save(ctx)
-	}
-	return exists, nil
+	return exists, d.Persist(ctx)
 }

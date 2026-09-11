@@ -90,7 +90,7 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 		return nil, err
 	}
 
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (d *Device) DeleteLAG(ctx context.Context, id int64) error {
 		return errors.New("lag_id must be positive")
 	}
 
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return err
 	}

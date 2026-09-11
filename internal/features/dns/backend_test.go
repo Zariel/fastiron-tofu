@@ -1,4 +1,4 @@
-package fastiron
+package dns
 
 import (
 	"context"
@@ -9,10 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
-func TestDNSServers(t *testing.T) {
+func TestServers(t *testing.T) {
 	// A readable empty collection is absence; an unsupported or malformed
 	// response must not make OpenTofu forget a configured server.
 	for _, tc := range []struct {
@@ -36,11 +38,11 @@ func TestDNSServers(t *testing.T) {
 				fmt.Fprint(w, tc.body)
 			}))
 			defer server.Close()
-			device, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := device.DNSServers(context.Background())
+			got, err := readServers(context.Background(), device)
 			if (err != nil) != tc.failure || !slices.Equal(got, tc.want) {
 				t.Fatalf("servers=%v error=%v", got, err)
 			}

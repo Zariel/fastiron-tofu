@@ -1,4 +1,4 @@
-package provider
+package dns
 
 import (
 	"context"
@@ -10,21 +10,21 @@ import (
 )
 
 type (
-	dnsDataSource   struct{ device *fastiron.Device }
-	dnsServersModel struct {
+	DataSource   struct{ device *fastiron.Device }
+	serversModel struct {
 		Addresses types.Set `tfsdk:"addresses"`
 	}
 )
 
-func (d *dnsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ip_dns_servers"
 }
 
-func (d *dnsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads all configured DNS server addresses without taking ownership.", Attributes: map[string]schema.Attribute{"addresses": schema.SetAttribute{Computed: true, ElementType: types.StringType, Description: "Configured DNS server addresses."}}}
 }
 
-func (d *dnsDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -35,8 +35,8 @@ func (d *dnsDataSource) Configure(_ context.Context, req datasource.ConfigureReq
 	}
 }
 
-func (d *dnsDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	servers, err := d.device.DNSServers(ctx)
+func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	servers, err := readServers(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read DNS servers", err.Error())
 		return
@@ -46,5 +46,5 @@ func (d *dnsDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, dnsServersModel{Addresses: addresses})...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, serversModel{Addresses: addresses})...)
 }

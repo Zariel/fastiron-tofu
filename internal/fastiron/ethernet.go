@@ -88,7 +88,7 @@ func (d *Device) ApplyEthernet(ctx context.Context, v Ethernet) (*Ethernet, erro
 	if err := ValidateEthernet(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

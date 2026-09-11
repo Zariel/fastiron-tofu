@@ -37,7 +37,7 @@ func (d *Device) ApplySTPInterface(ctx context.Context, name string, desired STP
 	if err := ValidateSTPInterface(name); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

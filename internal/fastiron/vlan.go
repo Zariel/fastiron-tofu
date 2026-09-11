@@ -108,7 +108,7 @@ func (d *Device) ApplyVLAN(ctx context.Context, v VLAN) (*VLAN, error) {
 	if err := ValidateVLAN(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (d *Device) DeleteVLAN(ctx context.Context, id int64) error {
 	if err := ValidateVLAN(VLAN{ID: id}); err != nil {
 		return err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return err
 	}

@@ -67,7 +67,7 @@ func (d *Device) LLDP(ctx context.Context, name string) (bool, error) {
 }
 
 func (d *Device) ApplyLLDP(ctx context.Context, name string, enabled bool) (*bool, error) {
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

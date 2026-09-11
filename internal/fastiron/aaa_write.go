@@ -152,7 +152,7 @@ func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *
 			return nil, errors.New("AAA key must be nonempty, contain no whitespace, and fit the protocol length limit")
 		}
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

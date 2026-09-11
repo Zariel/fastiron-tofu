@@ -53,7 +53,7 @@ func (d *Device) ApplyAuthenticationInterface(ctx context.Context, name string, 
 	if err := ValidateAuthenticationInterface(name, desired); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -129,7 +129,7 @@ func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPol
 	desired.CoAIgnore = slices.Clone(desired.CoAIgnore)
 	slices.Sort(desired.CoAIgnore)
 
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}

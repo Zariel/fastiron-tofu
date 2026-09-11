@@ -93,7 +93,7 @@ func (d *Device) ApplyVE(ctx context.Context, v VE) (*VE, error) {
 	if err := ValidateVE(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (d *Device) DeleteVE(ctx context.Context, id int64) error {
 	if err := ValidateVE(VE{ID: id, VLANID: id}); err != nil {
 		return err
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return err
 	}

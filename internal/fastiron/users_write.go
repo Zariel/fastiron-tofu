@@ -96,7 +96,7 @@ func (d *Device) ApplyUser(ctx context.Context, u User, password string, present
 	if present && (len(password) < 1 || len(password) > 48 || strings.IndexFunc(password, unicode.IsControl) >= 0) {
 		return nil, errors.New("user password must contain 1–48 bytes without control characters")
 	}
-	unlock, err := d.lock(ctx)
+	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
 	}
