@@ -85,3 +85,9 @@ data "fastiron_aaa_users" "switch" {
 output "local_user_privileges" {
   value = data.fastiron_aaa_users.switch.users
 }
+
+data "fastiron_aaa" "switch" {}
+
+output "policy" {
+  value = data.fastiron_aaa.switch
+}

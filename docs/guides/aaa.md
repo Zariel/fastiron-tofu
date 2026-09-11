@@ -114,3 +114,17 @@ Deletion removes the account. `persistence_pending` records an operation needing
 The `fastiron_aaa_users` data source returns `users`, a map from username to numeric privilege, including an empty map when no users exist. It excludes passwords and hashes and does not require AAA write opt-in.
 
 Hardware testing covered create, import, privilege and password updates, replacement, deletion, and independently checked running and saved configuration. SSH authentication accepted the rotated password, rejected the previous password, and continued accepting an unchanged neighboring account. This verifies authentication, not every role's command permissions.
+
+## Policy discovery
+
+```hcl
+data "fastiron_aaa" "switch" {}
+
+output "aaa_policy" {
+  value = data.fastiron_aaa.switch
+}
+```
+
+The policy data source exposes `login_methods` in authentication attempt order, `dot1x_default` as reported by the switch, `coa_enabled`, and `coa_ignore` as a set of ignored Change of Authorization actions. CoA enable state and ignored actions are independent: disabling CoA can leave ignore settings configured.
+
+Policy discovery does not require AAA write opt-in. It excludes account credentials and server keys and does not test an authentication server or establish that a client can authenticate. Missing required policy containers, login methods or CoA settings produce an error instead of reporting assumed defaults. Policy configuration resources remain under development.
