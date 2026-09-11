@@ -15,8 +15,9 @@ Plugin binary: `terraform-provider-fastiron`.
 |---|---|---|
 | VLANs | Implemented | Create, name and delete VLANs. |
 | VLAN membership | Implemented | Individual tagged or untagged Ethernet and LAG memberships. |
+| Additional VLAN policies | Not yet | Management/default VLAN selection, voice VLANs and IGMP snooping. |
 | LAGs | Implemented | Static/dynamic mode, name, members and discovery. Detached ports follow native behavior and become disabled. |
-| Ethernet interfaces | Partial | Port name and administrative enable state. Speed, duplex and clock settings remain. |
+| Ethernet interfaces | Partial | Port name and administrative enable state. Speed, duplex, clock, storm control, protected ports, jumbo frames and DSCP trust remain. |
 | Routed VLAN interfaces (VE) | Partial | Existence, VLAN binding and port name. Administrative enable state remains. |
 | Other interface configuration | Not yet | Dedicated management/LAG interface resources, loopbacks, group-VE and tunnels remain. |
 | Interface IP addresses | Implemented | Individual IPv4/IPv6 addresses on VE and management interfaces. |
@@ -24,7 +25,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | OSPF | Partial | Default-VRF areas and interface bindings. Additional routing options remain. |
 | Spanning tree | Partial | Per-VLAN STP/RSTP mode and priority; Ethernet admin-edge, BPDU guard and root guard. Global STP and MST remain. |
 | DNS servers | Partial | IPv4 servers and discovery. The tested firmware rejected IPv6 DNS addresses. |
-| LLDP | Implemented | Global and Ethernet enable state; interface discovery. |
+| LLDP | Partial | Global and Ethernet enable state; interface discovery. LLDP-MED network policies remain. |
 | PoE | Partial | Ethernet enable state and reported measurements. Broader controls and validation under load remain. |
 | Local users | Implemented | Usernames, privileges and passwords; privilege discovery. External password changes cannot currently be detected. |
 | RADIUS/TACACS servers | Partial | Addresses, protocol ports, purposes and shared keys. Keyless TACACS, additional options and remote secret drift detection remain. |
@@ -35,12 +36,19 @@ Plugin binary: `terraform-provider-fastiron`.
 | BGP | Not yet | Planned for SSH configuration support. |
 | Routing policy | Not yet | Prefix lists, route maps, AS-path filters and community lists. |
 | Global system settings | Not yet | Hostname and other system configuration fields. |
+| NTP and remote logging | Not yet | Time servers and logging destinations. |
+| SNMP | Not yet | Server groups, users and collectd configuration. |
+| DHCP | Not yet | Server, client and relay helper configuration. |
+| DHCP and neighbor security | Not yet | DHCPv4/v6 snooping, ARP/IPv6 neighbor inspection and IP source guards. |
+| MAC address tables | Not yet | Static entries and static/dynamic table discovery. |
+| Stacking | Not yet | Stack configuration. |
 | Configuration saving | Implemented | Automatic saves or an explicit save resource. Saved contents are verified; reboot persistence testing remains. |
 | Firmware discovery | Implemented | Reports the active firmware; no expected-version input. |
 | RESTCONF configuration | Partial | Used by the available resources above. Remaining endpoint and data-source coverage is still being implemented. |
 | SSH discovery and verification | Implemented | Native configuration reads, firmware discovery, ownership checks and saving. |
 | SSH configuration and fallback | Not yet | Follows completion of RESTCONF support. |
 | Configuration backups | Not yet | Backup resources and policies remain. |
+| Additional operational APIs | Not yet | Boot/reload, firmware transfer, diagnostics and configuration-file operations. |
 
 Hardware testing has used FastIron `09.0.10kT213` on an ICX 7150. ICX 7250 testing has not yet run. See [tested compatibility and limits](docs/compatibility.md) for details, and the [basic example](examples/basic/main.tf) to get started.
 
