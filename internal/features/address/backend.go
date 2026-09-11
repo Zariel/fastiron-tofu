@@ -1,4 +1,4 @@
-package fastiron
+package address
 
 import (
 	"context"
@@ -12,11 +12,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 type (
-	InterfaceAddress struct {
+	address struct {
 		Interface string
 		Address   netip.Prefix
 	}
@@ -26,7 +27,7 @@ type (
 	}
 )
 
-func ValidateAddressInterface(name string) error {
+func ValidateInterface(name string) error {
 	kind, number, ok := strings.Cut(name, " ")
 	id, err := strconv.ParseInt(number, 10, 64)
 	if !ok || err != nil || id < 1 || number != strconv.FormatInt(id, 10) || (kind != "ve" && kind != "management") || (kind == "ve" && id > 4094) {
@@ -35,8 +36,8 @@ func ValidateAddressInterface(name string) error {
 	return nil
 }
 
-func ValidateInterfaceAddress(v InterfaceAddress) error {
-	if err := ValidateAddressInterface(v.Interface); err != nil {
+func validateAddress(v address) error {
+	if err := ValidateInterface(v.Interface); err != nil {
 		return err
 	}
 	if !v.Address.IsValid() || v.Address.Addr().Is4In6() || v.Address.Addr().IsUnspecified() || v.Address.Addr().IsMulticast() {
@@ -57,11 +58,11 @@ func addressPath(name string, ipv6 bool) string {
 	return path.Join("/interfaces", "interface="+url.PathEscape(name), container, family, "addresses")
 }
 
-func (d *Device) readAddresses(ctx context.Context, name string, ipv6 bool) (map[netip.Addr]addressState, error) {
-	if err := ValidateAddressInterface(name); err != nil {
+func configuredAddresses(ctx context.Context, d *fastiron.Device, name string, ipv6 bool) (map[netip.Addr]addressState, error) {
+	if err := ValidateInterface(name); err != nil {
 		return nil, err
 	}
-	if d.config.Transport == "ssh" || d.rest == nil {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("interface addressing currently requires RESTCONF")
 	}
 	var response struct {
@@ -76,12 +77,12 @@ func (d *Device) readAddresses(ctx context.Context, name string, ipv6 bool) (map
 			} `json:"address"`
 		} `json:"openconfig-if-ip:addresses"`
 	}
-	err := d.rest.Do(ctx, http.MethodGet, addressPath(name, ipv6), nil, &response)
+	err := d.DoREST(ctx, http.MethodGet, addressPath(name, ipv6), nil, &response)
 	if errors.Is(err, restconf.ErrNotFound) && strings.HasPrefix(name, "ve ") {
 		id, _ := strconv.ParseInt(strings.TrimPrefix(name, "ve "), 10, 64)
 		// A missing address endpoint is not absence unless the parent is absent too.
-		if _, parentErr := d.VE(ctx, id); errors.Is(parentErr, ErrNotFound) {
-			return nil, ErrNotFound
+		if _, parentErr := d.VE(ctx, id); errors.Is(parentErr, fastiron.ErrNotFound) {
+			return nil, fastiron.ErrNotFound
 		}
 	}
 	if err != nil {
@@ -109,8 +110,8 @@ func (d *Device) readAddresses(ctx context.Context, name string, ipv6 bool) (map
 	return addresses, nil
 }
 
-func (d *Device) InterfaceAddresses(ctx context.Context, name string, ipv6 bool) ([]netip.Prefix, error) {
-	addresses, err := d.readAddresses(ctx, name, ipv6)
+func readAddresses(ctx context.Context, d *fastiron.Device, name string, ipv6 bool) ([]netip.Prefix, error) {
+	addresses, err := configuredAddresses(ctx, d, name, ipv6)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +123,8 @@ func (d *Device) InterfaceAddresses(ctx context.Context, name string, ipv6 bool)
 	return prefixes, nil
 }
 
-func (d *Device) ApplyInterfaceAddress(ctx context.Context, v InterfaceAddress, present bool) (*netip.Prefix, error) {
-	if err := ValidateInterfaceAddress(v); err != nil {
+func applyAddress(ctx context.Context, d *fastiron.Device, v address, present bool) (*netip.Prefix, error) {
+	if err := validateAddress(v); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -134,12 +135,9 @@ func (d *Device) ApplyInterfaceAddress(ctx context.Context, v InterfaceAddress, 
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	addresses, err := d.readAddresses(ctx, v.Interface, v.Address.Addr().Is6())
-	if errors.Is(err, ErrNotFound) && !present {
-		if d.config.Persistence == "after_each_write" {
-			return nil, d.save(ctx)
-		}
-		return nil, nil
+	addresses, err := configuredAddresses(ctx, d, v.Interface, v.Address.Addr().Is6())
+	if errors.Is(err, fastiron.ErrNotFound) && !present {
+		return nil, d.Persist(ctx)
 	}
 	if err != nil {
 		return nil, err
@@ -160,8 +158,8 @@ func (d *Device) ApplyInterfaceAddress(ctx context.Context, v InterfaceAddress, 
 			endpoint = path.Join(endpoint, "address="+url.PathEscape(v.Address.Addr().String()))
 			body = nil
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.readAddresses(ctx, v.Interface, v.Address.Addr().Is6())
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, readErr := configuredAddresses(ctx, d, v.Interface, v.Address.Addr().Is6())
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)
 		}
@@ -185,8 +183,5 @@ func (d *Device) ApplyInterfaceAddress(ctx context.Context, v InterfaceAddress, 
 	if exists {
 		current = &entry.Prefix
 	}
-	if d.config.Persistence == "after_each_write" {
-		return current, d.save(ctx)
-	}
-	return current, nil
+	return current, d.Persist(ctx)
 }

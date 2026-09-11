@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/features/address"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -36,7 +37,7 @@ func validateAreaID(id string) error {
 }
 
 func validateInterface(name string) error {
-	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) || strings.HasPrefix(name, "ve ") && fastiron.ValidateAddressInterface(name) == nil {
+	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) || strings.HasPrefix(name, "ve ") && address.ValidateInterface(name) == nil {
 		return nil
 	}
 	return errors.New("OSPF bindings require a canonical Ethernet, LAG, or VE interface name")

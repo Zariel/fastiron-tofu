@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/zariel/fastiron-tofu/internal/features/aaa"
+	"github.com/zariel/fastiron-tofu/internal/features/address"
 	"github.com/zariel/fastiron-tofu/internal/features/authentication"
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
 	"github.com/zariel/fastiron-tofu/internal/features/lldp"
@@ -45,8 +46,8 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return lldp.NewInterfaceResource() },
 		func() resource.Resource { return &poe.Resource{} },
 		func() resource.Resource { return &veResource{} },
-		func() resource.Resource { return &addressResource{} },
-		func() resource.Resource { return &addressResource{ipv6: true} },
+		func() resource.Resource { return address.NewIPv4Resource() },
+		func() resource.Resource { return address.NewIPv6Resource() },
 		func() resource.Resource { return &lagResource{} },
 		func() resource.Resource { return &route.Resource{} },
 		func() resource.Resource { return &ospf.AreaResource{} },
@@ -63,7 +64,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &dns.DataSource{} },
 		func() datasource.DataSource { return &lldp.DataSource{} },
 		func() datasource.DataSource { return &poe.DataSource{} },
-		func() datasource.DataSource { return &addressesDataSource{} },
+		func() datasource.DataSource { return &address.DataSource{} },
 		func() datasource.DataSource { return &lagDataSource{} },
 		func() datasource.DataSource { return &route.DataSource{} },
 		func() datasource.DataSource { return &ospf.DataSource{} },
