@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -39,7 +40,7 @@ func ValidateOSPFAreaID(id string) error {
 }
 
 func ValidateOSPFInterface(name string) error {
-	if lagPattern.MatchString(name) || strings.HasPrefix(name, "ethernet ") && portPattern.MatchString(strings.TrimPrefix(name, "ethernet ")) || strings.HasPrefix(name, "ve ") && ValidateAddressInterface(name) == nil {
+	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) || strings.HasPrefix(name, "ve ") && ValidateAddressInterface(name) == nil {
 		return nil
 	}
 	return errors.New("OSPF bindings require a canonical Ethernet, LAG, or VE interface name")

@@ -6,6 +6,8 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
 type STPInterface struct {
@@ -15,7 +17,7 @@ type STPInterface struct {
 }
 
 func ValidateSTPInterface(name string) error {
-	if !strings.HasPrefix(name, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(name, "ethernet ")) {
+	if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
 		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
 	}
 	return nil

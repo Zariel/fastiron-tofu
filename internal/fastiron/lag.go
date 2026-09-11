@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
 type LAG struct {
@@ -105,7 +107,7 @@ func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
 			lags[entry.Name] = LAG{ID: id, Name: config.Name, Mode: mode, Members: []string{}}
 		}
 		if entry.Ethernet != nil && entry.Ethernet.Config != nil && entry.Ethernet.Config.Aggregate != "" {
-			if !strings.HasPrefix(entry.Name, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(entry.Name, "ethernet ")) || entry.Config == nil || entry.Config.Name != entry.Name || entry.Config.Type != "iana-if-type:ethernetCsmacd" {
+			if !strings.HasPrefix(entry.Name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(entry.Name, "ethernet ")) || entry.Config == nil || entry.Config.Name != entry.Name || entry.Config.Type != "iana-if-type:ethernetCsmacd" {
 				return nil, errors.New("RESTCONF LAG member has an invalid Ethernet identity")
 			}
 			aggregate := entry.Ethernet.Config.Aggregate

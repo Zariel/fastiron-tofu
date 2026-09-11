@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
 func ValidateLAG(v LAG) error {
@@ -32,7 +34,7 @@ func ValidateLAG(v LAG) error {
 	seen := map[string]bool{}
 
 	for _, name := range v.Members {
-		if !strings.HasPrefix(name, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(name, "ethernet ")) {
+		if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
 			return errors.New("LAG members must be canonical Ethernet interface names")
 		}
 		if seen[name] {

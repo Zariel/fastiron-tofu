@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"regexp"
+
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
 type Ethernet struct {
@@ -12,10 +13,8 @@ type Ethernet struct {
 	Enabled        bool
 }
 
-var portPattern = regexp.MustCompile(`^[1-9][0-9]*/[1-9][0-9]*/[1-9][0-9]*$`)
-
 func ValidateEthernet(v Ethernet) error {
-	if !portPattern.MatchString(v.Port) {
+	if !interfaceid.EthernetPort(v.Port) {
 		return errors.New("port must use stack/slot/port syntax with positive numbers and no leading zeros")
 	}
 	return validatePortName(v.PortName)

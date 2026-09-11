@@ -9,10 +9,11 @@ import (
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
 func validateInterface(name string) error {
-	if !strings.HasPrefix(name, "ethernet ") || fastiron.ValidateEthernet(fastiron.Ethernet{Port: strings.TrimPrefix(name, "ethernet ")}) != nil {
+	if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
 		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
 	}
 	return nil

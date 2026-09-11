@@ -11,11 +11,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func ValidateAuthenticationInterface(name string, desired AuthenticationInterface) error {
-	if !strings.HasPrefix(name, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(name, "ethernet ")) {
+	if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
 		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
 	}
 	if !slices.Contains([]string{"auto", "force-authorized", "force-unauthorized"}, desired.PortControl) {

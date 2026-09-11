@@ -6,6 +6,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
 type AuthenticationInterface struct {
@@ -103,7 +105,7 @@ func authenticationPorts(fields []string) ([]string, error) {
 			}
 			continue
 		}
-		if !portPattern.MatchString(fields[i]) {
+		if !interfaceid.EthernetPort(fields[i]) {
 			return nil, errors.New("invalid native authentication interface")
 		}
 		parts := strings.Split(fields[i], "/")
@@ -113,7 +115,7 @@ func authenticationPorts(fields []string) ([]string, error) {
 		}
 		last := first
 		if i+1 < len(fields) && fields[i+1] == "to" {
-			if i+2 >= len(fields) || !portPattern.MatchString(fields[i+2]) {
+			if i+2 >= len(fields) || !interfaceid.EthernetPort(fields[i+2]) {
 				return nil, errors.New("incomplete native authentication port range")
 			}
 			end := strings.Split(fields[i+2], "/")
