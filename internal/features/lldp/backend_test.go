@@ -1,4 +1,4 @@
-package fastiron
+package lldp
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -27,11 +29,11 @@ func TestLLDPDefaults(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))
 			defer server.Close()
-			device, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			enabled, err := device.LLDP(context.Background(), tc.iface)
+			enabled, err := readEnabled(context.Background(), device, tc.iface)
 			if (err != nil) != tc.failure || enabled != tc.enabled {
 				t.Fatalf("enabled=%v error=%v", enabled, err)
 			}

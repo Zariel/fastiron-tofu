@@ -1,11 +1,11 @@
-package provider
+package lldp
 
 import (
 	"context"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
-	"github.com/hashicorp/terraform-plugin-framework/resource"
+	tfresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -14,19 +14,19 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type lldpResource struct {
+type resource struct {
 	device       *fastiron.Device
 	perInterface bool
 }
 
-func (r *lldpResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *resource) Metadata(_ context.Context, req tfresource.MetadataRequest, resp *tfresource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_lldp"
 	if r.perInterface {
 		resp.TypeName += "_interface"
 	}
 }
 
-func (r *lldpResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *resource) Schema(_ context.Context, _ tfresource.SchemaRequest, resp *tfresource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns LLDP enable state. Omission and destroy restore enabled=true. Global and per-interface settings are independently owned.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"enabled":             schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true), Description: "Enable LLDP in this scope. Defaults to true."},
@@ -37,7 +37,7 @@ func (r *lldpResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 	}
 }
 
-func (r *lldpResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *resource) Configure(_ context.Context, req tfresource.ConfigureRequest, resp *tfresource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -48,7 +48,7 @@ func (r *lldpResource) Configure(_ context.Context, req resource.ConfigureReques
 	}
 }
 
-func (r *lldpResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+func (r *resource) ValidateConfig(ctx context.Context, req tfresource.ValidateConfigRequest, resp *tfresource.ValidateConfigResponse) {
 	if !r.perInterface {
 		return
 	}
@@ -57,12 +57,12 @@ func (r *lldpResource) ValidateConfig(ctx context.Context, req resource.Validate
 	if resp.Diagnostics.HasError() || name.IsUnknown() || name.IsNull() {
 		return
 	}
-	if err := fastiron.ValidateLLDPInterface(name.ValueString()); err != nil {
+	if err := validateInterface(name.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Invalid LLDP interface", err.Error())
 	}
 }
 
-func (r *lldpResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *resource) ModifyPlan(ctx context.Context, req tfresource.ModifyPlanRequest, resp *tfresource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
 	}
@@ -80,12 +80,12 @@ func (r *lldpResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.LLDP(ctx, name.ValueString()); err != nil {
+	if _, err := readEnabled(ctx, r.device, name.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Cannot read LLDP capability", err.Error())
 	}
 }
 
-func (r *lldpResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *resource) Create(ctx context.Context, req tfresource.CreateRequest, resp *tfresource.CreateResponse) {
 	var enabled types.Bool
 	var name types.String
 	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("enabled"), &enabled)...)
@@ -95,7 +95,7 @@ func (r *lldpResource) Create(ctx context.Context, req resource.CreateRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyLLDP(ctx, name.ValueString(), enabled.ValueBool())
+	observed, err := applyEnabled(ctx, r.device, name.ValueString(), enabled.ValueBool())
 	if observed != nil {
 		resp.State.Raw = req.Plan.Raw
 		id := "lldp"
@@ -111,7 +111,7 @@ func (r *lldpResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 }
 
-func (r *lldpResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *resource) Update(ctx context.Context, req tfresource.UpdateRequest, resp *tfresource.UpdateResponse) {
 	var enabled types.Bool
 	var name types.String
 	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("enabled"), &enabled)...)
@@ -121,7 +121,7 @@ func (r *lldpResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyLLDP(ctx, name.ValueString(), enabled.ValueBool())
+	observed, err := applyEnabled(ctx, r.device, name.ValueString(), enabled.ValueBool())
 	if observed != nil {
 		resp.State.Raw = req.Plan.Raw
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("enabled"), *observed)...)
@@ -132,7 +132,7 @@ func (r *lldpResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 }
 
-func (r *lldpResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *resource) Read(ctx context.Context, req tfresource.ReadRequest, resp *tfresource.ReadResponse) {
 	var name types.String
 	var pending types.Bool
 	if r.perInterface {
@@ -142,7 +142,7 @@ func (r *lldpResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	enabled, err := r.device.LLDP(ctx, name.ValueString())
+	enabled, err := readEnabled(ctx, r.device, name.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read LLDP", err.Error())
 		return
@@ -153,7 +153,7 @@ func (r *lldpResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	}
 }
 
-func (r *lldpResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *resource) Delete(ctx context.Context, req tfresource.DeleteRequest, resp *tfresource.DeleteResponse) {
 	var name types.String
 	if r.perInterface {
 		resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("interface"), &name)...)
@@ -161,16 +161,16 @@ func (r *lldpResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.ApplyLLDP(ctx, name.ValueString(), true); err != nil {
+	if _, err := applyEnabled(ctx, r.device, name.ValueString(), true); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot reset LLDP", err.Error())
 	}
 }
 
-func (r *lldpResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *resource) ImportState(ctx context.Context, req tfresource.ImportStateRequest, resp *tfresource.ImportStateResponse) {
 	if r.perInterface {
 		name := strings.TrimPrefix(req.ID, "lldp|")
-		if req.ID != "lldp|"+name || fastiron.ValidateLLDPInterface(name) != nil {
+		if req.ID != "lldp|"+name || validateInterface(name) != nil {
 			resp.Diagnostics.AddError("Invalid LLDP identity", "Use lldp|ethernet <stack>/<slot>/<port>.")
 			return
 		}
@@ -181,3 +181,6 @@ func (r *lldpResource) ImportState(ctx context.Context, req resource.ImportState
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 }
+
+func NewGlobalResource() *resource    { return &resource{} }
+func NewInterfaceResource() *resource { return &resource{perInterface: true} }

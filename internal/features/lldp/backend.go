@@ -1,4 +1,4 @@
-package fastiron
+package lldp
 
 import (
 	"context"
@@ -7,10 +7,12 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-func ValidateLLDPInterface(name string) error {
-	if !strings.HasPrefix(name, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(name, "ethernet ")) {
+func validateInterface(name string) error {
+	if !strings.HasPrefix(name, "ethernet ") || fastiron.ValidateEthernet(fastiron.Ethernet{Port: strings.TrimPrefix(name, "ethernet ")}) != nil {
 		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
 	}
 	return nil
@@ -21,14 +23,14 @@ type lldpConfig struct {
 	Enabled *bool  `json:"enabled"`
 }
 
-// LLDP reads the global setting when name is empty, otherwise the named interface.
-func (d *Device) LLDP(ctx context.Context, name string) (bool, error) {
+// readEnabled reads the global setting when name is empty, otherwise the named interface.
+func readEnabled(ctx context.Context, d *fastiron.Device, name string) (bool, error) {
 	if name != "" {
-		if err := ValidateLLDPInterface(name); err != nil {
+		if err := validateInterface(name); err != nil {
 			return false, err
 		}
 	}
-	if d.config.Transport == "ssh" || d.rest == nil {
+	if !d.RESTCONFEnabled() {
 		return false, errors.New("LLDP configuration currently requires RESTCONF")
 	}
 	var config *lldpConfig
@@ -36,7 +38,7 @@ func (d *Device) LLDP(ctx context.Context, name string) (bool, error) {
 		var response struct {
 			Config *lldpConfig `json:"openconfig-lldp:config"`
 		}
-		if err := d.rest.Do(ctx, http.MethodGet, "/lldp/config", nil, &response); err != nil {
+		if err := d.DoREST(ctx, http.MethodGet, "/lldp/config", nil, &response); err != nil {
 			return false, err
 		}
 		config = response.Config
@@ -47,7 +49,7 @@ func (d *Device) LLDP(ctx context.Context, name string) (bool, error) {
 				Config *lldpConfig `json:"config"`
 			} `json:"openconfig-lldp:interface"`
 		}
-		if err := d.rest.Do(ctx, http.MethodGet, path.Join("/lldp/interfaces", "interface="+url.PathEscape(name)), nil, &response); err != nil {
+		if err := d.DoREST(ctx, http.MethodGet, path.Join("/lldp/interfaces", "interface="+url.PathEscape(name)), nil, &response); err != nil {
 			return false, err
 		}
 		if len(response.Interfaces) != 1 || response.Interfaces[0].Name != name {
@@ -66,7 +68,7 @@ func (d *Device) LLDP(ctx context.Context, name string) (bool, error) {
 	return config.Enabled == nil || *config.Enabled, nil
 }
 
-func (d *Device) ApplyLLDP(ctx context.Context, name string, enabled bool) (*bool, error) {
+func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled bool) (*bool, error) {
 	unlock, err := d.Lock(ctx)
 	if err != nil {
 		return nil, err
@@ -75,7 +77,7 @@ func (d *Device) ApplyLLDP(ctx context.Context, name string, enabled bool) (*boo
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	current, err := d.LLDP(ctx, name)
+	current, err := readEnabled(ctx, d, name)
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +88,8 @@ func (d *Device) ApplyLLDP(ctx context.Context, name string, enabled bool) (*boo
 			endpoint = "/lldp/interfaces"
 			body = map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": enabled}}}}}
 		}
-		writeErr := d.rest.Do(ctx, http.MethodPatch, endpoint, body, nil)
-		observed, readErr := d.LLDP(ctx, name)
+		writeErr := d.DoREST(ctx, http.MethodPatch, endpoint, body, nil)
+		observed, readErr := readEnabled(ctx, d, name)
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)
 		}
@@ -96,14 +98,11 @@ func (d *Device) ApplyLLDP(ctx context.Context, name string, enabled bool) (*boo
 		}
 		current = observed
 	}
-	if d.config.Persistence == "after_each_write" {
-		return &current, d.save(ctx)
-	}
-	return &current, nil
+	return &current, d.Persist(ctx)
 }
 
-func (d *Device) LLDPInterfaces(ctx context.Context) (map[string]bool, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]bool, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("LLDP discovery currently requires RESTCONF")
 	}
 	var response struct {
@@ -114,7 +113,7 @@ func (d *Device) LLDPInterfaces(ctx context.Context) (map[string]bool, error) {
 			} `json:"interface"`
 		} `json:"openconfig-lldp:interfaces"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/lldp/interfaces", nil, &response); err != nil {
+	if err := d.DoREST(ctx, http.MethodGet, "/lldp/interfaces", nil, &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {

@@ -1,4 +1,4 @@
-package provider
+package lldp
 
 import (
 	"context"
@@ -10,21 +10,21 @@ import (
 )
 
 type (
-	lldpDataSource      struct{ device *fastiron.Device }
-	lldpInterfacesModel struct {
+	DataSource      struct{ device *fastiron.Device }
+	interfacesModel struct {
 		Interfaces types.Map `tfsdk:"interfaces"`
 	}
 )
 
-func (d *lldpDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_lldp_interfaces"
 }
 
-func (d *lldpDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads LLDP enable configuration for all available interfaces without taking ownership.", Attributes: map[string]schema.Attribute{"interfaces": schema.MapAttribute{Computed: true, ElementType: types.BoolType, Description: "Canonical interface names mapped to their configured LLDP enable state."}}}
 }
 
-func (d *lldpDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -35,8 +35,8 @@ func (d *lldpDataSource) Configure(_ context.Context, req datasource.ConfigureRe
 	}
 }
 
-func (d *lldpDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	values, err := d.device.LLDPInterfaces(ctx)
+func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	values, err := readInterfaces(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read LLDP interfaces", err.Error())
 		return
@@ -46,5 +46,5 @@ func (d *lldpDataSource) Read(ctx context.Context, _ datasource.ReadRequest, res
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, lldpInterfacesModel{Interfaces: interfaces})...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, interfacesModel{Interfaces: interfaces})...)
 }
