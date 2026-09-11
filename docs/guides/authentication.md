@@ -1,4 +1,4 @@
-# Interface authentication
+# Authentication
 
 `fastiron_authentication_interfaces` reads configured FlexAuth settings for Ethernet interfaces:
 
@@ -24,7 +24,7 @@ The data source reads native configuration over SSH. On the tested firmware, cha
 
 Discovery requires the provider's SSH credentials and host trust configuration. It does not require `allow_aaa_changes` and does not modify or save switch configuration. These are configuration flags: global feature initialization, AAA policy, VLAN requirements, and connected clients determine whether authentication actually takes place.
 
-This is separate from [AAA login, default dot1x, and CoA policy](aaa.md). FlexAuth global settings remain under development. Hardware workflows verified enablement, repeated mode changes, import, disablement, destroy and recreation, with independent running/startup checks and neighboring-port preservation. Client authentication exchanges and reboot persistence were not tested.
+This is separate from [AAA login, default dot1x, and CoA policy](aaa.md). Global settings can be read with `fastiron_authentication`; global configuration resources remain under development. Hardware workflows verified enablement, repeated mode changes, import, disablement, destroy and recreation, with independent running/startup checks and neighboring-port preservation. Client authentication exchanges and reboot persistence were not tested.
 
 ## Configure one interface
 
@@ -52,3 +52,29 @@ Changing `interface` replaces the resource. Import an existing port using its ca
 ```sh
 tofu import fastiron_authentication_interface.access 'ethernet 1/1/9'
 ```
+
+## Read global settings
+
+```hcl
+data "fastiron_authentication" "switch" {}
+
+output "authentication_order" {
+  value = data.fastiron_authentication.switch.auth_order
+}
+```
+
+This data source reads native global configuration without modifying or saving it. It requires SSH credentials and host trust, but does not require `allow_aaa_changes`.
+
+| Attribute | Meaning |
+|---|---|
+| `dot1x_enabled`, `mac_authentication_enabled` | Global feature enablement, independent of port enablement |
+| `auth_order` | `dot1x mac-auth` (default) or `mac-auth dot1x` |
+| `auth_default_vlan`, `restricted_vlan`, `critical_vlan`, `voice_vlan`, `guest_vlan` | Configured VLAN IDs; null when unconfigured |
+| `max_sessions` | Global session limit, default 2 |
+| `re_authentication` | Periodic reauthentication enabled; does not report the separately configured period |
+| `mac_dot1x_disable` | Skip dot1x after successful MAC authentication with MAC-first order |
+| `mac_dot1x_override` | Attempt dot1x after failed MAC authentication with MAC-first order and restricted-VLAN failure handling |
+| `failure_action` | Configured `auth-fail-action` arguments, such as `restricted-vlan` |
+| `timeout_action` | Configured `auth-timeout-action` arguments: `success`, `failure`, or `critical-vlan` |
+
+Both action attributes are null when no action command is configured. This preserves the distinction between an explicit timeout `failure` action and the switch's unconfigured default. If configured, the native `voice voice-vlan` suffix is included in the action string. These values describe configuration; they do not verify successful client authentication.
