@@ -1,4 +1,4 @@
-package fastiron
+package ospf
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -20,18 +21,13 @@ const protocolsPath = "/network-instances/network-instance=default-vrf/protocols
 
 var ospfAreasPath = path.Join(protocolsPath, "protocol=OSPF,icx-ospf", "ospfv2/areas")
 
-type (
-	OSPFArea struct {
-		ID         string
-		Interfaces []string
-	}
-	ospfArea struct {
-		OSPFArea
-		key string
-	}
-)
+type area struct {
+	ID         string
+	Interfaces []string
+	key        string
+}
 
-func ValidateOSPFAreaID(id string) error {
+func validateAreaID(id string) error {
 	ip, err := netip.ParseAddr(id)
 	if err != nil || !ip.Is4() || ip.String() != id {
 		return errors.New("area_id must be a canonical dotted IPv4-format area identifier")
@@ -39,15 +35,15 @@ func ValidateOSPFAreaID(id string) error {
 	return nil
 }
 
-func ValidateOSPFInterface(name string) error {
-	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) || strings.HasPrefix(name, "ve ") && ValidateAddressInterface(name) == nil {
+func validateInterface(name string) error {
+	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) || strings.HasPrefix(name, "ve ") && fastiron.ValidateAddressInterface(name) == nil {
 		return nil
 	}
 	return errors.New("OSPF bindings require a canonical Ethernet, LAG, or VE interface name")
 }
 
 func normalizeAreaID(value string) (string, error) {
-	if ValidateOSPFAreaID(value) == nil {
+	if validateAreaID(value) == nil {
 		return value, nil
 	}
 	n, err := strconv.ParseUint(value, 10, 32)
@@ -59,20 +55,16 @@ func normalizeAreaID(value string) (string, error) {
 	return netip.AddrFrom4(bytes).String(), nil
 }
 
-func (d *Device) OSPFAreas(ctx context.Context) ([]OSPFArea, error) {
-	areas, err := d.readOSPFAreas(ctx)
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return nil, err
+func readAreas(ctx context.Context, d *fastiron.Device) ([]area, error) {
+	areas, err := configuredAreas(ctx, d)
+	if errors.Is(err, fastiron.ErrNotFound) {
+		return []area{}, nil
 	}
-	result := make([]OSPFArea, 0, len(areas))
-	for _, area := range areas {
-		result = append(result, area.OSPFArea)
-	}
-	return result, nil
+	return areas, err
 }
 
-func (d *Device) readOSPFAreas(ctx context.Context) ([]ospfArea, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func configuredAreas(ctx context.Context, d *fastiron.Device) ([]area, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("OSPF areas currently require RESTCONF")
 	}
 	var response struct {
@@ -93,7 +85,7 @@ func (d *Device) readOSPFAreas(ctx context.Context) ([]ospfArea, error) {
 			} `json:"area"`
 		} `json:"openconfig-network-instance:areas"`
 	}
-	err := d.rest.Do(ctx, http.MethodGet, ospfAreasPath, nil, &response)
+	err := d.DoREST(ctx, http.MethodGet, ospfAreasPath, nil, &response)
 	if errors.Is(err, restconf.ErrNotFound) {
 		var parent struct {
 			Protocols *struct {
@@ -103,7 +95,7 @@ func (d *Device) readOSPFAreas(ctx context.Context) ([]ospfArea, error) {
 				} `json:"protocol"`
 			} `json:"openconfig-network-instance:protocols"`
 		}
-		if parentErr := d.rest.Do(ctx, http.MethodGet, protocolsPath, nil, &parent); parentErr != nil {
+		if parentErr := d.DoREST(ctx, http.MethodGet, protocolsPath, nil, &parent); parentErr != nil {
 			return nil, parentErr
 		}
 		if parent.Protocols == nil {
@@ -117,7 +109,7 @@ func (d *Device) readOSPFAreas(ctx context.Context) ([]ospfArea, error) {
 				return nil, err
 			}
 		}
-		return nil, ErrNotFound
+		return nil, fastiron.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -125,7 +117,7 @@ func (d *Device) readOSPFAreas(ctx context.Context) ([]ospfArea, error) {
 	if response.Areas == nil {
 		return nil, errors.New("RESTCONF OSPF response is missing its area collection")
 	}
-	areas := []ospfArea{}
+	areas := []area{}
 	ids := map[string]bool{}
 	bindings := map[string]bool{}
 	for _, entry := range response.Areas.Area {
@@ -139,9 +131,9 @@ func (d *Device) readOSPFAreas(ctx context.Context) ([]ospfArea, error) {
 			return nil, errors.New("RESTCONF OSPF area has an inconsistent or duplicate identity")
 		}
 		ids[id] = true
-		area := ospfArea{OSPFArea: OSPFArea{ID: id, Interfaces: []string{}}, key: key}
+		area := area{ID: id, Interfaces: []string{}, key: key}
 		for _, binding := range entry.Interfaces.Interface {
-			if binding.Config == nil || binding.Config.ID != binding.ID || ValidateOSPFInterface(binding.ID) != nil {
+			if binding.Config == nil || binding.Config.ID != binding.ID || validateInterface(binding.ID) != nil {
 				return nil, errors.New("RESTCONF OSPF binding has an incomplete or unsupported interface identity")
 			}
 			if bindings[binding.ID] {
@@ -153,6 +145,6 @@ func (d *Device) readOSPFAreas(ctx context.Context) ([]ospfArea, error) {
 		slices.Sort(area.Interfaces)
 		areas = append(areas, area)
 	}
-	slices.SortFunc(areas, func(a, b ospfArea) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(areas, func(a, b area) int { return strings.Compare(a.ID, b.ID) })
 	return areas, nil
 }

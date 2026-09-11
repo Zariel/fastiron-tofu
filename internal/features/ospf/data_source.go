@@ -1,4 +1,4 @@
-package provider
+package ospf
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 )
 
 type (
-	ospfDataSource struct{ device *fastiron.Device }
-	ospfModel      struct {
+	DataSource struct{ device *fastiron.Device }
+	ospfModel  struct {
 		Areas map[string]ospfAreaStatusModel `tfsdk:"areas"`
 	}
 	ospfAreaStatusModel struct {
@@ -19,11 +19,11 @@ type (
 	}
 )
 
-func (d *ospfDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ospf_areas"
 }
 
-func (d *ospfDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads default-VRF OSPF areas and interface bindings.", Attributes: map[string]schema.Attribute{
 		"areas": schema.MapNestedAttribute{Computed: true, Description: "Areas keyed by canonical dotted area ID.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"interfaces": schema.SetAttribute{Computed: true, ElementType: types.StringType, Description: "Canonical interface names bound to the area."},
@@ -31,7 +31,7 @@ func (d *ospfDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, r
 	}}
 }
 
-func (d *ospfDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -42,8 +42,8 @@ func (d *ospfDataSource) Configure(_ context.Context, req datasource.ConfigureRe
 	}
 }
 
-func (d *ospfDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	areas, err := d.device.OSPFAreas(ctx)
+func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	areas, err := readAreas(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read OSPF areas", err.Error())
 		return

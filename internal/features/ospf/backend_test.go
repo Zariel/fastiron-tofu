@@ -1,4 +1,4 @@
-package fastiron
+package ospf
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -30,11 +31,11 @@ func TestOSPFAreas(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			areas, err := d.OSPFAreas(context.Background())
+			areas, err := readAreas(context.Background(), d)
 			if (err != nil) != tc.failure {
 				t.Fatalf("areas=%v error=%v", areas, err)
 			}

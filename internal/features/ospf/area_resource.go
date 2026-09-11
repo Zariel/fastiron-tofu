@@ -1,4 +1,4 @@
-package provider
+package ospf
 
 import (
 	"context"
@@ -14,19 +14,19 @@ import (
 )
 
 type (
-	ospfAreaResource struct{ device *fastiron.Device }
-	ospfAreaModel    struct {
+	AreaResource  struct{ device *fastiron.Device }
+	ospfAreaModel struct {
 		ID                 types.String `tfsdk:"id"`
 		AreaID             types.String `tfsdk:"area_id"`
 		PersistencePending types.Bool   `tfsdk:"persistence_pending"`
 	}
 )
 
-func (r *ospfAreaResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *AreaResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_router_ospf_area"
 }
 
-func (r *ospfAreaResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *AreaResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns one OSPF area in the default VRF. Interface bindings and area options remain independently managed.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"area_id":             schema.StringAttribute{Required: true, Description: "Canonical dotted area identifier, such as 0.0.0.0.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
@@ -34,7 +34,7 @@ func (r *ospfAreaResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 	}}
 }
 
-func (r *ospfAreaResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *AreaResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -45,18 +45,18 @@ func (r *ospfAreaResource) Configure(_ context.Context, req resource.ConfigureRe
 	}
 }
 
-func (r *ospfAreaResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+func (r *AreaResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var m ospfAreaModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() || m.AreaID.IsUnknown() || m.AreaID.IsNull() {
 		return
 	}
-	if err := fastiron.ValidateOSPFAreaID(m.AreaID.ValueString()); err != nil {
+	if err := validateAreaID(m.AreaID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Invalid OSPF area", err.Error())
 	}
 }
 
-func (r *ospfAreaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *AreaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
 	}
@@ -66,18 +66,18 @@ func (r *ospfAreaResource) ModifyPlan(ctx context.Context, req resource.ModifyPl
 	if resp.Diagnostics.HasError() || m.AreaID.IsUnknown() || m.AreaID.IsNull() || r.device == nil {
 		return
 	}
-	if _, err := r.device.OSPFAreas(ctx); err != nil {
+	if _, err := readAreas(ctx, r.device); err != nil {
 		resp.Diagnostics.AddError("Cannot read OSPF area capability", err.Error())
 	}
 }
 
-func (r *ospfAreaResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *AreaResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m ospfAreaModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyOSPFArea(ctx, m.AreaID.ValueString(), true)
+	observed, err := applyArea(ctx, r.device, m.AreaID.ValueString(), true)
 	if observed != nil {
 		m.ID = m.AreaID
 		m.PersistencePending = types.BoolValue(err != nil)
@@ -88,13 +88,13 @@ func (r *ospfAreaResource) Create(ctx context.Context, req resource.CreateReques
 	}
 }
 
-func (r *ospfAreaResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *AreaResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m ospfAreaModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyOSPFArea(ctx, m.AreaID.ValueString(), true)
+	observed, err := applyArea(ctx, r.device, m.AreaID.ValueString(), true)
 	if observed != nil {
 		m.PersistencePending = types.BoolValue(err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
@@ -104,18 +104,18 @@ func (r *ospfAreaResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 }
 
-func (r *ospfAreaResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *AreaResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var m ospfAreaModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	areas, err := r.device.OSPFAreas(ctx)
+	areas, err := readAreas(ctx, r.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read OSPF area", err.Error())
 		return
 	}
-	if slices.IndexFunc(areas, func(area fastiron.OSPFArea) bool { return area.ID == m.AreaID.ValueString() }) < 0 {
+	if slices.IndexFunc(areas, func(area area) bool { return area.ID == m.AreaID.ValueString() }) < 0 {
 		// Preserve failed-delete state until startup persistence can be retried.
 		if !m.PersistencePending.ValueBool() {
 			resp.State.RemoveResource(ctx)
@@ -128,20 +128,20 @@ func (r *ospfAreaResource) Read(ctx context.Context, req resource.ReadRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
 }
 
-func (r *ospfAreaResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *AreaResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var m ospfAreaModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.ApplyOSPFArea(ctx, m.AreaID.ValueString(), false); err != nil {
+	if _, err := applyArea(ctx, r.device, m.AreaID.ValueString(), false); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot remove OSPF area", err.Error())
 	}
 }
 
-func (r *ospfAreaResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	if err := fastiron.ValidateOSPFAreaID(req.ID); err != nil {
+func (r *AreaResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	if err := validateAreaID(req.ID); err != nil {
 		resp.Diagnostics.AddError("Invalid OSPF area identity", err.Error())
 		return
 	}

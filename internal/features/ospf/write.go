@@ -1,4 +1,4 @@
-package fastiron
+package ospf
 
 import (
 	"context"
@@ -9,10 +9,12 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-func (d *Device) ApplyOSPFArea(ctx context.Context, id string, present bool) (*OSPFArea, error) {
-	if err := ValidateOSPFAreaID(id); err != nil {
+func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool) (*area, error) {
+	if err := validateAreaID(id); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -23,12 +25,12 @@ func (d *Device) ApplyOSPFArea(ctx context.Context, id string, present bool) (*O
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	areas, err := d.readOSPFAreas(ctx)
-	createProtocol := errors.Is(err, ErrNotFound)
+	areas, err := configuredAreas(ctx, d)
+	createProtocol := errors.Is(err, fastiron.ErrNotFound)
 	if err != nil && !createProtocol {
 		return nil, err
 	}
-	var current *ospfArea
+	var current *area
 	for _, area := range areas {
 		if area.ID == id {
 			current = &area
@@ -47,21 +49,21 @@ func (d *Device) ApplyOSPFArea(ctx context.Context, id string, present bool) (*O
 			}
 		} else {
 			if len(current.Interfaces) > 0 {
-				return &current.OSPFArea, errors.New("OSPF area still has interface bindings; remove them before destroying the area")
+				return current, errors.New("OSPF area still has interface bindings; remove them before destroying the area")
 			}
-			output, err := d.cli.Run(ctx, true, "show running-config")
+			output, err := d.RunningConfig(ctx)
 			if err != nil {
-				return &current.OSPFArea, err
+				return current, err
 			}
-			if err := ospfAreaChildren(output[0], id); err != nil {
-				return &current.OSPFArea, err
+			if err := ospfAreaChildren(output, id); err != nil {
+				return current, err
 			}
 			endpoint = path.Join(ospfAreasPath, "area="+url.PathEscape(current.key))
 			method = http.MethodDelete
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.readOSPFAreas(ctx)
-		if readErr != nil && !errors.Is(readErr, ErrNotFound) {
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, readErr := configuredAreas(ctx, d)
+		if readErr != nil && !errors.Is(readErr, fastiron.ErrNotFound) {
 			return nil, errors.Join(writeErr, readErr)
 		}
 		current = nil
@@ -78,26 +80,16 @@ func (d *Device) ApplyOSPFArea(ctx context.Context, id string, present bool) (*O
 			if neighbor.ID == id {
 				continue
 			}
-			index := slices.IndexFunc(observed, func(area ospfArea) bool { return area.ID == neighbor.ID })
+			index := slices.IndexFunc(observed, func(area area) bool { return area.ID == neighbor.ID })
 			if index < 0 || !slices.Equal(observed[index].Interfaces, neighbor.Interfaces) {
 				return nil, errors.New("OSPF area operation changed an unrelated area")
 			}
 		}
 	}
-	var result *OSPFArea
-	if current != nil {
-		result = &current.OSPFArea
-	}
-	if d.config.Persistence == "after_each_write" {
-		return result, d.save(ctx)
-	}
-	return result, nil
+	return current, d.Persist(ctx)
 }
 
 func ospfAreaChildren(config, id string) error {
-	if _, err := configuration(config); err != nil {
-		return err
-	}
 	inside, found := false, false
 	for _, line := range strings.Split(config, "\n") {
 		fields := strings.Fields(line)
@@ -138,11 +130,11 @@ func ospfAreaChildren(config, id string) error {
 	return nil
 }
 
-func (d *Device) ApplyOSPFInterface(ctx context.Context, id, name string, present bool) (bool, error) {
-	if err := ValidateOSPFAreaID(id); err != nil {
+func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, present bool) (bool, error) {
+	if err := validateAreaID(id); err != nil {
 		return false, err
 	}
-	if err := ValidateOSPFInterface(name); err != nil {
+	if err := validateInterface(name); err != nil {
 		return false, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -153,11 +145,11 @@ func (d *Device) ApplyOSPFInterface(ctx context.Context, id, name string, presen
 	if _, err := d.Discover(ctx); err != nil {
 		return false, err
 	}
-	areas, err := d.readOSPFAreas(ctx)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	areas, err := configuredAreas(ctx, d)
+	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
 		return false, err
 	}
-	var target *ospfArea
+	var target *area
 	exists := false
 	for _, area := range areas {
 		if area.ID == id {
@@ -176,19 +168,19 @@ func (d *Device) ApplyOSPFInterface(ctx context.Context, id, name string, presen
 		var body any = map[string]any{"interface": []any{map[string]any{"id": name, "config": map[string]any{"id": name}}}}
 		if !present {
 			// Unbinding must not erase independently configured OSPF interface options.
-			output, err := d.cli.Run(ctx, true, "show running-config")
+			output, err := d.RunningConfig(ctx)
 			if err != nil {
 				return exists, err
 			}
-			if err := ospfInterfaceOptions(output[0], id, name); err != nil {
+			if err := ospfInterfaceOptions(output, id, name); err != nil {
 				return exists, err
 			}
 			endpoint = path.Join(endpoint, "interface="+url.PathEscape(name))
 			method = http.MethodDelete
 			body = nil
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.readOSPFAreas(ctx)
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, readErr := configuredAreas(ctx, d)
 		if readErr != nil {
 			return exists, errors.Join(writeErr, readErr)
 		}
@@ -202,7 +194,7 @@ func (d *Device) ApplyOSPFInterface(ctx context.Context, id, name string, presen
 			return exists, errors.Join(writeErr, errors.New("OSPF interface binding did not converge"))
 		}
 		for _, neighbor := range areas {
-			index := slices.IndexFunc(observed, func(area ospfArea) bool { return area.ID == neighbor.ID })
+			index := slices.IndexFunc(observed, func(area area) bool { return area.ID == neighbor.ID })
 			if index < 0 {
 				return exists, errors.New("OSPF binding operation removed an area")
 			}
@@ -216,16 +208,10 @@ func (d *Device) ApplyOSPFInterface(ctx context.Context, id, name string, presen
 			}
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return exists, d.save(ctx)
-	}
-	return exists, nil
+	return exists, d.Persist(ctx)
 }
 
 func ospfInterfaceOptions(config, id, name string) error {
-	if _, err := configuration(config); err != nil {
-		return err
-	}
 	inside, found := false, false
 	for _, line := range strings.Split(config, "\n") {
 		if line == "interface "+name {
