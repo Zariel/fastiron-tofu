@@ -10,6 +10,10 @@ terraform {
 variable "host" { type = string }
 variable "ca_certificate" { type = string }
 variable "known_hosts" { type = string }
+variable "interface" {
+  type        = string
+  description = "Canonical Ethernet or LAG interface to filter, such as ethernet 1/1/9."
+}
 
 # Supply transport credentials through FASTIRON_USERNAME and FASTIRON_PASSWORD.
 provider "fastiron" {
@@ -36,4 +40,10 @@ resource "fastiron_ip_access_list_standard" "sources" {
     sequence = 20
     action   = "deny"
   }
+}
+
+resource "fastiron_ip_access_group" "sources" {
+  interface = var.interface
+  direction = "in"
+  acl       = fastiron_ip_access_list_standard.sources.name
 }

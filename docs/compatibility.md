@@ -28,15 +28,16 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
+| ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet or LAG interfaces |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
 Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md).
 
-Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
+Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, native configuration verification, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits
 
-- ACL support currently covers numbered standard IPv4 ACLs and source-address rules; see [ACL ownership and limits](guides/acls.md). Other families, bindings and additional rule settings remain.
+- ACL support covers numbered standard IPv4 definitions and Ethernet/LAG access-group bindings; see [ACL ownership and limits](guides/acls.md). Other ACL definitions, VLAN/VE bindings and additional settings remain.
 
 - Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
