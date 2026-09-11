@@ -63,6 +63,9 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &authentication.InterfaceResource{} },
 		func() resource.Resource { return &authentication.GlobalResource{} },
 		func() resource.Resource { return &acl.StandardResource{} },
+		func() resource.Resource { return acl.NewIPAccessGroupResource() },
+		func() resource.Resource { return acl.NewIPv6AccessGroupResource() },
+		func() resource.Resource { return acl.NewMACAccessGroupResource() },
 	}
 }
 
