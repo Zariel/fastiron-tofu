@@ -63,7 +63,7 @@ The reference to the ACL resource gives OpenTofu the dependency needed to create
 | `fastiron_ipv6_access_group` | IPv6 | `in`, `out` |
 | `fastiron_mac_access_group` | MAC | `in` |
 
-`interface` is a canonical Ethernet or LAG name, such as `ethernet 1/1/9` or `lag 1`. `direction` defaults to `in`. The ACL must exist when the binding is applied; extended IPv4, IPv6 and MAC ACL definitions currently need to be created outside this provider.
+`interface` is a canonical Ethernet, LAG or VLAN name, such as `ethernet 1/1/9`, `lag 1` or `vlan 100`. `direction` defaults to `in`. The ACL and target LAG or VLAN must exist when the binding is applied; use resource references when creating them in the same apply. Extended IPv4, IPv6 and MAC ACL definitions currently need to be created outside this provider.
 
 Each resource owns one interface/family/direction slot. Declare only one resource for each slot. Other families, the opposite direction, other interfaces and ACL rules remain independently owned. Changing `acl` replaces the active binding in place. Changing `interface` or `direction` replaces the resource. Destroy removes the binding currently occupying the owned slot, including a binding changed outside OpenTofu.
 
@@ -76,6 +76,8 @@ tofu import fastiron_mac_access_group.lag 'lag 1 in'
 
 The provider verifies native configuration and removes stale REST entries left behind by binding changes. `persistence_pending` indicates that reconciliation, stale-entry cleanup or saving needs a retry. Refresh retains pending cleanup after a failed deletion so the next apply can finish it.
 
-Hardware workflows on the [tested firmware](../compatibility.md) covered all three binding families: creation with ACL dependencies, default direction, changes and changes back, import, external drift correction, interface/direction replacement, and deletion before ACL parents. Each phase checked running/startup configuration over serial, REST entries, neighboring bindings and a no-change plan.
+Hardware workflows on the [tested firmware](../compatibility.md) covered all three binding families on Ethernet and LAG interfaces: creation with ACL dependencies, default direction, changes and changes back, import, external drift correction, interface/direction replacement, and deletion before ACL parents. Each phase checked running/startup configuration over serial, REST entries, neighboring bindings and a no-change plan.
 
-Bindings that contain additional native settings, including `logging enable`, cannot currently be adopted by these resources. VLAN and VE binding configuration is not yet implemented. VE REST requests returned HTTP 500 during testing; the VLAN/VE binding API needs further investigation.
+VLAN bindings apply to the whole VLAN and do not require a VE. Direct REST/native checks covered creation and deletion for all supported families and directions. An OpenTofu workflow verified IPv4 VLAN binding creation with its ACL and VLAN parents, saved configuration, neighboring bindings and a no-change plan. Full VLAN lifecycle validation remains incomplete.
+
+Bindings that contain additional native settings, including `logging enable` or a VLAN port subset, cannot currently be adopted by these resources. VE binding configuration is not yet implemented. VE REST requests returned HTTP 500 during testing and need further investigation.
