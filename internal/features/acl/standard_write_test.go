@@ -192,3 +192,41 @@ func TestStandardPayload(t *testing.T) {
 		t.Fatalf("payload=%s", body)
 	}
 }
+
+func TestStandardReferences(t *testing.T) {
+	for name, tc := range map[string]struct {
+		config string
+		bound  bool
+	}{
+		"description":        {"interface ethernet 1/1/9\n port-name access-group 90\n", false},
+		"different ACL":      {"interface ethernet 1/1/9\n ip access-group 190 in\n", false},
+		"prefix list":        {"route-map example permit 10\n match ip address prefix-list 90\n", false},
+		"route map":          {"route-map example permit 10\n match ip address 89 90\n", true},
+		"IGMP":               {"interface ve 5\n ip igmp access-group 90\n", true},
+		"multicast boundary": {"interface ve 5\n ip multicast-boundary 90\n", true},
+		"PIM neighbor":       {"interface ve 5\n ip pim neighbor-filter 90\n", true},
+		"join policy":        {"router pim\n jp-policy 192.0.2.1 90\n", true},
+		"slow path":          {"router pim\n slow-path-forwarding filter 90\n", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := &standardSwitch{running: populatedStandard + tc.config + neighbor}
+			device := s.device(t, func(w http.ResponseWriter, r *http.Request) {
+				s.running = absentStandard + tc.config + neighbor
+				w.WriteHeader(204)
+			})
+			err := deleteStandard(context.Background(), device, "90")
+			if !tc.bound {
+				if err != nil || s.startup != absentStandard+tc.config+neighbor {
+					t.Fatalf("unrelated configuration blocked deletion: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "remove native ACL references") {
+				t.Fatalf("reference accepted: %v", err)
+			}
+			if s.writes != 0 || s.saves != 0 || s.startup != populatedStandard+tc.config+neighbor {
+				t.Fatal("referenced ACL was changed")
+			}
+		})
+	}
+}

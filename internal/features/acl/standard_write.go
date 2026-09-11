@@ -163,13 +163,7 @@ func deleteStandard(ctx context.Context, d *fastiron.Device, name string) error 
 		return d.Persist(ctx)
 	}
 	for _, line := range unowned {
-		fields := strings.Fields(line)
-		for i, field := range fields {
-			if (field == "access-group" || field == "access-class") && i+1 < len(fields) && fields[i+1] == name {
-				return errors.New("remove native ACL references before deleting the ACL")
-			}
-		}
-		if len(fields) >= 4 && fields[0] == "match" && fields[1] == "ip" && fields[2] == "address" && fields[3] != "prefix-list" && slices.Contains(fields[3:], name) {
+		if standardReference(line, name) {
 			return errors.New("remove native ACL references before deleting the ACL")
 		}
 	}
@@ -191,4 +185,23 @@ func deleteStandard(ctx context.Context, d *fastiron.Device, name string) error 
 		return writeErr
 	}
 	return d.Persist(ctx)
+}
+
+func standardReference(line, name string) bool {
+	fields := strings.Fields(line)
+	command := strings.Join(fields, " ")
+	for _, prefix := range []string{
+		"ip access-group ", "ip access-class ", "access-class ",
+		"ssh access-group ", "telnet access-group ", "web access-group ",
+		"ip igmp access-group ", "ip multicast-boundary ",
+		"ip pim neighbor-filter ", "slow-path-forwarding filter ",
+	} {
+		if command == prefix+name || strings.HasPrefix(command, prefix+name+" ") {
+			return true
+		}
+	}
+	if len(fields) >= 2 && fields[0] == "jp-policy" && fields[len(fields)-1] == name {
+		return true
+	}
+	return len(fields) >= 4 && fields[0] == "match" && fields[1] == "ip" && fields[2] == "address" && fields[3] != "prefix-list" && slices.Contains(fields[3:], name)
 }
