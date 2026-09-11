@@ -1,4 +1,4 @@
-package fastiron
+package stp
 
 import (
 	"context"
@@ -6,15 +6,17 @@ import (
 	"net/http"
 	"path"
 	"slices"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type STPVLAN struct {
+type vlan struct {
 	VLANID   int64
 	Mode     string
 	Priority int64
 }
 
-func ValidateSTPVLAN(v STPVLAN) error {
+func validateVLAN(v vlan) error {
 	if v.VLANID < 1 || v.VLANID > 4094 {
 		return errors.New("vlan_id must be between 1 and 4094")
 	}
@@ -34,8 +36,8 @@ func stpVLANPath(mode string) string {
 	return path.Join("/stp", "icx-openconfig-spanning-tree-aug:pvst")
 }
 
-func (d *Device) STPVLANs(ctx context.Context) ([]STPVLAN, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func readVLANs(ctx context.Context, d *fastiron.Device) ([]vlan, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("spanning-tree configuration currently requires RESTCONF")
 	}
 	type vlanCollection struct {
@@ -54,13 +56,13 @@ func (d *Device) STPVLANs(ctx context.Context) ([]STPVLAN, error) {
 			STP  *vlanCollection `json:"icx-openconfig-spanning-tree-aug:pvst"`
 		} `json:"openconfig-spanning-tree:stp"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/stp", nil, &response); err != nil {
+	if err := d.DoREST(ctx, http.MethodGet, "/stp", nil, &response); err != nil {
 		return nil, err
 	}
 	if response.STP == nil || response.STP.RSTP == nil || response.STP.STP == nil {
 		return nil, errors.New("RESTCONF spanning-tree response is missing its mode collections")
 	}
-	vlans := []STPVLAN{}
+	vlans := []vlan{}
 	ids := map[int64]bool{}
 	for _, collection := range []struct {
 		mode string
@@ -70,7 +72,7 @@ func (d *Device) STPVLANs(ctx context.Context) ([]STPVLAN, error) {
 			if entry.Config == nil || entry.Config.ID == nil || *entry.Config.ID != entry.ID || ids[entry.ID] {
 				return nil, errors.New("RESTCONF spanning-tree VLAN has an inconsistent or duplicate identity")
 			}
-			v := STPVLAN{VLANID: entry.ID, Mode: collection.mode, Priority: 32768}
+			v := vlan{VLANID: entry.ID, Mode: collection.mode, Priority: 32768}
 			priority := entry.Config.STPPriority
 			if collection.mode == "rstp" {
 				priority = entry.Config.RSTPPriority
@@ -78,13 +80,13 @@ func (d *Device) STPVLANs(ctx context.Context) ([]STPVLAN, error) {
 			if priority != nil {
 				v.Priority = *priority
 			}
-			if err := ValidateSTPVLAN(v); err != nil {
+			if err := validateVLAN(v); err != nil {
 				return nil, err
 			}
 			ids[v.VLANID] = true
 			vlans = append(vlans, v)
 		}
 	}
-	slices.SortFunc(vlans, func(a, b STPVLAN) int { return int(a.VLANID - b.VLANID) })
+	slices.SortFunc(vlans, func(a, b vlan) int { return int(a.VLANID - b.VLANID) })
 	return vlans, nil
 }

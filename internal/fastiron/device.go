@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 	"github.com/zariel/fastiron-tofu/internal/transport/ssh"
@@ -231,4 +232,12 @@ func (d *Device) RunningConfig(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return output[0], nil
+}
+
+// RESTCONFTimeout bounds reconciliation of asynchronous RESTCONF state.
+func (d *Device) RESTCONFTimeout() time.Duration {
+	if d.config.RESTCONF == nil {
+		return 0
+	}
+	return d.config.RESTCONF.Timeout
 }

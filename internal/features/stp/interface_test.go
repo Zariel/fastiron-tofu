@@ -1,4 +1,4 @@
-package fastiron
+package stp
 
 import (
 	"context"
@@ -9,20 +9,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func TestSTPInterfaces(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		want       map[string]STPInterface
+		want       map[string]interfaceConfig
 		failure    bool
 	}{
-		{"empty", `{"openconfig-spanning-tree:interfaces":{}}`, map[string]STPInterface{}, false},
-		{"enabled", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","edge-port":"openconfig-spanning-tree-types:EDGE_ENABLE","guard":"ROOT","bpdu-guard":true},"state":{}}]}}`, map[string]STPInterface{"ethernet 1/1/12": {AdminEdge: true, RootGuard: true, BPDUGuard: true}}, false},
-		{"explicit defaults", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","edge-port":"openconfig-spanning-tree-types:EDGE_DISABLE","guard":"NONE","bpdu-guard":false},"state":{}}]}}`, map[string]STPInterface{"ethernet 1/1/12": {}}, false},
-		{"omitted defaults", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","bpdu-guard":true},"state":{}}]}}`, map[string]STPInterface{"ethernet 1/1/12": {BPDUGuard: true}}, false},
-		{"config not state", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12"},"state":{"bpdu-guard":true,"guard":"ROOT","edge-port":"openconfig-spanning-tree-types:EDGE_ENABLE"}}]}}`, map[string]STPInterface{"ethernet 1/1/12": {}}, false},
+		{"empty", `{"openconfig-spanning-tree:interfaces":{}}`, map[string]interfaceConfig{}, false},
+		{"enabled", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","edge-port":"openconfig-spanning-tree-types:EDGE_ENABLE","guard":"ROOT","bpdu-guard":true},"state":{}}]}}`, map[string]interfaceConfig{"ethernet 1/1/12": {AdminEdge: true, RootGuard: true, BPDUGuard: true}}, false},
+		{"explicit defaults", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","edge-port":"openconfig-spanning-tree-types:EDGE_DISABLE","guard":"NONE","bpdu-guard":false},"state":{}}]}}`, map[string]interfaceConfig{"ethernet 1/1/12": {}}, false},
+		{"omitted defaults", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","bpdu-guard":true},"state":{}}]}}`, map[string]interfaceConfig{"ethernet 1/1/12": {BPDUGuard: true}}, false},
+		{"config not state", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12"},"state":{"bpdu-guard":true,"guard":"ROOT","edge-port":"openconfig-spanning-tree-types:EDGE_ENABLE"}}]}}`, map[string]interfaceConfig{"ethernet 1/1/12": {}}, false},
 		{"missing container", `{}`, nil, true},
 		{"missing config", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12"}]}}`, nil, true},
 		{"identity mismatch", `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/11"}}]}}`, nil, true},
@@ -39,12 +41,12 @@ func TestSTPInterfaces(t *testing.T) {
 				fmt.Fprint(w, tc.body)
 			}))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			got, err := d.STPInterfaces(context.Background())
+			got, err := readInterfaces(context.Background(), d)
 			if (err != nil) != tc.failure {
 				t.Fatalf("interfaces=%v error=%v", got, err)
 			}

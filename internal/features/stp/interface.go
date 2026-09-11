@@ -1,4 +1,4 @@
-package fastiron
+package stp
 
 import (
 	"context"
@@ -7,36 +7,38 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
-type STPInterface struct {
+type interfaceConfig struct {
 	AdminEdge bool
 	BPDUGuard bool
 	RootGuard bool
 }
 
-func ValidateSTPInterface(name string) error {
+func validateInterface(name string) error {
 	if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
 		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
 	}
 	return nil
 }
 
-func (d *Device) STPInterface(ctx context.Context, name string) (STPInterface, error) {
-	if err := ValidateSTPInterface(name); err != nil {
-		return STPInterface{}, err
+func readInterface(ctx context.Context, d *fastiron.Device, name string) (interfaceConfig, error) {
+	if err := validateInterface(name); err != nil {
+		return interfaceConfig{}, err
 	}
 	// An omitted STP entry denotes defaults only for an existing interface.
 	if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
-		return STPInterface{}, err
+		return interfaceConfig{}, err
 	}
-	interfaces, err := d.STPInterfaces(ctx)
+	interfaces, err := readInterfaces(ctx, d)
 	return interfaces[name], err
 }
 
-func (d *Device) ApplySTPInterface(ctx context.Context, name string, desired STPInterface) (*STPInterface, error) {
-	if err := ValidateSTPInterface(name); err != nil {
+func applyInterface(ctx context.Context, d *fastiron.Device, name string, desired interfaceConfig) (*interfaceConfig, error) {
+	if err := validateInterface(name); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -50,7 +52,7 @@ func (d *Device) ApplySTPInterface(ctx context.Context, name string, desired STP
 	if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
 		return nil, err
 	}
-	interfaces, err := d.STPInterfaces(ctx)
+	interfaces, err := readInterfaces(ctx, d)
 	if err != nil {
 		return nil, err
 	}
@@ -68,8 +70,8 @@ func (d *Device) ApplySTPInterface(ctx context.Context, name string, desired STP
 		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{
 			"name": name, "edge-port": "openconfig-spanning-tree-types:" + edge, "guard": guard, "bpdu-guard": desired.BPDUGuard,
 		}}}}}
-		writeErr := d.rest.Do(ctx, http.MethodPatch, "/stp/interfaces", body, nil)
-		observed, readErr := d.STPInterfaces(ctx)
+		writeErr := d.DoREST(ctx, http.MethodPatch, "/stp/interfaces", body, nil)
+		observed, readErr := readInterfaces(ctx, d)
 		if readErr != nil {
 			return &current, errors.Join(writeErr, readErr)
 		}
@@ -83,14 +85,11 @@ func (d *Device) ApplySTPInterface(ctx context.Context, name string, desired STP
 			return &current, errors.Join(writeErr, errors.New("spanning-tree interface configuration did not converge"))
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return &current, d.save(ctx)
-	}
-	return &current, nil
+	return &current, d.Persist(ctx)
 }
 
-func (d *Device) STPInterfaces(ctx context.Context) (map[string]STPInterface, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("spanning-tree configuration currently requires RESTCONF")
 	}
 	var response struct {
@@ -106,13 +105,13 @@ func (d *Device) STPInterfaces(ctx context.Context) (map[string]STPInterface, er
 			} `json:"interface"`
 		} `json:"openconfig-spanning-tree:interfaces"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/stp/interfaces", nil, &response); err != nil {
+	if err := d.DoREST(ctx, http.MethodGet, "/stp/interfaces", nil, &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {
 		return nil, errors.New("RESTCONF spanning-tree response is missing its interface container")
 	}
-	interfaces := map[string]STPInterface{}
+	interfaces := map[string]interfaceConfig{}
 	for _, entry := range response.Interfaces.Interface {
 		if entry.Name == "" || entry.Config == nil || entry.Config.Name != entry.Name {
 			return nil, errors.New("RESTCONF spanning-tree interface contains an inconsistent identity")
@@ -130,7 +129,7 @@ func (d *Device) STPInterfaces(ctx context.Context) (map[string]STPInterface, er
 			return nil, errors.New("RESTCONF spanning-tree interface has an unsupported guard setting")
 		}
 		// FastIron omits default-disabled options until they are explicitly set.
-		interfaces[entry.Name] = STPInterface{AdminEdge: edge == "EDGE_ENABLE", BPDUGuard: config.BPDUGuard, RootGuard: guard == "ROOT"}
+		interfaces[entry.Name] = interfaceConfig{AdminEdge: edge == "EDGE_ENABLE", BPDUGuard: config.BPDUGuard, RootGuard: guard == "ROOT"}
 	}
 	return interfaces, nil
 }

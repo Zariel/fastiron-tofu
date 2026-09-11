@@ -1,4 +1,4 @@
-package provider
+package stp
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 )
 
 type (
-	stpDataSource struct{ device *fastiron.Device }
-	stpModel      struct {
+	DataSource struct{ device *fastiron.Device }
+	stpModel   struct {
 		VLANs      map[string]stpVLANStatusModel      `tfsdk:"vlans"`
 		Interfaces map[string]stpInterfaceStatusModel `tfsdk:"interfaces"`
 	}
@@ -27,11 +27,11 @@ type (
 	}
 )
 
-func (d *stpDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_spanning_tree"
 }
 
-func (d *stpDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured VLAN and interface spanning-tree settings.", Attributes: map[string]schema.Attribute{
 		"interfaces": schema.MapNestedAttribute{Computed: true, Description: "Interface entries reported by RESTCONF, keyed by canonical interface name. Interfaces with no explicit settings may be omitted.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"admin_edge": schema.BoolAttribute{Computed: true, Description: "Configured RSTP edge-port setting."},
@@ -45,7 +45,7 @@ func (d *stpDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, re
 	}}
 }
 
-func (d *stpDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -56,13 +56,13 @@ func (d *stpDataSource) Configure(_ context.Context, req datasource.ConfigureReq
 	}
 }
 
-func (d *stpDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	vlans, err := d.device.STPVLANs(ctx)
+func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	vlans, err := readVLANs(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read spanning-tree configuration", err.Error())
 		return
 	}
-	interfaces, err := d.device.STPInterfaces(ctx)
+	interfaces, err := readInterfaces(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read spanning-tree interfaces", err.Error())
 		return

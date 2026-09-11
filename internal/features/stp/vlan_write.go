@@ -1,4 +1,4 @@
-package fastiron
+package stp
 
 import (
 	"context"
@@ -10,10 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*STPVLAN, error) {
-	if err := ValidateSTPVLAN(v); err != nil {
+func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*vlan, error) {
+	if err := validateVLAN(v); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -24,16 +26,16 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	var vlans []STPVLAN
+	var vlans []vlan
 	if present {
-		vlans, err = d.STPVLANs(ctx)
+		vlans, err = readVLANs(ctx, d)
 	} else {
-		vlans, err = d.waitSTPVLAN(ctx, v.VLANID)
+		vlans, err = waitVLAN(ctx, d, v.VLANID)
 	}
 	if err != nil {
 		return nil, err
 	}
-	var current *STPVLAN
+	var current *vlan
 	for _, entry := range vlans {
 		if entry.VLANID == v.VLANID {
 			current = &entry
@@ -77,13 +79,13 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 			method = http.MethodDelete
 			endpoint = path.Join(stpVLANPath(current.Mode), "vlan="+strconv.FormatInt(v.VLANID, 10))
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		var observed []STPVLAN
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		var observed []vlan
 		var readErr error
 		if present {
-			observed, readErr = d.STPVLANs(ctx)
+			observed, readErr = readVLANs(ctx, d)
 		} else {
-			observed, readErr = d.waitSTPVLAN(ctx, v.VLANID)
+			observed, readErr = waitVLAN(ctx, d, v.VLANID)
 		}
 		if readErr != nil {
 			return current, errors.Join(writeErr, readErr)
@@ -107,30 +109,27 @@ func (d *Device) ApplySTPVLAN(ctx context.Context, v STPVLAN, present bool) (*ST
 			return current, errors.Join(writeErr, errors.New("spanning-tree VLAN deletion did not converge"))
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return current, d.save(ctx)
-	}
-	return current, nil
+	return current, d.Persist(ctx)
 }
 
-func (d *Device) waitSTPVLAN(ctx context.Context, id int64) ([]STPVLAN, error) {
-	ctx, cancel := context.WithTimeout(ctx, d.config.RESTCONF.Timeout)
+func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
 	defer cancel()
 
 	for {
-		vlans, err := d.STPVLANs(ctx)
+		vlans, err := readVLANs(ctx, d)
 		if err != nil {
 			return nil, err
 		}
-		output, err := d.cli.Run(ctx, true, "show running-config")
+		output, err := d.RunningConfig(ctx)
 		if err != nil {
 			return vlans, err
 		}
-		native, err := nativeSTPVLAN(output[0], id)
+		native, err := nativeSTPVLAN(output, id)
 		if err != nil {
 			return vlans, err
 		}
-		var current *STPVLAN
+		var current *vlan
 		for _, entry := range vlans {
 			if entry.VLANID == id {
 				current = &entry
@@ -152,12 +151,9 @@ func (d *Device) waitSTPVLAN(ctx context.Context, id int64) ([]STPVLAN, error) {
 	}
 }
 
-func nativeSTPVLAN(config string, id int64) (*STPVLAN, error) {
-	if _, err := configuration(config); err != nil {
-		return nil, err
-	}
+func nativeSTPVLAN(config string, id int64) (*vlan, error) {
 	inside := false
-	var current *STPVLAN
+	var current *vlan
 
 	for _, line := range strings.Split(config, "\n") {
 		fields := strings.Fields(line)
@@ -179,7 +175,7 @@ func nativeSTPVLAN(config string, id int64) (*STPVLAN, error) {
 			fields = fields[1:]
 		}
 		if current == nil {
-			current = &STPVLAN{VLANID: id, Mode: mode, Priority: 32768}
+			current = &vlan{VLANID: id, Mode: mode, Priority: 32768}
 		} else if current.Mode != mode {
 			return nil, errors.New("native VLAN contains conflicting spanning-tree modes")
 		}

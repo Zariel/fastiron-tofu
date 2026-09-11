@@ -8,6 +8,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/ospf"
 	"github.com/zariel/fastiron-tofu/internal/features/poe"
 	"github.com/zariel/fastiron-tofu/internal/features/route"
+	"github.com/zariel/fastiron-tofu/internal/features/stp"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -48,8 +49,8 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &route.Resource{} },
 		func() resource.Resource { return &ospf.AreaResource{} },
 		func() resource.Resource { return &ospf.InterfaceResource{} },
-		func() resource.Resource { return &stpVLANResource{} },
-		func() resource.Resource { return &stpInterfaceResource{} },
+		func() resource.Resource { return &stp.VLANResource{} },
+		func() resource.Resource { return &stp.InterfaceResource{} },
 		func() resource.Resource { return &authenticationInterfaceResource{} },
 	}
 }
@@ -64,7 +65,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &lagDataSource{} },
 		func() datasource.DataSource { return &route.DataSource{} },
 		func() datasource.DataSource { return &ospf.DataSource{} },
-		func() datasource.DataSource { return &stpDataSource{} },
+		func() datasource.DataSource { return &stp.DataSource{} },
 		func() datasource.DataSource { return &aaaServersDataSource{} },
 		func() datasource.DataSource { return &usersDataSource{} },
 		func() datasource.DataSource { return &aaaDataSource{} },

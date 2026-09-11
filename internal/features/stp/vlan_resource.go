@@ -1,4 +1,4 @@
-package provider
+package stp
 
 import (
 	"context"
@@ -16,8 +16,8 @@ import (
 )
 
 type (
-	stpVLANResource struct{ device *fastiron.Device }
-	stpVLANModel    struct {
+	VLANResource struct{ device *fastiron.Device }
+	stpVLANModel struct {
 		ID                 types.String `tfsdk:"id"`
 		VLANID             types.Int64  `tfsdk:"vlan_id"`
 		Mode               types.String `tfsdk:"mode"`
@@ -26,11 +26,11 @@ type (
 	}
 )
 
-func (r *stpVLANResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *VLANResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_spanning_tree_vlan"
 }
 
-func (r *stpVLANResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *VLANResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns spanning-tree mode and bridge priority on one VLAN. Creation enables spanning tree; destruction disables it.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"vlan_id":             schema.Int64Attribute{Required: true, PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
@@ -40,7 +40,7 @@ func (r *stpVLANResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 	}}
 }
 
-func (r *stpVLANResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *VLANResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -51,11 +51,11 @@ func (r *stpVLANResource) Configure(_ context.Context, req resource.ConfigureReq
 	}
 }
 
-func (m stpVLANModel) desired() fastiron.STPVLAN {
-	return fastiron.STPVLAN{VLANID: m.VLANID.ValueInt64(), Mode: m.Mode.ValueString(), Priority: m.Priority.ValueInt64()}
+func (m stpVLANModel) desired() vlan {
+	return vlan{VLANID: m.VLANID.ValueInt64(), Mode: m.Mode.ValueString(), Priority: m.Priority.ValueInt64()}
 }
 
-func (r *stpVLANResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+func (r *VLANResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var m stpVLANModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
@@ -74,19 +74,19 @@ func (r *stpVLANResource) ValidateConfig(ctx context.Context, req resource.Valid
 	}
 }
 
-func (r *stpVLANResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *VLANResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
 	}
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("persistence_pending"), false)...)
 	if r.device != nil {
-		if _, err := r.device.STPVLANs(ctx); err != nil {
+		if _, err := readVLANs(ctx, r.device); err != nil {
 			resp.Diagnostics.AddError("Cannot read spanning-tree VLAN capability", err.Error())
 		}
 	}
 }
 
-func (m *stpVLANModel) observe(v fastiron.STPVLAN, pending bool) {
+func (m *stpVLANModel) observe(v vlan, pending bool) {
 	m.VLANID = types.Int64Value(v.VLANID)
 	m.Mode = types.StringValue(v.Mode)
 	m.Priority = types.Int64Value(v.Priority)
@@ -94,13 +94,13 @@ func (m *stpVLANModel) observe(v fastiron.STPVLAN, pending bool) {
 	m.PersistencePending = types.BoolValue(pending)
 }
 
-func (r *stpVLANResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *VLANResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m stpVLANModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplySTPVLAN(ctx, m.desired(), true)
+	observed, err := applyVLAN(ctx, r.device, m.desired(), true)
 	if observed != nil {
 		m.observe(*observed, err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
@@ -110,13 +110,13 @@ func (r *stpVLANResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 }
 
-func (r *stpVLANResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *VLANResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m stpVLANModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplySTPVLAN(ctx, m.desired(), true)
+	observed, err := applyVLAN(ctx, r.device, m.desired(), true)
 	if observed != nil {
 		m.observe(*observed, err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
@@ -126,13 +126,13 @@ func (r *stpVLANResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 }
 
-func (r *stpVLANResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *VLANResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var m stpVLANModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	vlans, err := r.device.STPVLANs(ctx)
+	vlans, err := readVLANs(ctx, r.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read spanning-tree VLANs", err.Error())
 		return
@@ -150,19 +150,19 @@ func (r *stpVLANResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 }
 
-func (r *stpVLANResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *VLANResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var m stpVLANModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.ApplySTPVLAN(ctx, m.desired(), false); err != nil {
+	if _, err := applyVLAN(ctx, r.device, m.desired(), false); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot delete spanning-tree VLAN", err.Error())
 	}
 }
 
-func (r *stpVLANResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *VLANResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id, err := strconv.ParseInt(req.ID, 10, 64)
 	if err != nil || strconv.FormatInt(id, 10) != req.ID || id < 1 || id > 4094 {
 		resp.Diagnostics.AddError("Invalid spanning-tree VLAN identity", "Use the numeric VLAN ID.")

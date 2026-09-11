@@ -1,4 +1,4 @@
-package fastiron
+package stp
 
 import (
 	"context"
@@ -8,19 +8,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func TestSTPVLANs(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		want       *STPVLAN
+		want       *vlan
 		failure    bool
 	}{
-		{"rstp priority", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{"vlan":[{"vlan-id":53,"config":{"vlan-id":53,"bridge-priority":12345}}]},"icx-openconfig-spanning-tree-aug:pvst":{}}}`, &STPVLAN{VLANID: 53, Mode: "rstp", Priority: 12345}, false},
-		{"default VLAN", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{},"icx-openconfig-spanning-tree-aug:pvst":{"vlan":[{"vlan-id":1,"config":{"vlan-id":1,"pvst-priority":32768}}]}}}`, &STPVLAN{VLANID: 1, Mode: "stp", Priority: 32768}, false},
-		{"classic default", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{},"icx-openconfig-spanning-tree-aug:pvst":{"vlan":[{"vlan-id":53,"config":{"vlan-id":53}}]}}}`, &STPVLAN{VLANID: 53, Mode: "stp", Priority: 32768}, false},
-		{"zero priority", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{},"icx-openconfig-spanning-tree-aug:pvst":{"vlan":[{"vlan-id":53,"config":{"vlan-id":53,"pvst-priority":0}}]}}}`, &STPVLAN{VLANID: 53, Mode: "stp", Priority: 0}, false},
+		{"rstp priority", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{"vlan":[{"vlan-id":53,"config":{"vlan-id":53,"bridge-priority":12345}}]},"icx-openconfig-spanning-tree-aug:pvst":{}}}`, &vlan{VLANID: 53, Mode: "rstp", Priority: 12345}, false},
+		{"default VLAN", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{},"icx-openconfig-spanning-tree-aug:pvst":{"vlan":[{"vlan-id":1,"config":{"vlan-id":1,"pvst-priority":32768}}]}}}`, &vlan{VLANID: 1, Mode: "stp", Priority: 32768}, false},
+		{"classic default", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{},"icx-openconfig-spanning-tree-aug:pvst":{"vlan":[{"vlan-id":53,"config":{"vlan-id":53}}]}}}`, &vlan{VLANID: 53, Mode: "stp", Priority: 32768}, false},
+		{"zero priority", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{},"icx-openconfig-spanning-tree-aug:pvst":{"vlan":[{"vlan-id":53,"config":{"vlan-id":53,"pvst-priority":0}}]}}}`, &vlan{VLANID: 53, Mode: "stp", Priority: 0}, false},
 		{"empty", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{},"icx-openconfig-spanning-tree-aug:pvst":{}}}`, nil, false},
 		{"missing root", `{}`, nil, true},
 		{"missing mode", `{"openconfig-spanning-tree:stp":{"rapid-pvst":{}}}`, nil, true},
@@ -31,11 +33,11 @@ func TestSTPVLANs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			vlans, err := d.STPVLANs(context.Background())
+			vlans, err := readVLANs(context.Background(), d)
 			if (err != nil) != tc.failure {
 				t.Fatalf("vlans=%v error=%v", vlans, err)
 			}
