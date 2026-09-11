@@ -3,9 +3,6 @@ package provider
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -93,15 +90,6 @@ func (m aaaServerResourceModel) secret() *string {
 	return &s
 }
 
-func (m aaaServerResourceModel) secretChecksum() []byte {
-	if m.Secret.IsNull() {
-		return []byte("null")
-	}
-	checksum := sha256.Sum256([]byte(m.Secret.ValueString()))
-	encoded, _ := json.Marshal(fmt.Sprintf("%x", checksum))
-	return encoded
-}
-
 func (r *aaaServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if r.device != nil {
 		if err := r.device.CheckAAAChanges(); err != nil {
@@ -136,7 +124,7 @@ func (r *aaaServerResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		resp.Diagnostics.Append(diags...)
 		// A failed write can leave configured input in state without establishing
 		// that the key was applied. Only a successful apply advances this checksum.
-		if !bytes.Equal(applied, m.secretChecksum()) {
+		if !bytes.Equal(applied, configuredSecretChecksum(m.Secret)) {
 			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("persistence_pending"), types.BoolUnknown())...)
 		}
 	}
@@ -158,7 +146,7 @@ func (r *aaaServerResource) Create(ctx context.Context, req resource.CreateReque
 		resp.Diagnostics.AddError("Cannot create AAA server", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_secret", m.secretChecksum())...)
+	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_secret", configuredSecretChecksum(m.Secret))...)
 }
 
 func (r *aaaServerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -177,7 +165,7 @@ func (r *aaaServerResource) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError("Cannot update AAA server", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_secret", m.secretChecksum())...)
+	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_secret", configuredSecretChecksum(m.Secret))...)
 }
 
 func (r *aaaServerResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
