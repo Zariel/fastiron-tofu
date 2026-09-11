@@ -1,4 +1,4 @@
-package fastiron
+package lag
 
 import (
 	"context"
@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
-type LAG struct {
+type config struct {
 	ID         int64
 	Name, Mode string
 	Members    []string
@@ -21,14 +22,14 @@ type LAG struct {
 
 var errLAGSync = errors.New("RESTCONF LAG membership has not synchronized")
 
-func (d *Device) LAGs(ctx context.Context) ([]LAG, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func readLAGs(ctx context.Context, d *fastiron.Device) ([]config, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("LAG discovery currently requires RESTCONF")
 	}
-	ctx, cancel := context.WithTimeout(ctx, d.config.RESTCONF.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
 	defer cancel()
 	for {
-		lags, err := d.readLAGs(ctx)
+		lags, err := readCollection(ctx, d)
 		if !errors.Is(err, errLAGSync) {
 			return lags, err
 		}
@@ -44,7 +45,7 @@ func (d *Device) LAGs(ctx context.Context) ([]LAG, error) {
 	}
 }
 
-func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
+func readCollection(ctx context.Context, d *fastiron.Device) ([]config, error) {
 	var response struct {
 		Interfaces *struct {
 			Interface []struct {
@@ -67,7 +68,7 @@ func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
 			} `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {
@@ -78,7 +79,7 @@ func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
 	if len(response.Interfaces.Interface) == 0 {
 		return nil, errors.New("RESTCONF interface collection is empty; cannot confirm LAG state")
 	}
-	lags := map[string]LAG{}
+	lags := map[string]config{}
 	members := map[string][]string{}
 	seen := map[string]bool{}
 	for _, entry := range response.Interfaces.Interface {
@@ -91,20 +92,20 @@ func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
 			if err != nil || id < 1 || entry.Name != "lag "+strconv.FormatInt(id, 10) || entry.Config == nil || entry.Config.Name != entry.Name || entry.Config.Type != "iana-if-type:ieee8023adLag" || entry.Aggregation == nil || entry.Aggregation.Config == nil {
 				return nil, errors.New("RESTCONF LAG response is missing its identity or configuration")
 			}
-			config := entry.Aggregation.Config
+			aggregate := entry.Aggregation.Config
 			mode := ""
-			switch config.Type {
+			switch aggregate.Type {
 			case "LACP":
 				mode = "dynamic"
 			case "STATIC":
 				mode = "static"
 			default:
-				return nil, fmt.Errorf("unsupported LAG type %q", config.Type)
+				return nil, fmt.Errorf("unsupported LAG type %q", aggregate.Type)
 			}
-			if config.Name == "" {
+			if aggregate.Name == "" {
 				return nil, errors.New("RESTCONF LAG response is missing its name")
 			}
-			lags[entry.Name] = LAG{ID: id, Name: config.Name, Mode: mode, Members: []string{}}
+			lags[entry.Name] = config{ID: id, Name: aggregate.Name, Mode: mode, Members: []string{}}
 		}
 		if entry.Ethernet != nil && entry.Ethernet.Config != nil && entry.Ethernet.Config.Aggregate != "" {
 			if !strings.HasPrefix(entry.Name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(entry.Name, "ethernet ")) || entry.Config == nil || entry.Config.Name != entry.Name || entry.Config.Type != "iana-if-type:ethernetCsmacd" {
@@ -123,7 +124,7 @@ func (d *Device) readLAGs(ctx context.Context) ([]LAG, error) {
 		lag.Members = ports
 		lags[name] = lag
 	}
-	result := make([]LAG, 0, len(lags))
+	result := make([]config, 0, len(lags))
 	for _, lag := range lags {
 		result = append(result, lag)
 	}

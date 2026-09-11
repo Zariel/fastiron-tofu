@@ -1,4 +1,4 @@
-package provider
+package lag
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 )
 
 type (
-	lagDataSource struct{ device *fastiron.Device }
-	lagsModel     struct {
+	DataSource struct{ device *fastiron.Device }
+	lagsModel  struct {
 		LAGs map[string]lagStatusModel `tfsdk:"lags"`
 	}
 	lagStatusModel struct {
@@ -23,11 +23,11 @@ type (
 	}
 )
 
-func (d *lagDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_lags"
 }
 
-func (d *lagDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured LAGs and their Ethernet members.", Attributes: map[string]schema.Attribute{
 		"lags": schema.MapNestedAttribute{Computed: true, Description: "LAG configuration keyed by canonical interface name, such as lag 5.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"lag_id":  schema.Int64Attribute{Computed: true, Description: "Numeric LAG identity."},
@@ -38,7 +38,7 @@ func (d *lagDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, re
 	}}
 }
 
-func (d *lagDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -49,8 +49,8 @@ func (d *lagDataSource) Configure(_ context.Context, req datasource.ConfigureReq
 	}
 }
 
-func (d *lagDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	lags, err := d.device.LAGs(ctx)
+func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	lags, err := readLAGs(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read LAGs", err.Error())
 		return

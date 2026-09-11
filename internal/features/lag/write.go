@@ -1,4 +1,4 @@
-package fastiron
+package lag
 
 import (
 	"context"
@@ -12,10 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
-func ValidateLAG(v LAG) error {
+func validate(v config) error {
 	if v.ID < 1 {
 		return errors.New("lag_id must be positive")
 	}
@@ -45,32 +46,32 @@ func ValidateLAG(v LAG) error {
 	return nil
 }
 
-func (d *Device) LAG(ctx context.Context, id int64) (LAG, error) {
+func readLAG(ctx context.Context, d *fastiron.Device, id int64) (config, error) {
 	if id < 1 {
-		return LAG{}, errors.New("lag_id must be positive")
+		return config{}, errors.New("lag_id must be positive")
 	}
 
-	lags, err := d.LAGs(ctx)
+	lags, err := readLAGs(ctx, d)
 	if err != nil {
-		return LAG{}, err
+		return config{}, err
 	}
 	for _, lag := range lags {
 		if lag.ID == id {
 			return lag, nil
 		}
 	}
-	return LAG{}, ErrNotFound
+	return config{}, fastiron.ErrNotFound
 }
 
-func (d *Device) waitLAG(ctx context.Context, id int64, matches func(*LAG) bool) (*LAG, error) {
-	ctx, cancel := context.WithTimeout(ctx, d.config.RESTCONF.Timeout)
+func waitLAG(ctx context.Context, d *fastiron.Device, id int64, matches func(*config) bool) (*config, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
 	defer cancel()
 	for {
-		lag, err := d.LAG(ctx, id)
-		var current *LAG
+		lag, err := readLAG(ctx, d, id)
+		var current *config
 		if err == nil {
 			current = &lag
-		} else if !errors.Is(err, ErrNotFound) {
+		} else if !errors.Is(err, fastiron.ErrNotFound) {
 			return nil, err
 		}
 		if matches(current) {
@@ -86,9 +87,9 @@ func (d *Device) waitLAG(ctx context.Context, id int64, matches func(*LAG) bool)
 	}
 }
 
-// ApplyLAG reports observed configuration, including after a failed save.
-func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
-	if err := ValidateLAG(v); err != nil {
+// applyLAG reports observed configuration, including after a failed save.
+func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
+	if err := validate(v); err != nil {
 		return nil, err
 	}
 
@@ -102,12 +103,12 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 		return nil, err
 	}
 
-	lags, err := d.LAGs(ctx)
+	lags, err := readLAGs(ctx, d)
 	if err != nil {
 		return nil, err
 	}
 
-	var current *LAG
+	var current *config
 	for _, lag := range lags {
 		if lag.ID == v.ID {
 			current = &lag
@@ -133,7 +134,7 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 		if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
 			return nil, err
 		}
-		port, err := d.switchport(ctx, name)
+		port, err := d.Switchport(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -157,8 +158,8 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 			method = http.MethodPost
 			body = map[string]any{"interface": []any{entry}}
 		}
-		writeErr := d.rest.Do(ctx, method, "/interfaces", body, nil)
-		observed, readErr := d.waitLAG(ctx, v.ID, func(lag *LAG) bool { return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode })
+		writeErr := d.DoREST(ctx, method, "/interfaces", body, nil)
+		observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode })
 		if readErr != nil {
 			return observed, errors.Join(writeErr, readErr)
 		}
@@ -169,8 +170,8 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 		if slices.Contains(v.Members, name) {
 			continue
 		}
-		if err := d.detachLAGPort(ctx, v.ID, name); err != nil {
-			observed, readErr := d.LAG(ctx, v.ID)
+		if err := detachPort(ctx, d, v.ID, name); err != nil {
+			observed, readErr := readLAG(ctx, d, v.ID)
 			if readErr != nil {
 				return nil, errors.Join(err, readErr)
 			}
@@ -179,7 +180,7 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 	}
 
 	for _, name := range v.Members {
-		lag, err := d.LAG(ctx, v.ID)
+		lag, err := readLAG(ctx, d, v.ID)
 		if err != nil {
 			return current, err
 		}
@@ -188,8 +189,8 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 		}
 		endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/config")
 		body := map[string]any{"config": map[string]any{"openconfig-if-aggregate:aggregate-id": "lag " + strconv.FormatInt(v.ID, 10)}}
-		writeErr := d.rest.Do(ctx, http.MethodPatch, endpoint, body, nil)
-		observed, readErr := d.waitLAG(ctx, v.ID, func(lag *LAG) bool { return lag != nil && slices.Contains(lag.Members, name) })
+		writeErr := d.DoREST(ctx, http.MethodPatch, endpoint, body, nil)
+		observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && slices.Contains(lag.Members, name) })
 		if readErr != nil {
 			return observed, errors.Join(writeErr, readErr)
 		}
@@ -198,32 +199,29 @@ func (d *Device) ApplyLAG(ctx context.Context, v LAG) (*LAG, error) {
 
 	desired := slices.Clone(v.Members)
 	slices.Sort(desired)
-	observed, err := d.waitLAG(ctx, v.ID, func(lag *LAG) bool {
+	observed, err := waitLAG(ctx, d, v.ID, func(lag *config) bool {
 		return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode && slices.Equal(lag.Members, desired)
 	})
 	if err != nil {
 		return observed, err
 	}
 
-	if d.config.Persistence == "after_each_write" {
-		return observed, d.save(ctx)
-	}
-	return observed, nil
+	return observed, d.Persist(ctx)
 }
 
-func (d *Device) detachLAGPort(ctx context.Context, id int64, name string) error {
+func detachPort(ctx context.Context, d *fastiron.Device, id int64, name string) error {
 	// Native removal disables the detached port. Administrative configuration
 	// belongs to the Ethernet resource; do not restore it as a LAG side effect.
 	endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/config/aggregate-id")
-	writeErr := d.rest.Do(ctx, http.MethodDelete, endpoint, nil, nil)
-	_, readErr := d.waitLAG(ctx, id, func(lag *LAG) bool { return lag == nil || !slices.Contains(lag.Members, name) })
+	writeErr := d.DoREST(ctx, http.MethodDelete, endpoint, nil, nil)
+	_, readErr := waitLAG(ctx, d, id, func(lag *config) bool { return lag == nil || !slices.Contains(lag.Members, name) })
 	if readErr != nil {
 		return errors.Join(writeErr, readErr)
 	}
 	return nil
 }
 
-func (d *Device) DeleteLAG(ctx context.Context, id int64) error {
+func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 	if id < 1 {
 		return errors.New("lag_id must be positive")
 	}
@@ -238,41 +236,38 @@ func (d *Device) DeleteLAG(ctx context.Context, id int64) error {
 		return err
 	}
 
-	current, err := d.LAG(ctx, id)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	current, err := readLAG(ctx, d, id)
+	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
 		return err
 	}
 	if err == nil {
 		name := "lag " + strconv.FormatInt(id, 10)
-		port, err := d.switchport(ctx, name)
+		port, err := d.Switchport(ctx, name)
 		if err != nil {
 			return err
 		}
 		if port.Access > 1 || len(port.Trunks) > 0 {
 			return errors.New("LAG has VLAN memberships; remove them before destroying it")
 		}
-		output, err := d.cli.Run(ctx, true, "show running-config")
+		output, err := d.RunningConfig(ctx)
 		if err != nil {
 			return err
 		}
-		if err := lagChildren(output[0], current); err != nil {
+		if err := lagChildren(output, current); err != nil {
 			return err
 		}
-		writeErr := d.rest.Do(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
-		_, readErr := d.waitLAG(ctx, id, func(lag *LAG) bool { return lag == nil })
+		writeErr := d.DoREST(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
+		_, readErr := waitLAG(ctx, d, id, func(lag *config) bool { return lag == nil })
 		if readErr != nil {
 			return errors.Join(writeErr, readErr)
 		}
 	}
 
-	if d.config.Persistence == "after_each_write" {
-		return d.save(ctx)
-	}
-	return nil
+	return d.Persist(ctx)
 }
 
-func lagChildren(config string, lag LAG) error {
-	if _, err := NormalizeConfiguration(config); err != nil {
+func lagChildren(config string, lag config) error {
+	if _, err := fastiron.NormalizeConfiguration(config); err != nil {
 		return err
 	}
 

@@ -1,4 +1,4 @@
-package fastiron
+package lag
 
 import (
 	"strings"
@@ -18,7 +18,7 @@ func TestLAGName(t *testing.T) {
 		{"réseau", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateLAG(LAG{ID: 53, Name: tc.name, Mode: "dynamic"})
+			err := validate(config{ID: 53, Name: tc.name, Mode: "dynamic"})
 			if (err == nil) != tc.valid {
 				t.Fatalf("name validation: %v; want valid=%v", err, tc.valid)
 			}
@@ -27,7 +27,7 @@ func TestLAGName(t *testing.T) {
 }
 
 func TestLAGChildren(t *testing.T) {
-	lag := LAG{ID: 53, Name: "test", Mode: "dynamic", Members: []string{"ethernet 1/1/7"}}
+	lag := config{ID: 53, Name: "test", Mode: "dynamic", Members: []string{"ethernet 1/1/7"}}
 	base := "ver 09.0.10k\nlag test dynamic id 53\n ports ethe 1/1/7\n"
 	for _, tc := range []struct {
 		name, config string

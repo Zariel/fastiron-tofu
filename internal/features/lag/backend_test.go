@@ -1,4 +1,4 @@
-package fastiron
+package lag
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -40,13 +41,13 @@ func TestLAGSynchronization(t *testing.T) {
 				fmt.Fprintf(w, `{"openconfig-interfaces:interfaces":{"interface":[%s]}}`, entries)
 			}))
 			defer server.Close()
-			device, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: tc.operationTimeout}})
+			device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: tc.operationTimeout}})
 			if err != nil {
 				t.Fatal(err)
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), tc.callerTimeout)
 			defer cancel()
-			got, err := device.LAGs(ctx)
+			got, err := readLAGs(ctx, device)
 			if !tc.converges {
 				if !errors.Is(err, context.DeadlineExceeded) || got != nil {
 					t.Fatalf("inconsistent collection reported as success: %#v, %v", got, err)
@@ -56,7 +57,7 @@ func TestLAGSynchronization(t *testing.T) {
 				}
 				return
 			}
-			want := []LAG{{ID: 53, Name: "storage", Mode: "dynamic", Members: []string{"ethernet 1/1/7"}}}
+			want := []config{{ID: 53, Name: "storage", Mode: "dynamic", Members: []string{"ethernet 1/1/7"}}}
 			if err != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("LAGs=%#v error=%v", got, err)
 			}
@@ -81,12 +82,12 @@ func TestLAGs(t *testing.T) {
 		fmt.Fprint(w, body)
 	}))
 	defer server.Close()
-	device, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+	device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := device.LAGs(context.Background())
-	want := []LAG{{ID: 1, Name: "uplink", Mode: "dynamic", Members: []string{"ethernet 1/2/1", "ethernet 1/2/2"}}, {ID: 53, Name: "backup", Mode: "static", Members: []string{}}}
+	got, err := readLAGs(context.Background(), device)
+	want := []config{{ID: 1, Name: "uplink", Mode: "dynamic", Members: []string{"ethernet 1/2/1", "ethernet 1/2/2"}}, {ID: 53, Name: "backup", Mode: "static", Members: []string{}}}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("LAGs=%#v error=%v", got, err)
 	}
@@ -108,11 +109,11 @@ func TestLAGCollection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))
 			defer server.Close()
-			device, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = device.LAGs(context.Background())
+			_, err = readLAGs(context.Background(), device)
 			if (err != nil) != tc.failure {
 				t.Fatalf("error=%v", err)
 			}
