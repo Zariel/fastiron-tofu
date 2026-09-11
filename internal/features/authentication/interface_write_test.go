@@ -1,4 +1,4 @@
-package fastiron
+package authentication
 
 import (
 	"reflect"

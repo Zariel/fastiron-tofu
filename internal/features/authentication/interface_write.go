@@ -1,4 +1,4 @@
-package fastiron
+package authentication
 
 import (
 	"context"
@@ -11,11 +11,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
-func ValidateAuthenticationInterface(name string, desired AuthenticationInterface) error {
+func validateInterface(name string, desired interfaceConfig) error {
 	if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
 		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
 	}
@@ -28,9 +30,9 @@ func ValidateAuthenticationInterface(name string, desired AuthenticationInterfac
 	return nil
 }
 
-func (d *Device) AuthenticationInterface(ctx context.Context, name string) (AuthenticationInterface, error) {
-	defaults := AuthenticationInterface{PortControl: "force-authorized"}
-	if err := ValidateAuthenticationInterface(name, defaults); err != nil {
+func readInterface(ctx context.Context, d *fastiron.Device, name string) (interfaceConfig, error) {
+	defaults := interfaceConfig{PortControl: "force-authorized"}
+	if err := validateInterface(name, defaults); err != nil {
 		return defaults, err
 	}
 	if _, err := d.Discover(ctx); err != nil {
@@ -40,18 +42,18 @@ func (d *Device) AuthenticationInterface(ctx context.Context, name string) (Auth
 	if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
 		return defaults, err
 	}
-	interfaces, err := d.AuthenticationInterfaces(ctx)
+	interfaces, err := readInterfaces(ctx, d)
 	if current, ok := interfaces[name]; ok {
 		return current, err
 	}
 	return defaults, err
 }
 
-func (d *Device) ApplyAuthenticationInterface(ctx context.Context, name string, desired AuthenticationInterface) (*AuthenticationInterface, error) {
+func applyInterface(ctx context.Context, d *fastiron.Device, name string, desired interfaceConfig) (*interfaceConfig, error) {
 	if err := d.CheckAAAChanges(); err != nil {
 		return nil, err
 	}
-	if err := ValidateAuthenticationInterface(name, desired); err != nil {
+	if err := validateInterface(name, desired); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -66,12 +68,12 @@ func (d *Device) ApplyAuthenticationInterface(ctx context.Context, name string, 
 		return nil, err
 	}
 
-	read := func() (map[string]AuthenticationInterface, []string, error) {
-		output, err := d.cli.Run(ctx, true, "show running-config")
+	read := func() (map[string]interfaceConfig, []string, error) {
+		output, err := d.RunningConfig(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
-		interfaces, unowned, err := nativeAuthenticationInterfaces(output[0])
+		interfaces, unowned, err := nativeAuthenticationInterfaces(output)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -104,8 +106,8 @@ func (d *Device) ApplyAuthenticationInterface(ctx context.Context, name string, 
 
 	// Each request owns only one port. Native verification catches projection-only
 	// success, and stops dependent writes after an ambiguous or unrelated change.
-	write := func(method, endpoint string, body any, expected *AuthenticationInterface, allowMissing bool) error {
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
+	write := func(method, endpoint string, body any, expected *interfaceConfig, allowMissing bool) error {
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
 		if allowMissing && errors.Is(writeErr, restconf.ErrNotFound) {
 			writeErr = nil
 		}
@@ -178,10 +180,7 @@ func (d *Device) ApplyAuthenticationInterface(ctx context.Context, name string, 
 			return &current, err
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return &current, d.save(ctx)
-	}
-	return &current, nil
+	return &current, d.Persist(ctx)
 }
 
 // Authentication moves a port out of the system default VLAN. Exclude only

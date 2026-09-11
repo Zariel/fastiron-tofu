@@ -1,4 +1,4 @@
-package provider
+package authentication
 
 import (
 	"context"
@@ -8,13 +8,13 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type authenticationInterfacesDataSource struct{ device *fastiron.Device }
+type InterfacesDataSource struct{ device *fastiron.Device }
 
-func (d *authenticationInterfacesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *InterfacesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_authentication_interfaces"
 }
 
-func (d *authenticationInterfacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *InterfacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured FlexAuth Ethernet interfaces from native configuration, resolving stale RESTCONF port-control lists. Reports configuration, not client authentication success.", Attributes: map[string]schema.Attribute{
 		"interfaces": schema.MapNestedAttribute{Computed: true, Description: "Configured interface settings keyed by canonical Ethernet name.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"dot1x_enabled":              schema.BoolAttribute{Computed: true, Description: "Whether dot1x is configured on this port; global initialization is separate."},
@@ -24,7 +24,7 @@ func (d *authenticationInterfacesDataSource) Schema(_ context.Context, _ datasou
 	}}
 }
 
-func (d *authenticationInterfacesDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *InterfacesDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -35,8 +35,8 @@ func (d *authenticationInterfacesDataSource) Configure(_ context.Context, req da
 	}
 }
 
-func (d *authenticationInterfacesDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	interfaces, err := d.device.AuthenticationInterfaces(ctx)
+func (d *InterfacesDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	interfaces, err := readInterfaces(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read authentication interfaces", err.Error())
 		return

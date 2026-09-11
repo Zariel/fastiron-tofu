@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 
+	"github.com/zariel/fastiron-tofu/internal/features/authentication"
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
 	"github.com/zariel/fastiron-tofu/internal/features/lldp"
 	"github.com/zariel/fastiron-tofu/internal/features/ospf"
@@ -51,7 +52,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &ospf.InterfaceResource{} },
 		func() resource.Resource { return &stp.VLANResource{} },
 		func() resource.Resource { return &stp.InterfaceResource{} },
-		func() resource.Resource { return &authenticationInterfaceResource{} },
+		func() resource.Resource { return &authentication.InterfaceResource{} },
 	}
 }
 
@@ -69,6 +70,6 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &aaaServersDataSource{} },
 		func() datasource.DataSource { return &usersDataSource{} },
 		func() datasource.DataSource { return &aaaDataSource{} },
-		func() datasource.DataSource { return &authenticationInterfacesDataSource{} },
+		func() datasource.DataSource { return &authentication.InterfacesDataSource{} },
 	}
 }

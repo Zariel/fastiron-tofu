@@ -1,4 +1,4 @@
-package provider
+package authentication
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 )
 
 type (
-	authenticationInterfaceResource struct{ device *fastiron.Device }
-	authenticationInterfaceModel    struct {
+	InterfaceResource            struct{ device *fastiron.Device }
+	authenticationInterfaceModel struct {
 		ID                 types.String `tfsdk:"id"`
 		Interface          types.String `tfsdk:"interface"`
 		Dot1XEnabled       types.Bool   `tfsdk:"dot1x_enabled"`
@@ -26,11 +26,11 @@ type (
 	}
 )
 
-func (r *authenticationInterfaceResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *InterfaceResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_authentication_interface"
 }
 
-func (r *authenticationInterfaceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *InterfaceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns dot1x and MAC authentication enablement and port-control on one Ethernet interface. Destroy disables both authentication types and resets control to force-authorized. Global authentication settings are separate. Requires allow_aaa_changes.", Attributes: map[string]schema.Attribute{
 		"id":                         schema.StringAttribute{Computed: true, Description: "Canonical Ethernet interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"interface":                  schema.StringAttribute{Required: true, Description: "Canonical Ethernet interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
@@ -41,7 +41,7 @@ func (r *authenticationInterfaceResource) Schema(_ context.Context, _ resource.S
 	}}
 }
 
-func (r *authenticationInterfaceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *InterfaceResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -52,23 +52,23 @@ func (r *authenticationInterfaceResource) Configure(_ context.Context, req resou
 	}
 }
 
-func (r *authenticationInterfaceResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+func (r *InterfaceResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var model authenticationInterfaceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
 	if resp.Diagnostics.HasError() || model.Interface.IsUnknown() || model.Interface.IsNull() {
 		return
 	}
-	desired := fastiron.AuthenticationInterface{PortControl: "force-authorized"}
+	desired := interfaceConfig{PortControl: "force-authorized"}
 	desired.Dot1XEnabled = model.Dot1XEnabled.IsUnknown() || model.Dot1XEnabled.ValueBool()
 	if !model.PortControl.IsUnknown() && !model.PortControl.IsNull() {
 		desired.PortControl = model.PortControl.ValueString()
 	}
-	if err := fastiron.ValidateAuthenticationInterface(model.Interface.ValueString(), desired); err != nil {
+	if err := validateInterface(model.Interface.ValueString(), desired); err != nil {
 		resp.Diagnostics.AddError("Invalid authentication interface configuration", err.Error())
 	}
 }
 
-func (r *authenticationInterfaceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *InterfaceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if r.device != nil {
 		if err := r.device.CheckAAAChanges(); err != nil {
 			resp.Diagnostics.AddError("AAA changes disabled", err.Error())
@@ -84,22 +84,22 @@ func (r *authenticationInterfaceResource) ModifyPlan(ctx context.Context, req re
 	if resp.Diagnostics.HasError() || plan.Interface.IsUnknown() || plan.Dot1XEnabled.IsUnknown() || plan.MACEnabled.IsUnknown() || plan.PortControl.IsUnknown() {
 		return
 	}
-	if err := fastiron.ValidateAuthenticationInterface(plan.Interface.ValueString(), plan.desired()); err != nil {
+	if err := validateInterface(plan.Interface.ValueString(), plan.desired()); err != nil {
 		resp.Diagnostics.AddError("Invalid authentication interface configuration", err.Error())
 		return
 	}
-	if _, err := r.device.AuthenticationInterface(ctx, plan.Interface.ValueString()); err != nil {
+	if _, err := readInterface(ctx, r.device, plan.Interface.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Authentication interface configuration is not supported by the configured switch", err.Error())
 	}
 }
 
-func (r *authenticationInterfaceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *InterfaceResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan authenticationInterfaceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyAuthenticationInterface(ctx, plan.Interface.ValueString(), plan.desired())
+	observed, err := applyInterface(ctx, r.device, plan.Interface.ValueString(), plan.desired())
 	if observed != nil {
 		state := authenticationInterfaceState(plan.Interface.ValueString(), *observed)
 		state.PersistencePending = types.BoolValue(err != nil)
@@ -110,13 +110,13 @@ func (r *authenticationInterfaceResource) Create(ctx context.Context, req resour
 	}
 }
 
-func (r *authenticationInterfaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *InterfaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan authenticationInterfaceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyAuthenticationInterface(ctx, plan.Interface.ValueString(), plan.desired())
+	observed, err := applyInterface(ctx, r.device, plan.Interface.ValueString(), plan.desired())
 	if observed != nil {
 		state := authenticationInterfaceState(plan.Interface.ValueString(), *observed)
 		state.PersistencePending = types.BoolValue(err != nil)
@@ -127,13 +127,13 @@ func (r *authenticationInterfaceResource) Update(ctx context.Context, req resour
 	}
 }
 
-func (r *authenticationInterfaceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *InterfaceResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state authenticationInterfaceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.AuthenticationInterface(ctx, state.Interface.ValueString())
+	observed, err := readInterface(ctx, r.device, state.Interface.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read authentication interface configuration", err.Error())
 		return
@@ -145,21 +145,21 @@ func (r *authenticationInterfaceResource) Read(ctx context.Context, req resource
 	resp.Diagnostics.Append(resp.State.Set(ctx, current)...)
 }
 
-func (r *authenticationInterfaceResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *InterfaceResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state authenticationInterfaceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := r.device.ApplyAuthenticationInterface(ctx, state.Interface.ValueString(), fastiron.AuthenticationInterface{PortControl: "force-authorized"})
+	_, err := applyInterface(ctx, r.device, state.Interface.ValueString(), interfaceConfig{PortControl: "force-authorized"})
 	if err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot reset authentication interface configuration", err.Error())
 	}
 }
 
-func (r *authenticationInterfaceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	if fastiron.ValidateAuthenticationInterface(req.ID, fastiron.AuthenticationInterface{PortControl: "force-authorized"}) != nil {
+func (r *InterfaceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	if validateInterface(req.ID, interfaceConfig{PortControl: "force-authorized"}) != nil {
 		resp.Diagnostics.AddError("Invalid authentication interface identity", "Use ethernet <stack>/<slot>/<port>.")
 		return
 	}
@@ -167,10 +167,10 @@ func (r *authenticationInterfaceResource) ImportState(ctx context.Context, req r
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("interface"), req.ID)...)
 }
 
-func (m authenticationInterfaceModel) desired() fastiron.AuthenticationInterface {
-	return fastiron.AuthenticationInterface{Dot1XEnabled: m.Dot1XEnabled.ValueBool(), MACEnabled: m.MACEnabled.ValueBool(), PortControl: m.PortControl.ValueString()}
+func (m authenticationInterfaceModel) desired() interfaceConfig {
+	return interfaceConfig{Dot1XEnabled: m.Dot1XEnabled.ValueBool(), MACEnabled: m.MACEnabled.ValueBool(), PortControl: m.PortControl.ValueString()}
 }
 
-func authenticationInterfaceState(name string, p fastiron.AuthenticationInterface) authenticationInterfaceModel {
+func authenticationInterfaceState(name string, p interfaceConfig) authenticationInterfaceModel {
 	return authenticationInterfaceModel{ID: types.StringValue(name), Interface: types.StringValue(name), Dot1XEnabled: types.BoolValue(p.Dot1XEnabled), MACEnabled: types.BoolValue(p.MACEnabled), PortControl: types.StringValue(p.PortControl), PersistencePending: types.BoolValue(false)}
 }

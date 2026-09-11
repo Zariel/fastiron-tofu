@@ -1,4 +1,4 @@
-package fastiron
+package authentication
 
 import (
 	"context"
@@ -7,32 +7,34 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
-type AuthenticationInterface struct {
+type interfaceConfig struct {
 	Dot1XEnabled bool
 	MACEnabled   bool
 	PortControl  string
 }
 
-// AuthenticationInterfaces uses native configuration because RESTCONF can retain
+// readInterfaces uses native configuration because RESTCONF can retain
 // a port in both its previous and current control-mode lists after a transition.
-func (d *Device) AuthenticationInterfaces(ctx context.Context) (map[string]AuthenticationInterface, error) {
+func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	output, err := d.cli.Run(ctx, true, "show running-config")
+	output, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	interfaces, _, err := nativeAuthenticationInterfaces(output[0])
+	interfaces, _, err := nativeAuthenticationInterfaces(output)
 	return interfaces, err
 }
 
-func nativeAuthenticationInterfaces(output string) (map[string]AuthenticationInterface, []string, error) {
+func nativeAuthenticationInterfaces(output string) (map[string]interfaceConfig, []string, error) {
 	var unowned []string
-	interfaces := map[string]AuthenticationInterface{}
+	interfaces := map[string]interfaceConfig{}
 	controls := map[string]string{}
 	active := false
 	for _, line := range strings.Split(output, "\n") {

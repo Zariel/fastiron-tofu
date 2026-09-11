@@ -1,4 +1,4 @@
-package fastiron
+package authentication
 
 import (
 	"reflect"
@@ -20,7 +20,7 @@ authentication
 !
 `
 	got, _, err := nativeAuthenticationInterfaces(input)
-	want := map[string]AuthenticationInterface{
+	want := map[string]interfaceConfig{
 		"ethernet 1/1/9":  {Dot1XEnabled: true, MACEnabled: true, PortControl: "force-authorized"},
 		"ethernet 1/1/10": {Dot1XEnabled: true, PortControl: "auto"},
 	}
@@ -31,7 +31,7 @@ authentication
 
 func TestAuthenticationPortControl(t *testing.T) {
 	got, _, err := nativeAuthenticationInterfaces("dot1x port-control force-unauthorized ethernet 2/1/3 2/1/5\n")
-	want := map[string]AuthenticationInterface{
+	want := map[string]interfaceConfig{
 		"ethernet 2/1/3": {PortControl: "force-unauthorized"},
 		"ethernet 2/1/5": {PortControl: "force-unauthorized"},
 	}
