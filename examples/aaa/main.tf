@@ -66,3 +66,22 @@ data "fastiron_aaa_servers" "switch" {
 output "servers" {
   value = data.fastiron_aaa_servers.switch.servers
 }
+
+variable "reader_password" {
+  type      = string
+  sensitive = true
+}
+
+resource "fastiron_aaa_user" "reader" {
+  username  = "tofu-reader"
+  privilege = 5
+  password  = var.reader_password
+}
+
+data "fastiron_aaa_users" "switch" {
+  depends_on = [fastiron_aaa_user.reader]
+}
+
+output "local_user_privileges" {
+  value = data.fastiron_aaa_users.switch.users
+}

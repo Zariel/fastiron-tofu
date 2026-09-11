@@ -1,4 +1,4 @@
-# AAA servers
+# AAA servers and local users
 
 The `fastiron_aaa_radius_server` and `fastiron_aaa_tacacs_server` resources each own one server. Enable AAA writes explicitly:
 
@@ -70,4 +70,47 @@ output "aaa_servers" {
 
 If discovery must reflect servers changed in the same apply, add `depends_on` referencing those resources to the data source.
 
-AAA user and authentication-policy resources are not yet available. Keyed server CRUD and saved configuration have been tested; end-to-end authentication against a live RADIUS or TACACS service has not.
+Authentication-policy resources are not yet available. Keyed server CRUD and saved configuration have been tested; end-to-end authentication against a live RADIUS or TACACS service has not.
+
+## Local users
+
+`fastiron_aaa_user` owns one local account's username, privilege, and password. It requires `allow_aaa_changes = true` and a separate administrative account for provider access. The provider refuses to modify or delete an account configured for either transport.
+
+```hcl
+variable "reader_password" {
+  type      = string
+  sensitive = true
+}
+
+resource "fastiron_aaa_user" "reader" {
+  username  = "tofu-reader"
+  privilege = 5
+  password  = var.reader_password
+}
+
+data "fastiron_aaa_users" "switch" {
+  depends_on = [fastiron_aaa_user.reader]
+}
+
+output "local_user_privileges" {
+  value = data.fastiron_aaa_users.switch.users
+}
+```
+
+`username` is required and accepts 1–48 non-whitespace ASCII characters. Changing it replaces the account. `privilege` is required: `0` is super user, `4` port configuration, `5` read only, `6` cloud user, and `7` no syslog access. Firmware determines role availability; hardware lifecycle testing exercised levels 4 and 5.
+
+`password` is required, accepts 1–48 bytes without control characters, and remains sensitive configuration in state. Switch password policies also apply. Each update sends both the configured password and privilege, so password reuse policies can affect privilege updates too. Returned password hashes never enter state and cannot be used as configured passwords. Refresh detects privilege drift but cannot detect external password changes.
+
+Accounts with native expiry, access-time, disablement, or other settings outside this resource's ownership cannot be mutated. Account mutations are also refused when `service local-user-protection` is enabled, because its authenticated update operation is not currently supported. Neighboring accounts and global authentication settings remain independently managed. This resource does not enable local authentication for a service.
+
+Import reads the account's metadata; supply the intended password in configuration before applying:
+
+```sh
+tofu import fastiron_aaa_user.reader 'username tofu-reader'
+```
+
+Deletion removes the account. `persistence_pending` records an operation needing reconciliation or persistence; retry apply or destroy after resolving an error. Persistence follows the provider's `persistence_mode`.
+
+The `fastiron_aaa_users` data source returns `users`, a map from username to numeric privilege, including an empty map when no users exist. It excludes passwords and hashes and does not require AAA write opt-in.
+
+Hardware testing covered create, import, privilege and password updates, replacement, deletion, and independently checked running and saved configuration. SSH authentication accepted the rotated password, rejected the previous password, and continued accepting an unchanged neighboring account. This verifies authentication, not every role's command permissions.
