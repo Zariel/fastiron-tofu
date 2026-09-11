@@ -3,6 +3,7 @@ package fastiron
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -11,6 +12,79 @@ type STPInterface struct {
 	AdminEdge bool
 	BPDUGuard bool
 	RootGuard bool
+}
+
+func ValidateSTPInterface(name string) error {
+	if !strings.HasPrefix(name, "ethernet ") || !portPattern.MatchString(strings.TrimPrefix(name, "ethernet ")) {
+		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
+	}
+	return nil
+}
+
+func (d *Device) STPInterface(ctx context.Context, name string) (STPInterface, error) {
+	if err := ValidateSTPInterface(name); err != nil {
+		return STPInterface{}, err
+	}
+	// An omitted STP entry denotes defaults only for an existing interface.
+	if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
+		return STPInterface{}, err
+	}
+	interfaces, err := d.STPInterfaces(ctx)
+	return interfaces[name], err
+}
+
+func (d *Device) ApplySTPInterface(ctx context.Context, name string, desired STPInterface) (*STPInterface, error) {
+	if err := ValidateSTPInterface(name); err != nil {
+		return nil, err
+	}
+	unlock, err := d.lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	if _, err := d.Discover(ctx); err != nil {
+		return nil, err
+	}
+	if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
+		return nil, err
+	}
+	interfaces, err := d.STPInterfaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+	current := interfaces[name]
+	if current != desired {
+		edge, guard := "EDGE_DISABLE", "NONE"
+		if desired.AdminEdge {
+			edge = "EDGE_ENABLE"
+		}
+		if desired.RootGuard {
+			guard = "ROOT"
+		}
+		// Patch only owned leaves; deleting the interface container would erase
+		// unrelated STP options and is not the native default-reset operation.
+		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{
+			"name": name, "edge-port": "openconfig-spanning-tree-types:" + edge, "guard": guard, "bpdu-guard": desired.BPDUGuard,
+		}}}}}
+		writeErr := d.rest.Do(ctx, http.MethodPatch, "/stp/interfaces", body, nil)
+		observed, readErr := d.STPInterfaces(ctx)
+		if readErr != nil {
+			return &current, errors.Join(writeErr, readErr)
+		}
+		current = observed[name]
+		delete(interfaces, name)
+		delete(observed, name)
+		if !maps.Equal(interfaces, observed) {
+			return &current, errors.Join(writeErr, errors.New("spanning-tree mutation changed neighboring interfaces"))
+		}
+		if current != desired {
+			return &current, errors.Join(writeErr, errors.New("spanning-tree interface configuration did not converge"))
+		}
+	}
+	if d.config.Persistence == "after_each_write" {
+		return &current, d.save(ctx)
+	}
+	return &current, nil
 }
 
 func (d *Device) STPInterfaces(ctx context.Context) (map[string]STPInterface, error) {
