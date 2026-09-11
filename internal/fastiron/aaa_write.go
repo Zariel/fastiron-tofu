@@ -13,7 +13,7 @@ import (
 	"unicode"
 )
 
-func validateAAAServer(s AAAServer) error {
+func ValidateAAAServer(s AAAServer) error {
 	if s.Kind != "radius" && s.Kind != "tacacs" {
 		return errors.New("AAA server kind must be radius or tacacs")
 	}
@@ -120,7 +120,7 @@ func nativeAAA(output string, desired AAAServer) (*nativeAAAServer, []string, er
 				return nil, nil, errors.New("native AAA server has settings not supported by RESTCONF ownership")
 			}
 		}
-		if err := validateAAAServer(s); err != nil {
+		if err := ValidateAAAServer(s); err != nil {
 			return nil, nil, errors.New("native AAA server has invalid configuration")
 		}
 		current.server = s
@@ -132,10 +132,10 @@ func nativeAAA(output string, desired AAAServer) (*nativeAAAServer, []string, er
 // A nil RADIUS secret requires a server without a per-server key; removing an
 // existing RADIUS key must be expressed as an explicit server replacement.
 func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *string, present bool) (*AAAServer, error) {
-	if !d.config.AllowAAAChanges {
-		return nil, errors.New("AAA writes require allow_aaa_changes = true")
+	if err := d.CheckAAAChanges(); err != nil {
+		return nil, err
 	}
-	if err := validateAAAServer(desired); err != nil {
+	if err := ValidateAAAServer(desired); err != nil {
 		return nil, err
 	}
 	// Omitting a TACACS key can still create a native key clause. Until a
@@ -256,4 +256,11 @@ func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *
 		return current, d.save(ctx)
 	}
 	return current, nil
+}
+
+func (d *Device) CheckAAAChanges() error {
+	if !d.config.AllowAAAChanges {
+		return errors.New("AAA writes require allow_aaa_changes = true")
+	}
+	return nil
 }

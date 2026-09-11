@@ -23,6 +23,8 @@ func (p *fastironProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 
 func (p *fastironProvider) Resources(context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
+		func() resource.Resource { return &aaaServerResource{kind: "radius"} },
+		func() resource.Resource { return &aaaServerResource{kind: "tacacs"} },
 		func() resource.Resource { return &saveResource{} },
 		func() resource.Resource { return &vlanResource{} },
 		func() resource.Resource { return &ethernetResource{} },

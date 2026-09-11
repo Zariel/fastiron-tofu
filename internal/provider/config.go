@@ -18,6 +18,7 @@ import (
 )
 
 type providerModel struct {
+	AllowAAAChanges  types.Bool     `tfsdk:"allow_aaa_changes"`
 	Host             types.String   `tfsdk:"host"`
 	Username         types.String   `tfsdk:"username"`
 	Password         types.String   `tfsdk:"password"`
@@ -49,6 +50,7 @@ func providerSchema() schema.Schema {
 	return schema.Schema{
 		Description: "Manage FastIron switch configuration. SSH discovers firmware and persists writes; RESTCONF is preferred for supported configuration operations.",
 		Attributes: map[string]schema.Attribute{
+			"allow_aaa_changes": schema.BoolAttribute{Optional: true, Description: "Permit AAA resource changes (default false). AAA changes can affect access to the switch."},
 			"host":              schema.StringAttribute{Optional: true, Description: "Switch hostname or IP address, without scheme or port. Defaults to FASTIRON_HOST."},
 			"username":          schema.StringAttribute{Optional: true, Description: "Automation username. Defaults to FASTIRON_USERNAME."},
 			"password":          schema.StringAttribute{Optional: true, Sensitive: true, Description: "Authentication password. Defaults to FASTIRON_PASSWORD."},
@@ -149,7 +151,7 @@ func (m providerModel) config() (fastiron.Config, error) {
 	if parseErr != nil || timeout <= 0 {
 		return fastiron.Config{}, errors.New("operation_timeout must be a positive duration")
 	}
-	cfg := fastiron.Config{Host: host, Transport: str(m.Transport, "", "auto"), Persistence: str(m.PersistenceMode, "", "after_each_write")}
+	cfg := fastiron.Config{AllowAAAChanges: boolean(m.AllowAAAChanges, false), Host: host, Transport: str(m.Transport, "", "auto"), Persistence: str(m.PersistenceMode, "", "after_each_write")}
 	r := m.RESTCONF
 	if r == nil {
 		r = &restconfModel{}

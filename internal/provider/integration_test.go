@@ -35,6 +35,7 @@ type testSwitch struct {
 	stp        *stpSwitch
 	stpPorts   *stpPortSwitch
 	aaaServers string
+	aaa        *aaaSwitch
 
 	ospf *ospfSwitch
 
@@ -159,7 +160,11 @@ func (s *testSwitch) command(command string) string {
 		if s.falseSave {
 			return "Write startup-config done."
 		}
-		unchanged := maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
+		aaaUnchanged := s.aaa == nil || maps.Equal(s.aaa.running, s.aaa.startup)
+		if s.aaa != nil {
+			s.aaa.startup = maps.Clone(s.aaa.running)
+		}
+		unchanged := aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
 		if s.lags != nil {
 			lagConfig := s.lags.configuration()
 			unchanged = unchanged && lagConfig == s.startupLAG
@@ -194,6 +199,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.aaa != nil {
+			text = strings.TrimSuffix(text, "end") + aaaConfiguration(s.aaa.running) + "end"
+		}
 		if s.stpPorts != nil {
 			text = stpPortConfiguration(text, s.stpPorts.running)
 		}
@@ -211,6 +219,9 @@ func (s *testSwitch) command(command string) string {
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.aaa != nil {
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + aaaConfiguration(s.aaa.startup) + "end"
+		}
 		if s.stpPorts != nil {
 			return stpPortConfiguration(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), s.stpPorts.startup)
 		}
@@ -279,6 +290,10 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.aaa != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/system/aaa/server-groups") {
+		s.aaa.rest(w, r)
+		return
+	}
 	if s.aaaServers != "" && r.Method == "GET" && r.URL.Path == "/restconf/data/system/aaa/server-groups" {
 		fmt.Fprint(w, s.aaaServers)
 		return

@@ -15,14 +15,14 @@ func TestProviderConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Transport != "auto" || cfg.Persistence != "after_each_write" || cfg.SSH.Address != "[2001:db8::1]:22" || cfg.RESTCONF.URL != "https://[2001:db8::1]:443/restconf/data" || cfg.SSH.KnownHosts != "trusted-host-keys" {
+	if cfg.AllowAAAChanges || cfg.Transport != "auto" || cfg.Persistence != "after_each_write" || cfg.SSH.Address != "[2001:db8::1]:22" || cfg.RESTCONF.URL != "https://[2001:db8::1]:443/restconf/data" || cfg.SSH.KnownHosts != "trusted-host-keys" {
 		t.Fatalf("incorrect defaults: %#v", cfg)
 	}
-	cfg, err = (providerModel{Username: types.StringValue("explicit-user"), Password: types.StringValue("")}).config()
+	cfg, err = (providerModel{AllowAAAChanges: types.BoolValue(true), Username: types.StringValue("explicit-user"), Password: types.StringValue("")}).config()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.SSH.Username != "explicit-user" || cfg.SSH.Password != "" {
+	if !cfg.AllowAAAChanges || cfg.SSH.Username != "explicit-user" || cfg.SSH.Password != "" {
 		t.Fatal("environment overrode explicit configuration")
 	}
 	for _, model := range []providerModel{
@@ -30,6 +30,7 @@ func TestProviderConfig(t *testing.T) {
 		{Host: types.StringValue("switch:443")},
 		{OperationTimeout: types.StringValue("0s")},
 		{Host: types.StringUnknown()},
+		{AllowAAAChanges: types.BoolUnknown()},
 		{SSH: &sshModel{Port: types.Int64Value(65536)}},
 		{RESTCONF: &restconfModel{Enabled: types.BoolUnknown()}},
 	} {
