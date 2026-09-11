@@ -3,6 +3,7 @@ package fastiron
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
@@ -19,6 +20,9 @@ func ValidateAuthenticationInterface(name string, desired AuthenticationInterfac
 	}
 	if !slices.Contains([]string{"auto", "force-authorized", "force-unauthorized"}, desired.PortControl) {
 		return errors.New("port_control must be auto, force-authorized or force-unauthorized")
+	}
+	if !desired.Dot1XEnabled && desired.PortControl != "force-authorized" {
+		return errors.New("nondefault port_control requires dot1x_enabled = true")
 	}
 	return nil
 }
@@ -104,6 +108,9 @@ func (d *Device) ApplyAuthenticationInterface(ctx context.Context, name string, 
 		if allowMissing && errors.Is(writeErr, restconf.ErrNotFound) {
 			writeErr = nil
 		}
+		if writeErr != nil {
+			writeErr = fmt.Errorf("authentication %s %s: %w", method, endpoint, writeErr)
+		}
 		observed, after, readErr := read()
 		if readErr != nil {
 			return errors.Join(writeErr, readErr)
@@ -138,6 +145,11 @@ func (d *Device) ApplyAuthenticationInterface(ctx context.Context, name string, 
 		expected := current
 		if family == "dot1x" {
 			expected.Dot1XEnabled = wanted
+			// Native dot1x removal also resets port-control. Reconcile the desired
+			// control mode after enablement changes have completed.
+			if !wanted {
+				expected.PortControl = "force-authorized"
+			}
 		} else {
 			expected.MACEnabled = wanted
 		}
