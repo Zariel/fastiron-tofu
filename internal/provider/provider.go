@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/zariel/fastiron-tofu/internal/features/aaa"
+	"github.com/zariel/fastiron-tofu/internal/features/acl"
 	"github.com/zariel/fastiron-tofu/internal/features/address"
 	"github.com/zariel/fastiron-tofu/internal/features/authentication"
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
@@ -61,6 +62,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &stp.InterfaceResource{} },
 		func() resource.Resource { return &authentication.InterfaceResource{} },
 		func() resource.Resource { return &authentication.GlobalResource{} },
+		func() resource.Resource { return &acl.StandardResource{} },
 	}
 }
 
