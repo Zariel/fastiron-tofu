@@ -34,6 +34,7 @@ import (
 type testSwitch struct {
 	stp          *stpSwitch
 	stpPorts     *stpPortSwitch
+	aaaPolicy    string
 	aaaServers   string
 	users        string
 	userAccounts *userSwitch
@@ -302,6 +303,10 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.aaaPolicy != "" && r.Method == "GET" && r.URL.Path == "/restconf/data/system/aaa" {
+		fmt.Fprint(w, s.aaaPolicy)
+		return
+	}
 	if s.userAccounts != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/system/aaa/authentication/users") {
 		s.userAccounts.rest(w, r)
 		return
