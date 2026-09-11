@@ -1,4 +1,4 @@
-# Per-VLAN spanning tree
+# Spanning tree
 
 `fastiron_spanning_tree_vlan` owns the spanning-tree mode and bridge priority on one existing VLAN. Creating the resource enables spanning tree; destroying it disables spanning tree on that VLAN.
 
@@ -28,4 +28,23 @@ On the tested firmware, removing RSTP leaves classic STP enabled. Resource delet
 
 Deletion refuses to erase additional native spanning-tree settings, such as timers or per-VLAN port costs. Remove those settings before destroying or replacing this resource.
 
-Global spanning-tree mode, MST, timers, and per-interface settings are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`; reboot persistence has not yet been verified.
+`fastiron_spanning_tree_interface` owns three options on an existing Ethernet interface:
+
+```hcl
+resource "fastiron_spanning_tree_interface" "server" {
+  interface  = "ethernet 1/1/12"
+  admin_edge = true
+  bpdu_guard = true
+  root_guard = false
+}
+```
+
+All three options default to false. Omitting an option resets it to false; destroying the resource resets all three. Port names, administrative enable state, VLAN membership and other STP options remain separately managed. Changing `interface` replaces the resource, resetting the old port before configuring the new one. Import uses the canonical interface name:
+
+```sh
+tofu import fastiron_spanning_tree_interface.server 'ethernet 1/1/12'
+```
+
+These flags do not enable spanning tree on a VLAN. Configure the corresponding VLAN's spanning-tree mode separately for the protection to operate. `admin_edge` configures the native RSTP edge-port option; `root_guard` configures root protection.
+
+Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`; reboot persistence has not yet been verified.

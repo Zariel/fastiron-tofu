@@ -16,7 +16,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Ethernet | Port name and administrative enable state |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
-| Spanning tree | Per-VLAN STP/RSTP mode and bridge priority |
+| Spanning tree | Per-VLAN STP/RSTP mode and bridge priority; Ethernet admin-edge, BPDU guard and root guard |
 | OSPF | Default-VRF area existence and interface bindings |
 | Static routing | One IPv4 prefix and gateway relationship in the default VRF |
 | DNS | Individual server addresses |
@@ -24,13 +24,13 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | PoE | Ethernet administrative enable state |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
-Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, and per-VLAN spanning-tree settings.
+Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, and VLAN/interface spanning-tree settings.
 
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits
 
-- Spanning tree currently manages per-VLAN STP/RSTP mode and priority; see [spanning-tree ownership and limits](guides/spanning-tree.md).
+- Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).
 - OSPF currently manages area existence and interface bindings; see [OSPF ownership and limits](guides/ospf.md).
 - Static routes currently support IPv4 gateways in the default VRF; see [route ownership and limits](guides/routes.md).
 - VE administrative enable state is not currently managed.
