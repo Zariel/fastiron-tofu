@@ -32,14 +32,15 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
-	stp          *stpSwitch
-	stpPorts     *stpPortSwitch
-	policy       *policySwitch
-	aaaPolicy    string
-	aaaServers   string
-	users        string
-	userAccounts *userSwitch
-	aaa          *aaaSwitch
+	stp            *stpSwitch
+	stpPorts       *stpPortSwitch
+	authInterfaces string
+	policy         *policySwitch
+	aaaPolicy      string
+	aaaServers     string
+	users          string
+	userAccounts   *userSwitch
+	aaa            *aaaSwitch
 
 	ospf *ospfSwitch
 
@@ -211,6 +212,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.authInterfaces != "" {
+			text = strings.TrimSuffix(text, "end") + s.authInterfaces + "end"
+		}
 		if s.policy != nil {
 			text = strings.TrimSuffix(text, "end") + s.policy.running.native() + s.policy.extra + "end"
 		}

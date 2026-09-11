@@ -61,5 +61,6 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &aaaServersDataSource{} },
 		func() datasource.DataSource { return &usersDataSource{} },
 		func() datasource.DataSource { return &aaaDataSource{} },
+		func() datasource.DataSource { return &authenticationInterfacesDataSource{} },
 	}
 }
