@@ -34,6 +34,7 @@ import (
 type testSwitch struct {
 	stp          *stpSwitch
 	stpPorts     *stpPortSwitch
+	policy       *policySwitch
 	aaaPolicy    string
 	aaaServers   string
 	users        string
@@ -163,6 +164,10 @@ func (s *testSwitch) command(command string) string {
 		if s.falseSave {
 			return "Write startup-config done."
 		}
+		policyUnchanged := s.policy == nil || s.policy.running.native() == s.policy.startup.native()
+		if s.policy != nil {
+			s.policy.startup = s.policy.running
+		}
 		usersUnchanged := s.userAccounts == nil || maps.Equal(s.userAccounts.running, s.userAccounts.startup)
 		if s.userAccounts != nil {
 			s.userAccounts.startup = maps.Clone(s.userAccounts.running)
@@ -171,7 +176,7 @@ func (s *testSwitch) command(command string) string {
 		if s.aaa != nil {
 			s.aaa.startup = maps.Clone(s.aaa.running)
 		}
-		unchanged := usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
+		unchanged := policyUnchanged && usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
 		if s.lags != nil {
 			lagConfig := s.lags.configuration()
 			unchanged = unchanged && lagConfig == s.startupLAG
@@ -206,6 +211,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.policy != nil {
+			text = strings.TrimSuffix(text, "end") + s.policy.running.native() + s.policy.extra + "end"
+		}
 		if s.userAccounts != nil {
 			text = strings.TrimSuffix(text, "end") + userConfig(s.userAccounts.running, s.userAccounts.protected) + "end"
 		}
@@ -229,6 +237,9 @@ func (s *testSwitch) command(command string) string {
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.policy != nil {
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + s.policy.startup.native() + s.policy.extra + "end"
+		}
 		if s.userAccounts != nil {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + userConfig(s.userAccounts.startup, s.userAccounts.protected) + "end"
 		}
@@ -303,6 +314,10 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.policy != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/system/aaa") {
+		s.policy.rest(w, r)
+		return
+	}
 	if s.aaaPolicy != "" && r.Method == "GET" && r.URL.Path == "/restconf/data/system/aaa" {
 		fmt.Fprint(w, s.aaaPolicy)
 		return

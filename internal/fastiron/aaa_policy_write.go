@@ -7,6 +7,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func ValidateAAAPolicy(p AAAPolicy) error {
@@ -155,7 +157,7 @@ func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPol
 			return errors.Join(writeErr, errors.New("AAA policy operation changed unrelated native configuration"))
 		}
 		if !sameAAAPolicy(*current, expected) {
-			return errors.Join(writeErr, errors.New("AAA policy did not converge"))
+			return errors.Join(writeErr, errors.New("AAA policy did not converge at "+endpoint))
 		}
 		return writeErr
 	}
@@ -186,6 +188,17 @@ func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPol
 		if desired.Dot1XDefault != "" {
 			method, endpoint = http.MethodPatch, path.Join(root, "authentication")
 			body = map[string]any{"authentication": map[string]any{"icx-openconfig-aaa-aug:dot1x": map[string]string{"default": desired.Dot1XDefault}}}
+		}
+		if current.Dot1XDefault == "" && desired.Dot1XDefault == "none" {
+			// An implicit REST default suppresses explicit native none creation.
+			// Native absence is already verified; clear only its projection and create
+			// immediately, without an intervening read or another authentication mode.
+			err := d.rest.Do(ctx, http.MethodDelete, path.Join(root, "authentication/dot1x"), nil, nil)
+			if err != nil && !errors.Is(err, restconf.ErrNotFound) {
+				return current, err
+			}
+			method = http.MethodPost
+			body = map[string]any{"icx-openconfig-aaa-aug:dot1x": map[string]string{"default": "none"}}
 		}
 		if err := write(method, endpoint, body, expected); err != nil {
 			return current, err
