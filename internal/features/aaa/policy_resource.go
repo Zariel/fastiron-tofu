@@ -1,4 +1,4 @@
-package provider
+package aaa
 
 import (
 	"context"
@@ -16,8 +16,8 @@ import (
 )
 
 type (
-	aaaResource struct{ device *fastiron.Device }
-	aaaModel    struct {
+	PolicyResource struct{ device *fastiron.Device }
+	aaaModel       struct {
 		ID                 types.String `tfsdk:"id"`
 		LoginMethods       types.List   `tfsdk:"login_methods"`
 		Dot1XDefault       types.String `tfsdk:"dot1x_default"`
@@ -27,11 +27,11 @@ type (
 	}
 )
 
-func (r *aaaResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *PolicyResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aaa"
 }
 
-func (r *aaaResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *PolicyResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns login authentication methods, dot1x default authentication and CoA policy. Requires allow_aaa_changes. Destroy restores local login, removes the dot1x policy and disables CoA with no ignored actions. Import with aaa.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"login_methods":       schema.ListAttribute{Required: true, ElementType: types.StringType, Description: "One to three distinct local, radius or tacacs+ methods in authentication attempt order."},
@@ -42,7 +42,7 @@ func (r *aaaResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 	}}
 }
 
-func (r *aaaResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *PolicyResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -53,8 +53,8 @@ func (r *aaaResource) Configure(_ context.Context, req resource.ConfigureRequest
 	}
 }
 
-func (m aaaModel) policy(ctx context.Context) (fastiron.AAAPolicy, diag.Diagnostics) {
-	p := fastiron.AAAPolicy{Dot1XDefault: m.Dot1XDefault.ValueString(), CoAEnabled: m.CoAEnabled.ValueBool()}
+func (m aaaModel) policy(ctx context.Context) (policy, diag.Diagnostics) {
+	p := policy{Dot1XDefault: m.Dot1XDefault.ValueString(), CoAEnabled: m.CoAEnabled.ValueBool()}
 	diags := m.LoginMethods.ElementsAs(ctx, &p.LoginMethods, false)
 	if !m.Dot1XDefault.IsNull() && m.Dot1XDefault.ValueString() == "" {
 		diags.AddError("Invalid dot1x policy", "dot1x_default must be radius or none; omit it to remove the native policy.")
@@ -64,7 +64,7 @@ func (m aaaModel) policy(ctx context.Context) (fastiron.AAAPolicy, diag.Diagnost
 	return p, diags
 }
 
-func (m *aaaModel) observe(ctx context.Context, p fastiron.AAAPolicy) diag.Diagnostics {
+func (m *aaaModel) observe(ctx context.Context, p policy) diag.Diagnostics {
 	m.ID = types.StringValue("aaa")
 	m.Dot1XDefault = types.StringNull()
 	if p.Dot1XDefault != "" {
@@ -82,7 +82,7 @@ func (m *aaaModel) observe(ctx context.Context, p fastiron.AAAPolicy) diag.Diagn
 	return diags
 }
 
-func (r *aaaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *PolicyResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if r.device != nil {
 		if err := r.device.CheckAAAChanges(); err != nil {
 			resp.Diagnostics.AddError("AAA changes disabled", err.Error())
@@ -113,17 +113,17 @@ func (r *aaaResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := fastiron.ValidateAAAPolicy(p); err != nil {
+	if err := validatePolicy(p); err != nil {
 		resp.Diagnostics.AddError("Invalid AAA policy", err.Error())
 	}
 }
 
-func (r *aaaResource) apply(ctx context.Context, m aaaModel) (*aaaModel, diag.Diagnostics) {
+func (r *PolicyResource) apply(ctx context.Context, m aaaModel) (*aaaModel, diag.Diagnostics) {
 	p, diags := m.policy(ctx)
 	if diags.HasError() {
 		return nil, diags
 	}
-	observed, err := r.device.ApplyAAAPolicy(ctx, p)
+	observed, err := applyPolicy(ctx, r.device, p)
 	if err != nil {
 		diags.AddError("Cannot apply AAA policy", err.Error())
 	}
@@ -135,7 +135,7 @@ func (r *aaaResource) apply(ctx context.Context, m aaaModel) (*aaaModel, diag.Di
 	return &m, diags
 }
 
-func (r *aaaResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *PolicyResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m aaaModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
@@ -148,7 +148,7 @@ func (r *aaaResource) Create(ctx context.Context, req resource.CreateRequest, re
 	}
 }
 
-func (r *aaaResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *PolicyResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m aaaModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
@@ -161,13 +161,13 @@ func (r *aaaResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	}
 }
 
-func (r *aaaResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *PolicyResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var m aaaModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	p, err := r.device.AAAConfiguration(ctx)
+	p, err := readConfiguration(ctx, r.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read AAA configuration", err.Error())
 		return
@@ -179,14 +179,14 @@ func (r *aaaResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
 }
 
-func (r *aaaResource) Delete(ctx context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
-	if _, err := r.device.ApplyAAAPolicy(ctx, fastiron.AAAPolicy{LoginMethods: []string{"local"}}); err != nil {
+func (r *PolicyResource) Delete(ctx context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
+	if _, err := applyPolicy(ctx, r.device, policy{LoginMethods: []string{"local"}}); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot reset AAA policy", err.Error())
 	}
 }
 
-func (r *aaaResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *PolicyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	if req.ID != "aaa" {
 		resp.Diagnostics.AddError("Invalid AAA identity", "Use aaa.")
 		return

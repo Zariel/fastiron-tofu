@@ -257,10 +257,3 @@ func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *
 	}
 	return current, nil
 }
-
-func (d *Device) CheckAAAChanges() error {
-	if !d.config.AllowAAAChanges {
-		return errors.New("AAA writes require allow_aaa_changes = true")
-	}
-	return nil
-}

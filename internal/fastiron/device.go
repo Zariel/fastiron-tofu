@@ -241,3 +241,10 @@ func (d *Device) RESTCONFTimeout() time.Duration {
 	}
 	return d.config.RESTCONF.Timeout
 }
+
+func (d *Device) CheckAAAChanges() error {
+	if !d.config.AllowAAAChanges {
+		return errors.New("AAA writes require allow_aaa_changes = true")
+	}
+	return nil
+}

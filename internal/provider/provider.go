@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 
+	"github.com/zariel/fastiron-tofu/internal/features/aaa"
 	"github.com/zariel/fastiron-tofu/internal/features/authentication"
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
 	"github.com/zariel/fastiron-tofu/internal/features/lldp"
@@ -32,7 +33,7 @@ func (p *fastironProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 func (p *fastironProvider) Resources(context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		func() resource.Resource { return &userResource{} },
-		func() resource.Resource { return &aaaResource{} },
+		func() resource.Resource { return &aaa.PolicyResource{} },
 		func() resource.Resource { return &aaaServerResource{kind: "radius"} },
 		func() resource.Resource { return &aaaServerResource{kind: "tacacs"} },
 		func() resource.Resource { return &saveResource{} },
@@ -69,7 +70,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &stp.DataSource{} },
 		func() datasource.DataSource { return &aaaServersDataSource{} },
 		func() datasource.DataSource { return &usersDataSource{} },
-		func() datasource.DataSource { return &aaaDataSource{} },
+		func() datasource.DataSource { return &aaa.PolicyDataSource{} },
 		func() datasource.DataSource { return &authentication.InterfacesDataSource{} },
 	}
 }

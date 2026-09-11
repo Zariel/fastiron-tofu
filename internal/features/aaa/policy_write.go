@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -8,10 +8,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
-func ValidateAAAPolicy(p AAAPolicy) error {
+func validatePolicy(p policy) error {
 	if len(p.LoginMethods) < 1 || len(p.LoginMethods) > 3 {
 		return errors.New("login_methods must contain one to three distinct methods")
 	}
@@ -35,8 +37,8 @@ func ValidateAAAPolicy(p AAAPolicy) error {
 	return nil
 }
 
-func nativeAAAPolicy(output string) (*AAAPolicy, []string, error) {
-	p := &AAAPolicy{}
+func nativeAAAPolicy(output string) (*policy, []string, error) {
+	p := &policy{}
 	var neighbors []string
 	seen := map[string]bool{}
 	for _, line := range strings.Split(output, "\n") {
@@ -75,37 +77,37 @@ func nativeAAAPolicy(output string) (*AAAPolicy, []string, error) {
 			seen[key] = true
 		}
 	}
-	if err := ValidateAAAPolicy(*p); err != nil {
+	if err := validatePolicy(*p); err != nil {
 		return nil, nil, errors.New("native AAA policy has unsupported or incomplete settings")
 	}
 	slices.Sort(p.CoAIgnore)
 	return p, neighbors, nil
 }
 
-func sameAAAPolicy(a, b AAAPolicy) bool {
+func sameAAAPolicy(a, b policy) bool {
 	return slices.Equal(a.LoginMethods, b.LoginMethods) && a.Dot1XDefault == b.Dot1XDefault && a.CoAEnabled == b.CoAEnabled && slices.Equal(a.CoAIgnore, b.CoAIgnore)
 }
 
 // AAAConfiguration distinguishes an absent native dot1x policy from explicit
 // none authentication, which RESTCONF reports identically.
-func (d *Device) AAAConfiguration(ctx context.Context) (*AAAPolicy, error) {
+func readConfiguration(ctx context.Context, d *fastiron.Device) (*policy, error) {
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	p, _, err := d.aaaConfiguration(ctx)
+	p, _, err := configuration(ctx, d)
 	return p, err
 }
 
-func (d *Device) aaaConfiguration(ctx context.Context) (*AAAPolicy, []string, error) {
-	projected, err := d.AAAPolicy(ctx)
+func configuration(ctx context.Context, d *fastiron.Device) (*policy, []string, error) {
+	projected, err := readPolicy(ctx, d)
 	if err != nil {
 		return nil, nil, err
 	}
-	output, err := d.cli.Run(ctx, true, "show running-config")
+	output, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	native, neighbors, err := nativeAAAPolicy(output[0])
+	native, neighbors, err := nativeAAAPolicy(output)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -119,11 +121,11 @@ func (d *Device) aaaConfiguration(ctx context.Context) (*AAAPolicy, []string, er
 	return native, neighbors, nil
 }
 
-func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPolicy, error) {
+func applyPolicy(ctx context.Context, d *fastiron.Device, desired policy) (*policy, error) {
 	if err := d.CheckAAAChanges(); err != nil {
 		return nil, err
 	}
-	if err := ValidateAAAPolicy(desired); err != nil {
+	if err := validatePolicy(desired); err != nil {
 		return nil, err
 	}
 	desired.CoAIgnore = slices.Clone(desired.CoAIgnore)
@@ -137,16 +139,16 @@ func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPol
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	current, neighbors, err := d.aaaConfiguration(ctx)
+	current, neighbors, err := configuration(ctx, d)
 	if err != nil {
 		return current, err
 	}
 
 	// Verify each native command family before moving to the next. In particular,
 	// CoA's parent PATCH can update the REST projection without applying ignores.
-	write := func(method, endpoint string, body any, expected AAAPolicy) error {
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, after, readErr := d.aaaConfiguration(ctx)
+	write := func(method, endpoint string, body any, expected policy) error {
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, after, readErr := configuration(ctx, d)
 		if observed != nil {
 			current = observed
 		}
@@ -193,7 +195,7 @@ func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPol
 			// An implicit REST default suppresses explicit native none creation.
 			// Native absence is already verified; clear only its projection and create
 			// immediately, without an intervening read or another authentication mode.
-			err := d.rest.Do(ctx, http.MethodDelete, path.Join(root, "authentication/dot1x"), nil, nil)
+			err := d.DoREST(ctx, http.MethodDelete, path.Join(root, "authentication/dot1x"), nil, nil)
 			if err != nil && !errors.Is(err, restconf.ErrNotFound) {
 				return current, err
 			}
@@ -210,8 +212,5 @@ func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPol
 			return current, err
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return current, d.save(ctx)
-	}
-	return current, nil
+	return current, d.Persist(ctx)
 }

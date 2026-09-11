@@ -1,4 +1,4 @@
-package provider
+package aaa
 
 import (
 	"context"
@@ -9,13 +9,13 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type aaaDataSource struct{ device *fastiron.Device }
+type PolicyDataSource struct{ device *fastiron.Device }
 
-func (d *aaaDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *PolicyDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aaa"
 }
 
-func (d *aaaDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *PolicyDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads AAA login methods, dot1x default authentication and CoA policy without exposing account credentials or server keys.", Attributes: map[string]schema.Attribute{
 		"login_methods": schema.ListAttribute{Computed: true, ElementType: types.StringType, Description: "Configured login authentication methods, in attempt order."},
 		"dot1x_default": schema.StringAttribute{Computed: true, Description: "Default dot1x authentication reported by the switch; an absent RESTCONF policy is normalized to none."},
@@ -24,7 +24,7 @@ func (d *aaaDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, re
 	}}
 }
 
-func (d *aaaDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *PolicyDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -35,8 +35,8 @@ func (d *aaaDataSource) Configure(_ context.Context, req datasource.ConfigureReq
 	}
 }
 
-func (d *aaaDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	policy, err := d.device.AAAPolicy(ctx)
+func (d *PolicyDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	policy, err := readPolicy(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read AAA policy", err.Error())
 		return

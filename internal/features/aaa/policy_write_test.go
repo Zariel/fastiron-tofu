@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"reflect"
@@ -8,10 +8,10 @@ import (
 func TestNativeAAAPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name, input string
-		want        AAAPolicy
+		want        policy
 	}{
-		{"absent dot1x", "aaa authentication login default local\n", AAAPolicy{LoginMethods: []string{"local"}}},
-		{"explicit none and grouped ignores", "aaa authentication login default radius local\naaa authentication dot1x default none\naaa authorization coa enable\naaa authorization coa ignore modify-acl dm-request\n", AAAPolicy{LoginMethods: []string{"radius", "local"}, Dot1XDefault: "none", CoAEnabled: true, CoAIgnore: []string{"dm-request", "modify-acl"}}},
+		{"absent dot1x", "aaa authentication login default local\n", policy{LoginMethods: []string{"local"}}},
+		{"explicit none and grouped ignores", "aaa authentication login default radius local\naaa authentication dot1x default none\naaa authorization coa enable\naaa authorization coa ignore modify-acl dm-request\n", policy{LoginMethods: []string{"radius", "local"}, Dot1XDefault: "none", CoAEnabled: true, CoAIgnore: []string{"dm-request", "modify-acl"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := "aaa authentication web-server default local\n" + tc.input + "username operator password opaque"

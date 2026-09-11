@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -30,12 +32,12 @@ func TestAAAPolicyIncomplete(t *testing.T) {
 				fmt.Fprint(w, body)
 			}))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if policy, err := d.AAAPolicy(context.Background()); err == nil || policy != nil {
+			if policy, err := readPolicy(context.Background(), d); err == nil || policy != nil {
 				t.Fatalf("incomplete policy was accepted: %v, %v", policy, err)
 			}
 		})
@@ -47,12 +49,12 @@ func TestAAAPolicyWithoutDot1X(t *testing.T) {
 		fmt.Fprint(w, `{"openconfig-system:aaa":{"authentication":{"icx-openconfig-aaa-aug:login":{"default":["local"]}},"authorization":{"icx-openconfig-aaa-aug:coa":{"enable":false,"ignore":{"disable-port":false,"dm-request":false,"flip-port":false,"modify-acl":false,"reauth-host":false}}}}}`)
 	}))
 	defer server.Close()
-	d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+	d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	policy, err := d.AAAPolicy(context.Background())
+	policy, err := readPolicy(context.Background(), d)
 	if err != nil || policy == nil {
 		t.Fatalf("deleted dot1x policy was not readable: %v", err)
 	}
