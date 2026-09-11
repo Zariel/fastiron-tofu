@@ -1,4 +1,4 @@
-package provider
+package route
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 )
 
 type (
-	routeResource struct{ device *fastiron.Device }
-	routeModel    struct {
+	Resource   struct{ device *fastiron.Device }
+	routeModel struct {
 		ID                 types.String `tfsdk:"id"`
 		Prefix             types.String `tfsdk:"prefix"`
 		NextHop            types.String `tfsdk:"next_hop"`
@@ -27,11 +27,11 @@ type (
 	}
 )
 
-func (r *routeResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *Resource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ip_route"
 }
 
-func (r *routeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *Resource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns one IPv4 prefix and next-hop relationship in the default VRF. Other next hops remain independently managed.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"prefix":              schema.StringAttribute{Required: true, Description: "Canonical IPv4 destination network in CIDR notation.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
@@ -41,7 +41,7 @@ func (r *routeResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	}}
 }
 
-func (r *routeResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *Resource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -52,13 +52,13 @@ func (r *routeResource) Configure(_ context.Context, req resource.ConfigureReque
 	}
 }
 
-func (m routeModel) desired() fastiron.StaticRoute {
+func (m routeModel) desired() route {
 	prefix, _ := netip.ParsePrefix(m.Prefix.ValueString())
 	nextHop, _ := netip.ParseAddr(m.NextHop.ValueString())
-	return fastiron.StaticRoute{Prefix: prefix, NextHop: nextHop, Distance: m.Distance.ValueInt64()}
+	return route{Prefix: prefix, NextHop: nextHop, Distance: m.Distance.ValueInt64()}
 }
 
-func (r *routeResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+func (r *Resource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var m routeModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
@@ -81,19 +81,19 @@ func (r *routeResource) ValidateConfig(ctx context.Context, req resource.Validat
 	}
 }
 
-func (r *routeResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *Resource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
 	}
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("persistence_pending"), false)...)
 	if r.device != nil {
-		if _, err := r.device.StaticRoutes(ctx); err != nil {
+		if _, err := readRoutes(ctx, r.device); err != nil {
 			resp.Diagnostics.AddError("Cannot read static route capability", err.Error())
 		}
 	}
 }
 
-func (m *routeModel) observe(route fastiron.StaticRoute, pending bool) {
+func (m *routeModel) observe(route route, pending bool) {
 	m.Prefix = types.StringValue(route.Prefix.String())
 	m.NextHop = types.StringValue(route.NextHop.String())
 	m.Distance = types.Int64Value(route.Distance)
@@ -101,13 +101,13 @@ func (m *routeModel) observe(route fastiron.StaticRoute, pending bool) {
 	m.PersistencePending = types.BoolValue(pending)
 }
 
-func (r *routeResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *Resource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m routeModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyStaticRoute(ctx, m.desired(), true)
+	observed, err := applyRoute(ctx, r.device, m.desired(), true)
 	if observed != nil {
 		m.observe(*observed, err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
@@ -117,13 +117,13 @@ func (r *routeResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 }
 
-func (r *routeResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *Resource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m routeModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyStaticRoute(ctx, m.desired(), true)
+	observed, err := applyRoute(ctx, r.device, m.desired(), true)
 	if observed != nil {
 		m.observe(*observed, err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
@@ -133,13 +133,13 @@ func (r *routeResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 }
 
-func (r *routeResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *Resource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var m routeModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	routes, err := r.device.StaticRoutes(ctx)
+	routes, err := readRoutes(ctx, r.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read static routes", err.Error())
 		return
@@ -157,24 +157,24 @@ func (r *routeResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 }
 
-func (r *routeResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var m routeModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.ApplyStaticRoute(ctx, m.desired(), false); err != nil {
+	if _, err := applyRoute(ctx, r.device, m.desired(), false); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot delete static route", err.Error())
 	}
 }
 
-func (r *routeResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *Resource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	prefix, nextHop, ok := strings.Cut(req.ID, "|")
 	p, prefixErr := netip.ParsePrefix(prefix)
 	ip, ipErr := netip.ParseAddr(nextHop)
-	v := fastiron.StaticRoute{Prefix: p, NextHop: ip, Distance: 1}
-	if !ok || prefixErr != nil || ipErr != nil || p.String() != prefix || ip.String() != nextHop || fastiron.ValidateStaticRoute(v) != nil {
+	v := route{Prefix: p, NextHop: ip, Distance: 1}
+	if !ok || prefixErr != nil || ipErr != nil || p.String() != prefix || ip.String() != nextHop || validateRoute(v) != nil {
 		resp.Diagnostics.AddError("Invalid route identity", "Use <IPv4 prefix>|<IPv4 next hop>.")
 		return
 	}

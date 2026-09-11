@@ -217,3 +217,18 @@ func (d *Device) Persist(ctx context.Context) error {
 	}
 	return nil
 }
+
+// RunningConfig reads a complete native configuration, preserving its formatting.
+func (d *Device) RunningConfig(ctx context.Context) (string, error) {
+	if d.cli == nil {
+		return "", errors.New("SSH is required to read native configuration")
+	}
+	output, err := d.cli.Run(ctx, true, "show running-config")
+	if err != nil {
+		return "", err
+	}
+	if _, err := configuration(output[0]); err != nil {
+		return "", err
+	}
+	return output[0], nil
+}

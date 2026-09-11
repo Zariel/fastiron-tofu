@@ -15,6 +15,8 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
+const protocolsPath = "/network-instances/network-instance=default-vrf/protocols"
+
 var ospfAreasPath = path.Join(protocolsPath, "protocol=OSPF,icx-ospf", "ospfv2/areas")
 
 type (

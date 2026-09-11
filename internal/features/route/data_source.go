@@ -1,4 +1,4 @@
-package provider
+package route
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 )
 
 type (
-	routesDataSource struct{ device *fastiron.Device }
-	routesModel      struct {
+	DataSource  struct{ device *fastiron.Device }
+	routesModel struct {
 		Routes map[string]routeStatusModel `tfsdk:"routes"`
 	}
 	routeStatusModel struct {
@@ -21,11 +21,11 @@ type (
 	}
 )
 
-func (d *routesDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_static_routes"
 }
 
-func (d *routesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads default-VRF IPv4 static routes with IP gateways.", Attributes: map[string]schema.Attribute{
 		"routes": schema.MapNestedAttribute{Computed: true, Description: "Routes keyed by <prefix>|<next hop>.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"prefix":   schema.StringAttribute{Computed: true},
@@ -35,7 +35,7 @@ func (d *routesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest,
 	}}
 }
 
-func (d *routesDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -46,8 +46,8 @@ func (d *routesDataSource) Configure(_ context.Context, req datasource.Configure
 	}
 }
 
-func (d *routesDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	routes, err := d.device.StaticRoutes(ctx)
+func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	routes, err := readRoutes(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read static routes", err.Error())
 		return

@@ -1,4 +1,4 @@
-package fastiron
+package route
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -30,15 +31,15 @@ func TestStaticRoutes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			routes, err := d.StaticRoutes(context.Background())
+			routes, err := readRoutes(context.Background(), d)
 			if (err != nil) != tc.failure || len(routes) != tc.count {
 				t.Fatalf("routes=%v error=%v", routes, err)
 			}
-			if tc.count == 1 && routes[0] != (StaticRoute{Prefix: netip.MustParsePrefix("198.18.53.0/24"), NextHop: netip.MustParseAddr("192.0.2.2"), Distance: 200}) {
+			if tc.count == 1 && routes[0] != (route{Prefix: netip.MustParsePrefix("198.18.53.0/24"), NextHop: netip.MustParseAddr("192.0.2.2"), Distance: 200}) {
 				t.Fatalf("route=%v", routes[0])
 			}
 		})
@@ -64,11 +65,11 @@ func TestStaticProtocolAbsence(t *testing.T) {
 				w.WriteHeader(http.StatusNotFound)
 			}))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			routes, err := d.StaticRoutes(context.Background())
+			routes, err := readRoutes(context.Background(), d)
 			if len(routes) != 0 || (err != nil) != tc.failure {
 				t.Fatalf("routes=%v error=%v", routes, err)
 			}

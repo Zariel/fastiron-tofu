@@ -1,4 +1,4 @@
-package fastiron
+package route
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -18,13 +19,13 @@ const protocolsPath = "/network-instances/network-instance=default-vrf/protocols
 
 var staticRoutesPath = path.Join(protocolsPath, "protocol=STATIC,icx-static", "static-routes")
 
-type StaticRoute struct {
+type route struct {
 	Prefix   netip.Prefix
 	NextHop  netip.Addr
 	Distance int64
 }
 
-func ValidateStaticRoute(v StaticRoute) error {
+func validateRoute(v route) error {
 	if !v.Prefix.IsValid() || v.Prefix != v.Prefix.Masked() || !v.Prefix.Addr().Is4() || v.Prefix.Addr().IsMulticast() {
 		return errors.New("prefix must be a canonical IPv4 network in CIDR notation")
 	}
@@ -37,16 +38,16 @@ func ValidateStaticRoute(v StaticRoute) error {
 	return nil
 }
 
-func (d *Device) StaticRoutes(ctx context.Context) ([]StaticRoute, error) {
-	routes, err := d.readStaticRoutes(ctx)
-	if errors.Is(err, ErrNotFound) {
-		return []StaticRoute{}, nil
+func readRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
+	routes, err := configuredRoutes(ctx, d)
+	if errors.Is(err, fastiron.ErrNotFound) {
+		return []route{}, nil
 	}
 	return routes, err
 }
 
-func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func configuredRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("static routes currently require RESTCONF")
 	}
 	var response struct {
@@ -69,7 +70,7 @@ func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
 			} `json:"static"`
 		} `json:"openconfig-network-instance:static-routes"`
 	}
-	err := d.rest.Do(ctx, http.MethodGet, staticRoutesPath, nil, &response)
+	err := d.DoREST(ctx, http.MethodGet, staticRoutesPath, nil, &response)
 	if errors.Is(err, restconf.ErrNotFound) {
 		// The static protocol need not exist before its first route. Confirm parent
 		// discovery instead of interpreting every missing endpoint as an empty table.
@@ -81,7 +82,7 @@ func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
 				} `json:"protocol"`
 			} `json:"openconfig-network-instance:protocols"`
 		}
-		if parentErr := d.rest.Do(ctx, http.MethodGet, protocolsPath, nil, &parent); parentErr != nil {
+		if parentErr := d.DoREST(ctx, http.MethodGet, protocolsPath, nil, &parent); parentErr != nil {
 			return nil, parentErr
 		}
 		if parent.Protocols == nil {
@@ -95,7 +96,7 @@ func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
 				return nil, err
 			}
 		}
-		return nil, ErrNotFound
+		return nil, fastiron.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -103,7 +104,7 @@ func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
 	if response.Routes == nil {
 		return nil, errors.New("RESTCONF route response is missing its collection")
 	}
-	routes := []StaticRoute{}
+	routes := []route{}
 	identities := map[string]bool{}
 	for _, entry := range response.Routes.Static {
 		prefix, err := netip.ParsePrefix(entry.Prefix)
@@ -115,8 +116,8 @@ func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
 			if err != nil || hop.Config == nil || hop.Config.Index != hop.Index || hop.Config.NextHop != hop.Index || hop.Config.Metric == nil {
 				return nil, errors.New("RESTCONF route response contains an unsupported or inconsistent next hop")
 			}
-			route := StaticRoute{Prefix: prefix, NextHop: gateway, Distance: *hop.Config.Metric}
-			if err := ValidateStaticRoute(route); err != nil {
+			route := route{Prefix: prefix, NextHop: gateway, Distance: *hop.Config.Metric}
+			if err := validateRoute(route); err != nil {
 				return nil, err
 			}
 			key := entry.Prefix + "|" + hop.Index
@@ -127,7 +128,7 @@ func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
 			routes = append(routes, route)
 		}
 	}
-	slices.SortFunc(routes, func(a, b StaticRoute) int {
+	slices.SortFunc(routes, func(a, b route) int {
 		if n := a.Prefix.Addr().Compare(b.Prefix.Addr()); n != 0 {
 			return n
 		}
@@ -139,8 +140,8 @@ func (d *Device) readStaticRoutes(ctx context.Context) ([]StaticRoute, error) {
 	return routes, nil
 }
 
-func (d *Device) ApplyStaticRoute(ctx context.Context, v StaticRoute, present bool) (*StaticRoute, error) {
-	if err := ValidateStaticRoute(v); err != nil {
+func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) (*route, error) {
+	if err := validateRoute(v); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -151,12 +152,12 @@ func (d *Device) ApplyStaticRoute(ctx context.Context, v StaticRoute, present bo
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	routes, err := d.readStaticRoutes(ctx)
-	createProtocol := errors.Is(err, ErrNotFound)
+	routes, err := configuredRoutes(ctx, d)
+	createProtocol := errors.Is(err, fastiron.ErrNotFound)
 	if err != nil && !createProtocol {
 		return nil, err
 	}
-	var current *StaticRoute
+	var current *route
 	for _, route := range routes {
 		if route.Prefix == v.Prefix && route.NextHop == v.NextHop {
 			current = &route
@@ -189,18 +190,18 @@ func (d *Device) ApplyStaticRoute(ctx context.Context, v StaticRoute, present bo
 		} else {
 			// Deleting the next hop also removes native options absent from this API.
 			// Refuse to erase those options until their owner has removed them.
-			output, err := d.cli.Run(ctx, true, "show running-config")
+			output, err := d.RunningConfig(ctx)
 			if err != nil {
 				return current, err
 			}
-			if err := routeOptions(output[0], v); err != nil {
+			if err := routeOptions(output, v); err != nil {
 				return current, err
 			}
 			method = http.MethodDelete
 			endpoint = path.Join(staticRoutesPath, "static="+url.PathEscape(v.Prefix.String()), "next-hops", "next-hop="+url.PathEscape(v.NextHop.String()))
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.StaticRoutes(ctx)
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, readErr := readRoutes(ctx, d)
 		if readErr != nil {
 			return current, errors.Join(writeErr, readErr)
 		}
@@ -222,16 +223,10 @@ func (d *Device) ApplyStaticRoute(ctx context.Context, v StaticRoute, present bo
 			}
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return current, d.save(ctx)
-	}
-	return current, nil
+	return current, d.Persist(ctx)
 }
 
-func routeOptions(config string, v StaticRoute) error {
-	if _, err := configuration(config); err != nil {
-		return err
-	}
+func routeOptions(config string, v route) error {
 	expected := fmt.Sprintf("ip route %s %s", v.Prefix, v.NextHop)
 	for _, line := range strings.Split(config, "\n") {
 		line = strings.TrimSpace(line)
