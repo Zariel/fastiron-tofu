@@ -1,4 +1,4 @@
-package fastiron
+package vlan
 
 import (
 	"context"
@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func TestMembershipInterfaces(t *testing.T) {
 	for _, name := range []string{"lag 0", "lag 01", "lag -1", "lag 1/2", "ve 5", "ethernet 01/1/2", "ethernet 1/1/2\n"} {
-		if err := ValidateVLANMembership(VLANMembership{VLANID: 53, Interface: name, Tagging: "tagged"}); err == nil {
+		if err := validateMembership(membership{VLANID: 53, Interface: name, Tagging: "tagged"}); err == nil {
 			t.Errorf("accepted invalid switchport %q", name)
 		}
 	}
@@ -31,12 +32,12 @@ func TestMembershipInterfaces(t *testing.T) {
 				fmt.Fprint(w, `{"openconfig-vlan:switched-vlan":{"config":{"access-vlan":54,"trunk-vlans":[53,55]}}}`)
 			}))
 			defer server.Close()
-			device, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, membership := range []VLANMembership{{VLANID: 53, Interface: tc.name, Tagging: "tagged"}, {VLANID: 54, Interface: tc.name, Tagging: "untagged"}} {
-				present, err := device.VLANMembership(context.Background(), membership)
+			for _, membership := range []membership{{VLANID: 53, Interface: tc.name, Tagging: "tagged"}, {VLANID: 54, Interface: tc.name, Tagging: "untagged"}} {
+				present, err := readMembership(context.Background(), device, membership)
 				if err != nil || !present {
 					t.Fatalf("membership=%#v present=%v error=%v", membership, present, err)
 				}

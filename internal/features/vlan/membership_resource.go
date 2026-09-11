@@ -1,4 +1,4 @@
-package provider
+package vlan
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 )
 
 type (
-	membershipResource struct{ device *fastiron.Device }
+	MembershipResource struct{ device *fastiron.Device }
 	membershipModel    struct {
 		ID                 types.String `tfsdk:"id"`
 		VLANID             types.Int64  `tfsdk:"vlan_id"`
@@ -27,11 +27,11 @@ type (
 	}
 )
 
-func (r *membershipResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *MembershipResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_vlan_membership"
 }
 
-func (r *membershipResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *MembershipResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns one tagged or untagged VLAN-to-interface relationship. Other memberships remain independently managed. Removing an untagged membership restores the default VLAN. Import with vlan <id>|<interface>|<tagging>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"vlan_id":             schema.Int64Attribute{Required: true, Description: "VLAN identifier, 2 through 4094.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
@@ -41,7 +41,7 @@ func (r *membershipResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	}}
 }
 
-func (r *membershipResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *MembershipResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -52,26 +52,26 @@ func (r *membershipResource) Configure(_ context.Context, req resource.Configure
 	}
 }
 
-func (m membershipModel) desired() fastiron.VLANMembership {
-	return fastiron.VLANMembership{VLANID: m.VLANID.ValueInt64(), Interface: m.Interface.ValueString(), Tagging: m.Tagging.ValueString()}
+func (m membershipModel) desired() membership {
+	return membership{VLANID: m.VLANID.ValueInt64(), Interface: m.Interface.ValueString(), Tagging: m.Tagging.ValueString()}
 }
 
 func (m membershipModel) known() bool {
 	return !m.VLANID.IsUnknown() && !m.VLANID.IsNull() && !m.Interface.IsUnknown() && !m.Interface.IsNull() && !m.Tagging.IsUnknown() && !m.Tagging.IsNull()
 }
 
-func (r *membershipResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+func (r *MembershipResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var m membershipModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() || !m.known() {
 		return
 	}
-	if err := fastiron.ValidateVLANMembership(m.desired()); err != nil {
+	if err := validateMembership(m.desired()); err != nil {
 		resp.Diagnostics.AddError("Invalid VLAN membership", err.Error())
 	}
 }
 
-func (r *membershipResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *MembershipResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if req.Plan.Raw.IsNull() {
 		return
 	}
@@ -81,18 +81,18 @@ func (r *membershipResource) ModifyPlan(ctx context.Context, req resource.Modify
 	if resp.Diagnostics.HasError() || !m.known() || r.device == nil {
 		return
 	}
-	if _, err := r.device.VLANMembership(ctx, m.desired()); err != nil {
+	if _, err := readMembership(ctx, r.device, m.desired()); err != nil {
 		resp.Diagnostics.AddError("Cannot read VLAN membership capability", err.Error())
 	}
 }
 
-func (r *membershipResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *MembershipResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m membershipModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	exists, err := r.device.ApplyVLANMembership(ctx, m.desired(), true)
+	exists, err := applyMembership(ctx, r.device, m.desired(), true)
 	if exists {
 		m.ID = types.StringValue(fmt.Sprintf("vlan %d|%s|%s", m.VLANID.ValueInt64(), m.Interface.ValueString(), m.Tagging.ValueString()))
 		m.PersistencePending = types.BoolValue(err != nil)
@@ -103,13 +103,13 @@ func (r *membershipResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 }
 
-func (r *membershipResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *MembershipResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m membershipModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	exists, err := r.device.ApplyVLANMembership(ctx, m.desired(), true)
+	exists, err := applyMembership(ctx, r.device, m.desired(), true)
 	if exists {
 		m.PersistencePending = types.BoolValue(err != nil)
 		resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
@@ -119,13 +119,13 @@ func (r *membershipResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 }
 
-func (r *membershipResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *MembershipResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var m membershipModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	exists, err := r.device.VLANMembership(ctx, m.desired())
+	exists, err := readMembership(ctx, r.device, m.desired())
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read VLAN membership", err.Error())
 		return
@@ -143,27 +143,27 @@ func (r *membershipResource) Read(ctx context.Context, req resource.ReadRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
 }
 
-func (r *membershipResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *MembershipResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var m membershipModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.ApplyVLANMembership(ctx, m.desired(), false); err != nil {
+	if _, err := applyMembership(ctx, r.device, m.desired(), false); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot remove VLAN membership", err.Error())
 	}
 }
 
-func (r *membershipResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *MembershipResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts := strings.Split(req.ID, "|")
 	if len(parts) != 3 {
 		resp.Diagnostics.AddError("Invalid membership identity", "Use vlan <id>|<interface>|<tagging>, with an Ethernet or LAG interface name.")
 		return
 	}
 	id, err := strconv.ParseInt(strings.TrimPrefix(parts[0], "vlan "), 10, 64)
-	v := fastiron.VLANMembership{VLANID: id, Interface: parts[1], Tagging: parts[2]}
-	if err != nil || parts[0] != fmt.Sprintf("vlan %d", id) || fastiron.ValidateVLANMembership(v) != nil {
+	v := membership{VLANID: id, Interface: parts[1], Tagging: parts[2]}
+	if err != nil || parts[0] != fmt.Sprintf("vlan %d", id) || validateMembership(v) != nil {
 		resp.Diagnostics.AddError("Invalid membership identity", "Use vlan <id>|<interface>|<tagging>, with an Ethernet or LAG interface name.")
 		return
 	}

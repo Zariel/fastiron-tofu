@@ -14,6 +14,7 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
+	"github.com/zariel/fastiron-tofu/internal/features/vlan"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
@@ -135,7 +136,7 @@ func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error
 		if _, err := ethernet.Read(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 			return nil, err
 		}
-		port, err := d.Switchport(ctx, name)
+		port, err := vlan.ReadSwitchport(ctx, d, name)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +244,7 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 	}
 	if err == nil {
 		name := "lag " + strconv.FormatInt(id, 10)
-		port, err := d.Switchport(ctx, name)
+		port, err := vlan.ReadSwitchport(ctx, d, name)
 		if err != nil {
 			return err
 		}

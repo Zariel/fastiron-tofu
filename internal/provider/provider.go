@@ -15,6 +15,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/route"
 	"github.com/zariel/fastiron-tofu/internal/features/stp"
 	"github.com/zariel/fastiron-tofu/internal/features/ve"
+	"github.com/zariel/fastiron-tofu/internal/features/vlan"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -43,7 +44,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &saveResource{} },
 		func() resource.Resource { return &vlanResource{} },
 		func() resource.Resource { return &ethernet.Resource{} },
-		func() resource.Resource { return &membershipResource{} },
+		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
 		func() resource.Resource { return lldp.NewGlobalResource() },
 		func() resource.Resource { return lldp.NewInterfaceResource() },
