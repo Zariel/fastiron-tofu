@@ -25,7 +25,7 @@ type switchport struct {
 }
 
 func validateMembership(v membership) error {
-	if err := fastiron.ValidateVLAN(fastiron.VLAN{ID: v.VLANID}); err != nil {
+	if err := Validate(Config{ID: v.VLANID}); err != nil {
 		return err
 	}
 	if !interfaceid.LAG(v.Interface) && (!strings.HasPrefix(v.Interface, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(v.Interface, "ethernet "))) {
@@ -107,7 +107,7 @@ func applyMembership(ctx context.Context, d *fastiron.Device, v membership, pres
 	exists := port.contains(v)
 	if exists != present {
 		if present {
-			if _, err := d.VLAN(ctx, v.VLANID); err != nil {
+			if _, err := Read(ctx, d, v.VLANID); err != nil {
 				return exists, fmt.Errorf("membership requires an existing VLAN: %w", err)
 			}
 			if v.Tagging == "untagged" && port.Access > 1 && port.Access != v.VLANID {

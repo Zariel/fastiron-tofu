@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/features/vlan"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
@@ -20,7 +21,7 @@ type config struct {
 }
 
 func validate(v config) error {
-	if err := fastiron.ValidateVLAN(fastiron.VLAN{ID: v.ID}); err != nil {
+	if err := vlan.Validate(vlan.Config{ID: v.ID}); err != nil {
 		return err
 	}
 	if v.ID != v.VLANID {
@@ -104,7 +105,7 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := d.VLAN(ctx, v.VLANID); err != nil {
+	if _, err := vlan.Read(ctx, d, v.VLANID); err != nil {
 		return nil, fmt.Errorf("VE requires an existing VLAN: %w", err)
 	}
 	current, err := Read(ctx, d, v.ID)

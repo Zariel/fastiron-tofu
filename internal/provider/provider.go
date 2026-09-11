@@ -42,7 +42,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return aaa.NewRADIUSResource() },
 		func() resource.Resource { return aaa.NewTACACSResource() },
 		func() resource.Resource { return &saveResource{} },
-		func() resource.Resource { return &vlanResource{} },
+		func() resource.Resource { return &vlan.Resource{} },
 		func() resource.Resource { return &ethernet.Resource{} },
 		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },

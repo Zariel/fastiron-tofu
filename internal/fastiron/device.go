@@ -254,3 +254,5 @@ func (d *Device) CheckAAAChanges() error {
 func (d *Device) IsTransportAccount(username string) bool {
 	return d.config.RESTCONF != nil && strings.EqualFold(username, d.config.RESTCONF.Username) || d.config.SSH != nil && strings.EqualFold(username, d.config.SSH.Username)
 }
+
+var ErrNotFound = errors.New("FastIron object not found")

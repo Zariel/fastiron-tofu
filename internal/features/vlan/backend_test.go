@@ -1,4 +1,4 @@
-package fastiron
+package vlan
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -39,12 +40,12 @@ func TestReadDefaultVLAN(t *testing.T) {
 		fmt.Fprint(w, `{"openconfig-network-instance:vlan":[{"vlan-id":1,"config":{"vlan-id":1,"name":"DEFAULT-VLAN"}}]}`)
 	}))
 	defer server.Close()
-	d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+	d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	vlan, err := d.VLAN(context.Background(), 1)
+	vlan, err := Read(context.Background(), d, 1)
 	if err != nil || vlan.ID != 1 || vlan.Name != "DEFAULT-VLAN" {
 		t.Fatalf("default VLAN=%v error=%v", vlan, err)
 	}

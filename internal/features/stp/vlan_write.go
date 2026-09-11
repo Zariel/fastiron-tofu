@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	vlanfeature "github.com/zariel/fastiron-tofu/internal/features/vlan"
 )
 
 func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*vlan, error) {
@@ -42,7 +43,7 @@ func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*
 		}
 	}
 	if present {
-		if _, err := d.VLAN(ctx, v.VLANID); err != nil {
+		if _, err := vlanfeature.Read(ctx, d, v.VLANID); err != nil {
 			return nil, err
 		}
 		if current != nil && current.Mode != v.Mode {
