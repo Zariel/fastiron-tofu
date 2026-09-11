@@ -32,7 +32,8 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
-	stp *stpSwitch
+	stp      *stpSwitch
+	stpPorts *stpPortSwitch
 
 	ospf *ospfSwitch
 
@@ -178,6 +179,10 @@ func (s *testSwitch) command(command string) string {
 			unchanged = unchanged && maps.Equal(s.stp.running, s.stp.startup)
 			s.stp.startup = maps.Clone(s.stp.running)
 		}
+		if s.stpPorts != nil {
+			unchanged = unchanged && maps.Equal(s.stpPorts.running, s.stpPorts.startup)
+			s.stpPorts.startup = maps.Clone(s.stpPorts.running)
+		}
 		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)
@@ -188,6 +193,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.stpPorts != nil {
+			text = stpPortConfiguration(text, s.stpPorts.running)
+		}
 		if s.stp != nil {
 			text = strings.TrimSuffix(text, "end") + stpConfiguration(s.stp.running, s.stp.extra) + "end"
 		}
@@ -202,6 +210,9 @@ func (s *testSwitch) command(command string) string {
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.stpPorts != nil {
+			return stpPortConfiguration(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), s.stpPorts.startup)
+		}
 		if s.stp != nil {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + stpConfiguration(s.stp.startup, s.stp.extra) + "end"
 		}
@@ -267,6 +278,10 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stpPorts != nil && r.URL.Path == "/restconf/data/stp/interfaces" {
+		s.stpPorts.rest(w, r)
+		return
+	}
 	if s.lags != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/interfaces") {
 		s.lags.rest(w, r)
 		return
@@ -325,6 +340,9 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 			entries := []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet, "openconfig-if-ethernet:ethernet": map[string]any{"icx-openconfig-if-poe-aug:poe": map[string]any{"config": map[string]any{"enabled": s.poe}, "state": map[string]any{"power-used": "7000.0", "power-class": 4}}}}}
 			if s.ve != nil {
 				entries = append(entries, map[string]any{"name": "ve 53", "config": s.ve, "openconfig-vlan:routed-vlan": map[string]any{"config": map[string]any{"vlan": 53}}})
+			}
+			if s.stpPorts != nil {
+				entries = append(entries, map[string]any{"name": "ethernet 1/1/3", "config": map[string]any{"name": "ethernet 1/1/3", "description": "NEIGHBOR", "enabled": true}})
 			}
 			json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": entries}})
 			return
