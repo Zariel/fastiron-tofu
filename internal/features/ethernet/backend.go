@@ -1,31 +1,32 @@
-package fastiron
+package ethernet
 
 import (
 	"context"
 	"errors"
 	"net/http"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
-type Ethernet struct {
+type config struct {
 	Port, PortName string
 	Enabled        bool
 }
 
-func ValidateEthernet(v Ethernet) error {
+func validate(v config) error {
 	if !interfaceid.EthernetPort(v.Port) {
 		return errors.New("port must use stack/slot/port syntax with positive numbers and no leading zeros")
 	}
 	return interfaceid.ValidatePortName(v.PortName)
 }
 
-func (d *Device) Ethernet(ctx context.Context, port string) (Ethernet, error) {
-	if err := ValidateEthernet(Ethernet{Port: port}); err != nil {
-		return Ethernet{}, err
+func Read(ctx context.Context, d *fastiron.Device, port string) (config, error) {
+	if err := validate(config{Port: port}); err != nil {
+		return config{}, err
 	}
-	if d.config.Transport == "ssh" || d.rest == nil {
-		return Ethernet{}, errors.New("base Ethernet configuration currently requires RESTCONF")
+	if !d.RESTCONFEnabled() {
+		return config{}, errors.New("base Ethernet configuration currently requires RESTCONF")
 	}
 	var response struct {
 		Interfaces *struct {
@@ -39,40 +40,40 @@ func (d *Device) Ethernet(ctx context.Context, port string) (Ethernet, error) {
 			} `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
-		return Ethernet{}, err
+	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+		return config{}, err
 	}
 	if response.Interfaces == nil {
-		return Ethernet{}, errors.New("RESTCONF interface response is missing its configuration container")
+		return config{}, errors.New("RESTCONF interface response is missing its configuration container")
 	}
 	if len(response.Interfaces.Interface) == 0 {
-		return Ethernet{}, errors.New("RESTCONF interface collection is empty; cannot confirm Ethernet state")
+		return config{}, errors.New("RESTCONF interface collection is empty; cannot confirm Ethernet state")
 	}
 	for _, entry := range response.Interfaces.Interface {
 		if entry.Name != "ethernet "+port {
 			continue
 		}
 		if entry.Config == nil || entry.Config.Name != entry.Name || entry.Config.Description == nil || entry.Config.Enabled == nil {
-			return Ethernet{}, errors.New("RESTCONF Ethernet response is missing owned configuration fields")
+			return config{}, errors.New("RESTCONF Ethernet response is missing owned configuration fields")
 		}
-		return Ethernet{Port: port, PortName: *entry.Config.Description, Enabled: *entry.Config.Enabled}, nil
+		return config{Port: port, PortName: *entry.Config.Description, Enabled: *entry.Config.Enabled}, nil
 	}
-	return Ethernet{}, ErrNotFound
+	return config{}, fastiron.ErrNotFound
 }
 
-func (d *Device) CheckEthernet(ctx context.Context, v Ethernet) error {
-	if err := ValidateEthernet(v); err != nil {
+func check(ctx context.Context, d *fastiron.Device, v config) error {
+	if err := validate(v); err != nil {
 		return err
 	}
 	if _, err := d.Discover(ctx); err != nil {
 		return err
 	}
-	_, err := d.Ethernet(ctx, v.Port)
+	_, err := Read(ctx, d, v.Port)
 	return err
 }
 
-func (d *Device) ApplyEthernet(ctx context.Context, v Ethernet) (*Ethernet, error) {
-	if err := ValidateEthernet(v); err != nil {
+func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
+	if err := validate(v); err != nil {
 		return nil, err
 	}
 	unlock, err := d.Lock(ctx)
@@ -83,7 +84,7 @@ func (d *Device) ApplyEthernet(ctx context.Context, v Ethernet) (*Ethernet, erro
 	if _, err = d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	current, err := d.Ethernet(ctx, v.Port)
+	current, err := Read(ctx, d, v.Port)
 	if err != nil {
 		return nil, err
 	}
@@ -96,8 +97,8 @@ func (d *Device) ApplyEthernet(ctx context.Context, v Ethernet) (*Ethernet, erro
 			config["enabled"] = v.Enabled
 		}
 		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": "ethernet " + v.Port, "config": config}}}}
-		writeErr := d.rest.Do(ctx, http.MethodPatch, "/interfaces", body, nil)
-		observed, readErr := d.Ethernet(ctx, v.Port)
+		writeErr := d.DoREST(ctx, http.MethodPatch, "/interfaces", body, nil)
+		observed, readErr := Read(ctx, d, v.Port)
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)
 		}
@@ -106,10 +107,5 @@ func (d *Device) ApplyEthernet(ctx context.Context, v Ethernet) (*Ethernet, erro
 		}
 		current = observed
 	}
-	if d.config.Persistence == "after_each_write" {
-		if err := d.save(ctx); err != nil {
-			return &current, err
-		}
-	}
-	return &current, nil
+	return &current, d.Persist(ctx)
 }

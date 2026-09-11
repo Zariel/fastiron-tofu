@@ -1,4 +1,4 @@
-package fastiron
+package ethernet
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -23,12 +24,12 @@ func TestEmptyInterfaceDatabase(t *testing.T) {
 			fmt.Fprint(w, body)
 		}))
 		t.Cleanup(server.Close)
-		device, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+		device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := device.Ethernet(context.Background(), "1/1/7"); err == nil || errors.Is(err, ErrNotFound) {
+		if _, err := Read(context.Background(), device, "1/1/7"); err == nil || errors.Is(err, fastiron.ErrNotFound) {
 			t.Fatalf("incomplete database reported as confirmed state: %v", err)
 		}
 	}

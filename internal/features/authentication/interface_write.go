@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -39,7 +40,7 @@ func readInterface(ctx context.Context, d *fastiron.Device, name string) (interf
 		return defaults, err
 	}
 	// Native omission denotes defaults only for an existing Ethernet interface.
-	if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
+	if _, err := ethernet.Read(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 		return defaults, err
 	}
 	interfaces, err := readInterfaces(ctx, d)
@@ -64,7 +65,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
+	if _, err := ethernet.Read(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 		return nil, err
 	}
 

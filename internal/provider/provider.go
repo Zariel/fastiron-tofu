@@ -7,6 +7,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/address"
 	"github.com/zariel/fastiron-tofu/internal/features/authentication"
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
+	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/features/lag"
 	"github.com/zariel/fastiron-tofu/internal/features/lldp"
 	"github.com/zariel/fastiron-tofu/internal/features/ospf"
@@ -41,7 +42,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return aaa.NewTACACSResource() },
 		func() resource.Resource { return &saveResource{} },
 		func() resource.Resource { return &vlanResource{} },
-		func() resource.Resource { return &ethernetResource{} },
+		func() resource.Resource { return &ethernet.Resource{} },
 		func() resource.Resource { return &membershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
 		func() resource.Resource { return lldp.NewGlobalResource() },

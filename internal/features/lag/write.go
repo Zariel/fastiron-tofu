@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
@@ -131,7 +132,7 @@ func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error
 		if current != nil && slices.Contains(current.Members, name) {
 			continue
 		}
-		if _, err := d.Ethernet(ctx, strings.TrimPrefix(name, "ethernet ")); err != nil {
+		if _, err := ethernet.Read(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 			return nil, err
 		}
 		port, err := d.Switchport(ctx, name)
