@@ -32,8 +32,9 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
-	stp      *stpSwitch
-	stpPorts *stpPortSwitch
+	stp        *stpSwitch
+	stpPorts   *stpPortSwitch
+	aaaServers string
 
 	ospf *ospfSwitch
 
@@ -278,6 +279,10 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.aaaServers != "" && r.Method == "GET" && r.URL.Path == "/restconf/data/system/aaa/server-groups" {
+		fmt.Fprint(w, s.aaaServers)
+		return
+	}
 	if s.stpPorts != nil && r.URL.Path == "/restconf/data/stp/interfaces" {
 		s.stpPorts.rest(w, r)
 		return
