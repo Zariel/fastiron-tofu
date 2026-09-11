@@ -49,7 +49,7 @@ func (r *accessGroupResource) Metadata(_ context.Context, req resource.MetadataR
 func (r *accessGroupResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns one interface/family/direction ACL binding. ACL rules and other binding slots remain separately owned.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: <interface> <direction>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet or LAG interface, such as ethernet 1/1/9 or lag 1.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet, LAG or VLAN interface, such as ethernet 1/1/9, lag 1 or vlan 100.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"direction":           schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("in"), Description: "in or out; defaults to in. MAC ACLs support in only.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"acl":                 schema.StringAttribute{Required: true, Description: "Name of an existing ACL of the resource's family. Changes replace the active binding in place."},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when binding reconciliation, stale REST entry cleanup or saving needs a retry."},
@@ -98,7 +98,7 @@ func (r *accessGroupResource) ModifyPlan(ctx context.Context, req resource.Modif
 	if resp.Diagnostics.HasError() || model.unknown() {
 		return
 	}
-	// A referenced ACL or LAG may be created earlier in the same apply. Parent
+	// A referenced ACL, LAG or VLAN may be created earlier in the same apply. Parent
 	// existence is checked under the write lock, after dependencies have completed.
 	if _, err := readAccessGroup(ctx, r.device, model.key(r.family)); err != nil {
 		resp.Diagnostics.AddError("Cannot inspect ACL binding", err.Error())
@@ -201,7 +201,7 @@ func (r *accessGroupResource) Delete(ctx context.Context, req resource.DeleteReq
 func (r *accessGroupResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	fields := strings.Fields(req.ID)
 	if len(fields) != 3 || strings.Join(fields, " ") != req.ID {
-		resp.Diagnostics.AddError("Invalid ACL binding identity", "Use <interface> <direction>, such as ethernet 1/1/9 in or lag 1 out.")
+		resp.Diagnostics.AddError("Invalid ACL binding identity", "Use <interface> <direction>, such as ethernet 1/1/9 in, lag 1 out or vlan 100 in.")
 		return
 	}
 	k := accessGroupKey{fields[0] + " " + fields[1], r.family, fields[2]}

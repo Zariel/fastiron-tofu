@@ -61,3 +61,40 @@ func TestAccessGroupDefaultHeader(t *testing.T) {
 		t.Fatal("default interface header treated as unrelated configuration")
 	}
 }
+
+func TestVLANBindingOwnership(t *testing.T) {
+	output := `ver 09.0.10kT213
+vlan 100 name USERS by port
+ tagged ethe 1/1/9
+ ip access-group 90 in
+ ip access-group 91 out
+ ipv6 access-group V6 in
+vlan 1000 name NEIGHBOR by port
+ ip access-group 91 in
+ip access-list standard 90
+ sequence 10 permit any
+end`
+	view, err := nativeAccessGroup(output, accessGroupKey{"vlan 100", "ip", "in"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.ACL != "90" {
+		t.Fatalf("binding=%q", view.ACL)
+	}
+	want := []string{
+		"ver 09.0.10kT213", "vlan 100 name USERS by port", " tagged ethe 1/1/9",
+		" ip access-group 91 out", " ipv6 access-group V6 in",
+		"vlan 1000 name NEIGHBOR by port", " ip access-group 91 in",
+		"ip access-list standard 90", " sequence 10 permit any", "end",
+	}
+	if !slices.Equal(view.Unowned, want) {
+		t.Fatalf("unowned=%q", view.Unowned)
+	}
+}
+
+func TestVLANBindingPortSubset(t *testing.T) {
+	output := "ver 09.0.10kT213\nvlan 100 by port\n ip access-group 90 in ethernet 1/1/9\nend"
+	if _, err := nativeAccessGroup(output, accessGroupKey{"vlan 100", "ip", "in"}); err == nil {
+		t.Fatal("port-specific VLAN binding was treated as an entire-VLAN binding")
+	}
+}

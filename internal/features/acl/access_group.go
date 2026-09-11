@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -24,6 +25,15 @@ type accessGroupView struct {
 	Available map[[2]string]bool
 }
 
+func (k accessGroupKey) isVLAN() bool {
+	value, ok := strings.CutPrefix(k.Interface, "vlan ")
+	if !ok {
+		return false
+	}
+	id, err := strconv.ParseInt(value, 10, 64)
+	return err == nil && id >= 1 && id <= 4094 && strconv.FormatInt(id, 10) == value
+}
+
 func (k accessGroupKey) restType() string {
 	return map[string]string{"ip": "ACL_IPV4", "ipv6": "ACL_IPV6", "mac": "ACL_L2"}[k.Family]
 }
@@ -37,8 +47,8 @@ func (k accessGroupKey) restDirection() string {
 
 func (k accessGroupKey) validate() error {
 	ethernet := strings.HasPrefix(k.Interface, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(k.Interface, "ethernet "))
-	if !ethernet && !interfaceid.LAG(k.Interface) {
-		return errors.New("ACL bindings require a canonical Ethernet or LAG interface name")
+	if !ethernet && !interfaceid.LAG(k.Interface) && !k.isVLAN() {
+		return errors.New("ACL bindings require a canonical Ethernet, LAG or VLAN interface name")
 	}
 	if k.restType() == "" {
 		return errors.New("unsupported ACL family")
@@ -76,6 +86,7 @@ func (k accessGroupKey) payload(name string) map[string]any {
 func nativeAccessGroup(output string, k accessGroupKey) (accessGroupView, error) {
 	view := accessGroupView{Available: map[[2]string]bool{}}
 	active := false
+	vlan := k.isVLAN()
 	for _, line := range strings.Split(output, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) == 0 || strings.TrimSpace(line) == "!" {
@@ -83,9 +94,15 @@ func nativeAccessGroup(output string, k accessGroupKey) (accessGroupView, error)
 		}
 		if line[0] != ' ' && line[0] != '\t' {
 			active = line == "interface "+k.Interface
+			if vlan {
+				active = line == k.Interface || strings.HasPrefix(line, k.Interface+" ")
+			}
+			// VLAN headers carry separately owned names. Default interface headers
+			// can appear or disappear solely because a binding exists.
+			if active && vlan {
+				view.Unowned = append(view.Unowned, line)
+			}
 			if active {
-				// Default interfaces appear in running configuration only when a
-				// setting is present. Their header alone is not unrelated state.
 				continue
 			}
 			family, name := nativeACLHeader(fields)
@@ -131,6 +148,14 @@ func nativeACLHeader(fields []string) (string, string) {
 func (k accessGroupKey) checkParents(view accessGroupView, name string) error {
 	if !view.Available[[2]string{k.Family, name}] {
 		return fmt.Errorf("create the %s ACL %q before binding it", k.Family, name)
+	}
+	if k.isVLAN() {
+		for _, line := range view.Unowned {
+			if line == k.Interface || strings.HasPrefix(line, k.Interface+" ") {
+				return nil
+			}
+		}
+		return fmt.Errorf("ACL binding interface %s: %w", k.Interface, fastiron.ErrNotFound)
 	}
 	if !interfaceid.LAG(k.Interface) {
 		return nil
@@ -229,6 +254,10 @@ func accessGroupConfiguration(ctx context.Context, d *fastiron.Device, k accessG
 }
 
 func checkAccessGroupInterface(ctx context.Context, d *fastiron.Device, k accessGroupKey) error {
+	// VLAN parent checks use the native VLAN stanza in checkParents.
+	if k.isVLAN() {
+		return nil
+	}
 	type identity struct {
 		Name string `json:"name"`
 	}

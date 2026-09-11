@@ -260,3 +260,15 @@ func TestAccessGroupDeletedLAG(t *testing.T) {
 		t.Fatal("stale LAG inventory allowed a mutation")
 	}
 }
+
+func TestAccessGroupMissingVLAN(t *testing.T) {
+	s := &groupSwitch{}
+	device := s.device(t)
+	_, err := applyAccessGroup(context.Background(), device, accessGroupKey{"vlan 100", "ip", "in"}, "90")
+	if err == nil || !strings.Contains(err.Error(), "interface vlan 100") {
+		t.Fatalf("missing native VLAN accepted: %v", err)
+	}
+	if s.writes != 0 || s.saves != 0 {
+		t.Fatal("missing VLAN allowed a mutation")
+	}
+}

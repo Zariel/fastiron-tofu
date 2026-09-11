@@ -12,7 +12,11 @@ func TestOpenTofuAccessGroupValidation(t *testing.T) {
 	run(0, "init", "-no-color")
 	for name, tc := range map[string]struct{ family, body, message string }{
 		"VE": {"ip", `interface = "ve 5"
-acl = "90"`, "canonical Ethernet or LAG"},
+acl = "90"`, "canonical Ethernet, LAG or VLAN"},
+		"VLAN range": {"ip", `interface = "vlan 4095"
+acl = "90"`, "canonical Ethernet, LAG or VLAN"},
+		"VLAN identity": {"ip", `interface = "vlan 010"
+acl = "90"`, "canonical Ethernet, LAG or VLAN"},
 		"direction": {"ipv6", `interface = "ethernet 1/1/9"
 direction = "ingress"
 acl = "V6"`, "direction must be in or out"},
