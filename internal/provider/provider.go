@@ -32,10 +32,10 @@ func (p *fastironProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 
 func (p *fastironProvider) Resources(context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		func() resource.Resource { return &userResource{} },
+		func() resource.Resource { return &aaa.UserResource{} },
 		func() resource.Resource { return &aaa.PolicyResource{} },
-		func() resource.Resource { return &aaaServerResource{kind: "radius"} },
-		func() resource.Resource { return &aaaServerResource{kind: "tacacs"} },
+		func() resource.Resource { return aaa.NewRADIUSResource() },
+		func() resource.Resource { return aaa.NewTACACSResource() },
 		func() resource.Resource { return &saveResource{} },
 		func() resource.Resource { return &vlanResource{} },
 		func() resource.Resource { return &ethernetResource{} },
@@ -68,8 +68,8 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &route.DataSource{} },
 		func() datasource.DataSource { return &ospf.DataSource{} },
 		func() datasource.DataSource { return &stp.DataSource{} },
-		func() datasource.DataSource { return &aaaServersDataSource{} },
-		func() datasource.DataSource { return &usersDataSource{} },
+		func() datasource.DataSource { return &aaa.ServersDataSource{} },
+		func() datasource.DataSource { return &aaa.UsersDataSource{} },
 		func() datasource.DataSource { return &aaa.PolicyDataSource{} },
 		func() datasource.DataSource { return &authentication.InterfacesDataSource{} },
 	}

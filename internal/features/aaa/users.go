@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -6,15 +6,17 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type User struct {
+type account struct {
 	Username  string
 	Privilege int64
 }
 
-func (d *Device) Users(ctx context.Context) ([]User, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func readUsers(ctx context.Context, d *fastiron.Device) ([]account, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("local user discovery currently requires RESTCONF")
 	}
 	var response struct {
@@ -28,13 +30,13 @@ func (d *Device) Users(ctx context.Context) ([]User, error) {
 			} `json:"user"`
 		} `json:"openconfig-system:users"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/system/aaa/authentication/users", nil, &response); err != nil {
+	if err := d.DoREST(ctx, http.MethodGet, "/system/aaa/authentication/users", nil, &response); err != nil {
 		return nil, err
 	}
 	if response.Users == nil {
 		return nil, errors.New("RESTCONF user response is missing its user container")
 	}
-	users := []User{}
+	users := []account{}
 	names := map[string]bool{}
 	for _, entry := range response.Users.User {
 		if entry.Username == "" || names[entry.Username] || entry.Config == nil || entry.Config.Username != entry.Username {
@@ -44,8 +46,8 @@ func (d *Device) Users(ctx context.Context) ([]User, error) {
 			return nil, errors.New("RESTCONF user response is missing its privilege")
 		}
 		names[entry.Username] = true
-		users = append(users, User{Username: entry.Username, Privilege: *entry.Config.Privilege})
+		users = append(users, account{Username: entry.Username, Privilege: *entry.Config.Privilege})
 	}
-	slices.SortFunc(users, func(a, b User) int { return strings.Compare(a.Username, b.Username) })
+	slices.SortFunc(users, func(a, b account) int { return strings.Compare(a.Username, b.Username) })
 	return users, nil
 }

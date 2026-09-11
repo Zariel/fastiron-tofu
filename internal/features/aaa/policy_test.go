@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
-
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 

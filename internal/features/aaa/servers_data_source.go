@@ -1,4 +1,4 @@
-package provider
+package aaa
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 )
 
 type (
-	aaaServersDataSource struct{ device *fastiron.Device }
-	aaaServersModel      struct {
+	ServersDataSource struct{ device *fastiron.Device }
+	aaaServersModel   struct {
 		Servers map[string]aaaServerModel `tfsdk:"servers"`
 	}
 	aaaServerModel struct {
@@ -23,11 +23,11 @@ type (
 	}
 )
 
-func (d *aaaServersDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *ServersDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aaa_servers"
 }
 
-func (d *aaaServersDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *ServersDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured RADIUS and TACACS servers without exposing secret material.", Attributes: map[string]schema.Attribute{
 		"servers": schema.MapNestedAttribute{Computed: true, Description: "Servers keyed by radius|address or tacacs|address.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"kind":      schema.StringAttribute{Computed: true, Description: "radius or tacacs."},
@@ -39,7 +39,7 @@ func (d *aaaServersDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 	}}
 }
 
-func (d *aaaServersDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *ServersDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -50,8 +50,8 @@ func (d *aaaServersDataSource) Configure(_ context.Context, req datasource.Confi
 	}
 }
 
-func (d *aaaServersDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	servers, err := d.device.AAAServers(ctx)
+func (d *ServersDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	servers, err := readServers(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read AAA servers", err.Error())
 		return

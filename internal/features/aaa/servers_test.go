@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -9,19 +9,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func TestAAAServers(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		want       []AAAServer
+		want       []server
 		failure    bool
 	}{
-		{"empty", `{"openconfig-system:server-groups":{}}`, []AAAServer{}, false},
-		{"empty group", `{"openconfig-system:server-groups":{"server-group":[{"name":"tacacs-default-group","config":{"name":"tacacs-default-group","type":"openconfig-aaa:TACACS"},"servers":{}}]}}`, []AAAServer{}, false},
-		{"radius", `{"openconfig-system:server-groups":{"server-group":[{"name":"radius-default-group","config":{"name":"radius-default-group","type":"openconfig-aaa:RADIUS"},"servers":{"server":[{"address":"192.0.2.53","config":{"address":"192.0.2.53"},"radius":{"config":{"auth-port":1912,"acct-port":1913,"secret-key":"opaque-test-value","icx-openconfig-aaa-aug:purpose":"accounting-only"}}}]}}]}}`, []AAAServer{{Kind: "radius", Address: "192.0.2.53", AuthPort: 1912, AcctPort: 1913, Purpose: "accounting-only"}}, false},
-		{"tacacs", `{"openconfig-system:server-groups":{"server-group":[{"name":"tacacs-default-group","config":{"name":"tacacs-default-group","type":"openconfig-aaa:TACACS"},"servers":{"server":[{"address":"192.0.2.54","config":{"address":"192.0.2.54"},"tacacs":{"config":{"port":49,"secret-key":"","icx-openconfig-aaa-aug:purpose":"default"}}}]}}]}}`, []AAAServer{{Kind: "tacacs", Address: "192.0.2.54", AuthPort: 49, Purpose: "default"}}, false},
+		{"empty", `{"openconfig-system:server-groups":{}}`, []server{}, false},
+		{"empty group", `{"openconfig-system:server-groups":{"server-group":[{"name":"tacacs-default-group","config":{"name":"tacacs-default-group","type":"openconfig-aaa:TACACS"},"servers":{}}]}}`, []server{}, false},
+		{"radius", `{"openconfig-system:server-groups":{"server-group":[{"name":"radius-default-group","config":{"name":"radius-default-group","type":"openconfig-aaa:RADIUS"},"servers":{"server":[{"address":"192.0.2.53","config":{"address":"192.0.2.53"},"radius":{"config":{"auth-port":1912,"acct-port":1913,"secret-key":"opaque-test-value","icx-openconfig-aaa-aug:purpose":"accounting-only"}}}]}}]}}`, []server{{Kind: "radius", Address: "192.0.2.53", AuthPort: 1912, AcctPort: 1913, Purpose: "accounting-only"}}, false},
+		{"tacacs", `{"openconfig-system:server-groups":{"server-group":[{"name":"tacacs-default-group","config":{"name":"tacacs-default-group","type":"openconfig-aaa:TACACS"},"servers":{"server":[{"address":"192.0.2.54","config":{"address":"192.0.2.54"},"tacacs":{"config":{"port":49,"secret-key":"","icx-openconfig-aaa-aug:purpose":"default"}}}]}}]}}`, []server{{Kind: "tacacs", Address: "192.0.2.54", AuthPort: 49, Purpose: "default"}}, false},
 		{"missing root", `{}`, nil, true},
 		{"group mismatch", `{"openconfig-system:server-groups":{"server-group":[{"name":"radius-default-group","config":{"name":"tacacs-default-group","type":"openconfig-aaa:RADIUS"},"servers":{}}]}}`, nil, true},
 		{"missing servers", `{"openconfig-system:server-groups":{"server-group":[{"name":"radius-default-group","config":{"name":"radius-default-group","type":"openconfig-aaa:RADIUS"}}]}}`, nil, true},
@@ -37,12 +38,12 @@ func TestAAAServers(t *testing.T) {
 				fmt.Fprint(w, tc.body)
 			}))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			got, err := d.AAAServers(context.Background())
+			got, err := readServers(context.Background(), d)
 			if (err != nil) != tc.failure {
 				t.Fatalf("servers=%v error=%v", got, err)
 			}

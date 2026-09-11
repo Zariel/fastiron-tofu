@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
-
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
@@ -88,7 +87,7 @@ func sameAAAPolicy(a, b policy) bool {
 	return slices.Equal(a.LoginMethods, b.LoginMethods) && a.Dot1XDefault == b.Dot1XDefault && a.CoAEnabled == b.CoAEnabled && slices.Equal(a.CoAIgnore, b.CoAIgnore)
 }
 
-// AAAConfiguration distinguishes an absent native dot1x policy from explicit
+// readConfiguration distinguishes an absent native dot1x policy from explicit
 // none authentication, which RESTCONF reports identically.
 func readConfiguration(ctx context.Context, d *fastiron.Device) (*policy, error) {
 	if _, err := d.Discover(ctx); err != nil {

@@ -1,4 +1,4 @@
-package provider
+package aaa
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 )
 
 type (
-	aaaServerResource struct {
+	serverResource struct {
 		device *fastiron.Device
 		kind   string
 	}
@@ -32,11 +32,11 @@ type (
 	}
 )
 
-func (r *aaaServerResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *serverResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aaa_" + r.kind + "_server"
 }
 
-func (r *aaaServerResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *serverResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	port := int64(49)
 	if r.kind == "radius" {
 		port = 1812
@@ -56,7 +56,7 @@ func (r *aaaServerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	resp.Schema = schema.Schema{Description: "Owns one AAA server, preserving shared retry settings, authentication policy, and other servers. Requires allow_aaa_changes. Import with " + r.kind + "-server host <address>.", Attributes: attrs}
 }
 
-func (r *aaaServerResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *serverResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -67,11 +67,11 @@ func (r *aaaServerResource) Configure(_ context.Context, req resource.ConfigureR
 	}
 }
 
-func (m aaaServerResourceModel) server(kind string) fastiron.AAAServer {
-	return fastiron.AAAServer{Kind: kind, Address: m.Address.ValueString(), AuthPort: m.AuthPort.ValueInt64(), AcctPort: m.AcctPort.ValueInt64(), Purpose: m.Purpose.ValueString()}
+func (m aaaServerResourceModel) server(kind string) server {
+	return server{Kind: kind, Address: m.Address.ValueString(), AuthPort: m.AuthPort.ValueInt64(), AcctPort: m.AcctPort.ValueInt64(), Purpose: m.Purpose.ValueString()}
 }
 
-func (m *aaaServerResourceModel) observe(s fastiron.AAAServer) {
+func (m *aaaServerResourceModel) observe(s server) {
 	m.ID = types.StringValue(s.Kind + "-server host " + s.Address)
 	m.Address = types.StringValue(s.Address)
 	m.AuthPort = types.Int64Value(s.AuthPort)
@@ -90,7 +90,7 @@ func (m aaaServerResourceModel) secret() *string {
 	return &s
 }
 
-func (r *aaaServerResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *serverResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if r.device != nil {
 		if err := r.device.CheckAAAChanges(); err != nil {
 			resp.Diagnostics.AddError("AAA changes disabled", err.Error())
@@ -110,7 +110,7 @@ func (r *aaaServerResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 	if !m.Address.IsUnknown() && !m.AuthPort.IsUnknown() && !m.AcctPort.IsUnknown() && !m.Purpose.IsUnknown() {
-		if err := fastiron.ValidateAAAServer(m.server(r.kind)); err != nil {
+		if err := validateServer(m.server(r.kind)); err != nil {
 			resp.Diagnostics.AddError("Invalid AAA server", err.Error())
 		}
 	}
@@ -130,13 +130,13 @@ func (r *aaaServerResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 	}
 }
 
-func (r *aaaServerResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *serverResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m aaaServerResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyAAAServer(ctx, m.server(r.kind), m.secret(), true)
+	observed, err := applyServer(ctx, r.device, m.server(r.kind), m.secret(), true)
 	if observed != nil {
 		m.observe(*observed)
 		m.PersistencePending = types.BoolValue(err != nil)
@@ -149,13 +149,13 @@ func (r *aaaServerResource) Create(ctx context.Context, req resource.CreateReque
 	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_secret", configuredSecretChecksum(m.Secret))...)
 }
 
-func (r *aaaServerResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *serverResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m aaaServerResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyAAAServer(ctx, m.server(r.kind), m.secret(), true)
+	observed, err := applyServer(ctx, r.device, m.server(r.kind), m.secret(), true)
 	if observed != nil {
 		m.observe(*observed)
 	}
@@ -168,13 +168,13 @@ func (r *aaaServerResource) Update(ctx context.Context, req resource.UpdateReque
 	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_secret", configuredSecretChecksum(m.Secret))...)
 }
 
-func (r *aaaServerResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *serverResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var m aaaServerResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	servers, err := r.device.AAAServers(ctx)
+	servers, err := readServers(ctx, r.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read AAA server", err.Error())
 		return
@@ -194,26 +194,26 @@ func (r *aaaServerResource) Read(ctx context.Context, req resource.ReadRequest, 
 	}
 }
 
-func (r *aaaServerResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *serverResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var m aaaServerResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.ApplyAAAServer(ctx, m.server(r.kind), nil, false); err != nil {
+	if _, err := applyServer(ctx, r.device, m.server(r.kind), nil, false); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot delete AAA server", err.Error())
 	}
 }
 
-func (r *aaaServerResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *serverResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	prefix := r.kind + "-server host "
 	address, ok := strings.CutPrefix(req.ID, prefix)
-	s := fastiron.AAAServer{Kind: r.kind, Address: address, AuthPort: 49, Purpose: "default"}
+	s := server{Kind: r.kind, Address: address, AuthPort: 49, Purpose: "default"}
 	if r.kind == "radius" {
 		s.AuthPort, s.AcctPort = 1812, 1813
 	}
-	if !ok || fastiron.ValidateAAAServer(s) != nil {
+	if !ok || validateServer(s) != nil {
 		resp.Diagnostics.AddError("Invalid AAA server identity", "Use "+prefix+"<address>.")
 		return
 	}
@@ -221,3 +221,6 @@ func (r *aaaServerResource) ImportState(ctx context.Context, req resource.Import
 	m.observe(s)
 	resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
 }
+
+func NewRADIUSResource() *serverResource { return &serverResource{kind: "radius"} }
+func NewTACACSResource() *serverResource { return &serverResource{kind: "tacacs"} }

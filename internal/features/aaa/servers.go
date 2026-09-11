@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -6,15 +6,17 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type AAAServer struct {
+type server struct {
 	Kind, Address, Purpose string
 	AuthPort, AcctPort     int64
 }
 
-func (d *Device) AAAServers(ctx context.Context) ([]AAAServer, error) {
-	if d.config.Transport == "ssh" || d.rest == nil {
+func readServers(ctx context.Context, d *fastiron.Device) ([]server, error) {
+	if !d.RESTCONFEnabled() {
 		return nil, errors.New("AAA server discovery currently requires RESTCONF")
 	}
 	type serverConfig struct {
@@ -47,13 +49,13 @@ func (d *Device) AAAServers(ctx context.Context) ([]AAAServer, error) {
 			} `json:"server-group"`
 		} `json:"openconfig-system:server-groups"`
 	}
-	if err := d.rest.Do(ctx, http.MethodGet, "/system/aaa/server-groups", nil, &response); err != nil {
+	if err := d.DoREST(ctx, http.MethodGet, "/system/aaa/server-groups", nil, &response); err != nil {
 		return nil, err
 	}
 	if response.Groups == nil {
 		return nil, errors.New("RESTCONF AAA response is missing its server-group container")
 	}
-	servers := []AAAServer{}
+	servers := []server{}
 	groups := map[string]bool{}
 	for _, group := range response.Groups.Group {
 		kind := ""
@@ -93,7 +95,7 @@ func (d *Device) AAAServers(ctx context.Context) ([]AAAServer, error) {
 			if port == nil || *port < 1 || *port > 65535 {
 				return nil, errors.New("RESTCONF AAA server has an invalid authentication port")
 			}
-			server := AAAServer{Kind: kind, Address: entry.Address, AuthPort: *port, Purpose: c.Purpose}
+			server := server{Kind: kind, Address: entry.Address, AuthPort: *port, Purpose: c.Purpose}
 			if kind == "radius" {
 				if c.AcctPort == nil || *c.AcctPort < 1 || *c.AcctPort > 65535 {
 					return nil, errors.New("RESTCONF RADIUS server has an invalid accounting port")
@@ -106,7 +108,7 @@ func (d *Device) AAAServers(ctx context.Context) ([]AAAServer, error) {
 			servers = append(servers, server)
 		}
 	}
-	slices.SortFunc(servers, func(a, b AAAServer) int {
+	slices.SortFunc(servers, func(a, b server) int {
 		if n := strings.Compare(a.Kind, b.Kind); n != 0 {
 			return n
 		}

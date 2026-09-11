@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-func ValidateUser(u User) error {
+func validateUser(u account) error {
 	if len(u.Username) < 1 || len(u.Username) > 48 {
 		return errors.New("username must contain 1–48 non-whitespace ASCII characters")
 	}
@@ -28,7 +30,7 @@ func ValidateUser(u User) error {
 }
 
 type nativeUser struct {
-	user        User
+	user        account
 	hasPassword bool
 }
 
@@ -54,7 +56,7 @@ func userConfiguration(output, name string) (*nativeUser, []string, error) {
 		if current != nil {
 			return nil, nil, errors.New("native user has additional configuration outside RESTCONF ownership")
 		}
-		current = &nativeUser{user: User{Username: name}}
+		current = &nativeUser{user: account{Username: name}}
 		seen := map[string]bool{}
 		for i := 2; i < len(f); i++ {
 			field := f[i]
@@ -76,21 +78,21 @@ func userConfiguration(output, name string) (*nativeUser, []string, error) {
 				return nil, nil, errors.New("native user has settings outside RESTCONF ownership")
 			}
 		}
-		if err := ValidateUser(current.user); err != nil {
+		if err := validateUser(current.user); err != nil {
 			return nil, nil, errors.New("native user has invalid identity or privilege")
 		}
 	}
 	return current, neighbors, nil
 }
 
-func (d *Device) ApplyUser(ctx context.Context, u User, password string, present bool) (*User, error) {
+func applyUser(ctx context.Context, d *fastiron.Device, u account, password string, present bool) (*account, error) {
 	if err := d.CheckAAAChanges(); err != nil {
 		return nil, err
 	}
-	if err := ValidateUser(u); err != nil {
+	if err := validateUser(u); err != nil {
 		return nil, err
 	}
-	if d.config.RESTCONF != nil && strings.EqualFold(u.Username, d.config.RESTCONF.Username) || d.config.SSH != nil && strings.EqualFold(u.Username, d.config.SSH.Username) {
+	if d.IsTransportAccount(u.Username) {
 		return nil, errors.New("cannot modify a provider transport account; use a separate administrative account")
 	}
 	if present && (len(password) < 1 || len(password) > 48 || strings.IndexFunc(password, unicode.IsControl) >= 0) {
@@ -104,19 +106,19 @@ func (d *Device) ApplyUser(ctx context.Context, u User, password string, present
 	if _, err = d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	users, err := d.Users(ctx)
+	users, err := readUsers(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	output, err := d.cli.Run(ctx, true, "show running-config")
+	output, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	native, neighbors, err := userConfiguration(output[0], u.Username)
+	native, neighbors, err := userConfiguration(output, u.Username)
 	if err != nil {
 		return nil, err
 	}
-	var current *User
+	var current *account
 	for _, user := range users {
 		if user.Username == u.Username {
 			current = &user
@@ -126,7 +128,7 @@ func (d *Device) ApplyUser(ctx context.Context, u User, password string, present
 		return current, errors.New("native and RESTCONF user configuration disagree; retry after synchronization")
 	}
 	if present || current != nil {
-		if slices.Contains(strings.Split(strings.ReplaceAll(output[0], "\r", ""), "\n"), "service local-user-protection") {
+		if slices.Contains(strings.Split(strings.ReplaceAll(output, "\r", ""), "\n"), "service local-user-protection") {
 			return current, errors.New("local-user protection requires an authenticated user-update operation not currently supported")
 		}
 		endpoint := "/system/aaa/authentication/users"
@@ -140,8 +142,8 @@ func (d *Device) ApplyUser(ctx context.Context, u User, password string, present
 		} else {
 			endpoint = path.Join(endpoint, "user="+url.PathEscape(u.Username))
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.Users(ctx)
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, readErr := readUsers(ctx, d)
 		if readErr != nil {
 			return current, errors.Join(writeErr, readErr)
 		}
@@ -151,11 +153,11 @@ func (d *Device) ApplyUser(ctx context.Context, u User, password string, present
 				current = &user
 			}
 		}
-		output, nativeErr := d.cli.Run(ctx, true, "show running-config")
+		output, nativeErr := d.RunningConfig(ctx)
 		if nativeErr != nil {
 			return current, errors.Join(writeErr, nativeErr)
 		}
-		native, after, parseErr := userConfiguration(output[0], u.Username)
+		native, after, parseErr := userConfiguration(output, u.Username)
 		if parseErr != nil {
 			return current, errors.Join(writeErr, parseErr)
 		}
@@ -170,8 +172,5 @@ func (d *Device) ApplyUser(ctx context.Context, u User, password string, present
 			return current, writeErr
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return current, d.save(ctx)
-	}
-	return current, nil
+	return current, d.Persist(ctx)
 }

@@ -1,4 +1,4 @@
-package provider
+package aaa
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 )
 
 type (
-	userResource      struct{ device *fastiron.Device }
+	UserResource      struct{ device *fastiron.Device }
 	userResourceModel struct {
 		ID                 types.String `tfsdk:"id"`
 		Username           types.String `tfsdk:"username"`
@@ -25,11 +25,11 @@ type (
 	}
 )
 
-func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *UserResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aaa_user"
 }
 
-func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *UserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns one local account's username, privilege and password. Requires allow_aaa_changes. Import with username <name>. Accounts used by provider transports cannot be modified.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"username":            schema.StringAttribute{Required: true, Description: "Account name, 1–48 non-whitespace ASCII characters. Changing it replaces the account.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
@@ -39,7 +39,7 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 	}}
 }
 
-func (r *userResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *UserResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -50,17 +50,17 @@ func (r *userResource) Configure(_ context.Context, req resource.ConfigureReques
 	}
 }
 
-func (m userResourceModel) user() fastiron.User {
-	return fastiron.User{Username: m.Username.ValueString(), Privilege: m.Privilege.ValueInt64()}
+func (m userResourceModel) user() account {
+	return account{Username: m.Username.ValueString(), Privilege: m.Privilege.ValueInt64()}
 }
 
-func (m *userResourceModel) observe(u fastiron.User) {
+func (m *userResourceModel) observe(u account) {
 	m.ID = types.StringValue("username " + u.Username)
 	m.Username = types.StringValue(u.Username)
 	m.Privilege = types.Int64Value(u.Privilege)
 }
 
-func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+func (r *UserResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	if r.device != nil {
 		if err := r.device.CheckAAAChanges(); err != nil {
 			resp.Diagnostics.AddError("AAA changes disabled", err.Error())
@@ -77,7 +77,7 @@ func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 		return
 	}
 	if !m.Username.IsUnknown() && !m.Privilege.IsUnknown() {
-		if err := fastiron.ValidateUser(m.user()); err != nil {
+		if err := validateUser(m.user()); err != nil {
 			resp.Diagnostics.AddError("Invalid local user", err.Error())
 		}
 	}
@@ -90,13 +90,13 @@ func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRe
 	}
 }
 
-func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m userResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyUser(ctx, m.user(), m.Password.ValueString(), true)
+	observed, err := applyUser(ctx, r.device, m.user(), m.Password.ValueString(), true)
 	if observed != nil {
 		m.observe(*observed)
 		m.PersistencePending = types.BoolValue(err != nil)
@@ -109,13 +109,13 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_password", configuredSecretChecksum(m.Password))...)
 }
 
-func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m userResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := r.device.ApplyUser(ctx, m.user(), m.Password.ValueString(), true)
+	observed, err := applyUser(ctx, r.device, m.user(), m.Password.ValueString(), true)
 	if observed != nil {
 		m.observe(*observed)
 	}
@@ -128,13 +128,13 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	resp.Diagnostics.Append(resp.Private.SetKey(ctx, "configured_password", configuredSecretChecksum(m.Password))...)
 }
 
-func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var m userResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	users, err := r.device.Users(ctx)
+	users, err := readUsers(ctx, r.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read local user", err.Error())
 		return
@@ -154,22 +154,22 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	}
 }
 
-func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *UserResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var m userResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &m)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if _, err := r.device.ApplyUser(ctx, m.user(), "", false); err != nil {
+	if _, err := applyUser(ctx, r.device, m.user(), "", false); err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot delete local user", err.Error())
 	}
 }
 
-func (r *userResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *UserResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	name, ok := strings.CutPrefix(req.ID, "username ")
-	u := fastiron.User{Username: name}
-	if !ok || fastiron.ValidateUser(u) != nil {
+	u := account{Username: name}
+	if !ok || validateUser(u) != nil {
 		resp.Diagnostics.AddError("Invalid local user identity", "Use username <name>.")
 		return
 	}

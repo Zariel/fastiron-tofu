@@ -1,20 +1,22 @@
-package fastiron
+package aaa
 
 import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func TestNativeUser(t *testing.T) {
 	for _, tc := range []struct {
 		line string
-		want User
+		want account
 	}{
-		{"username reader privilege 5 password $6$opaque", User{Username: "reader", Privilege: 5}},
-		{"username reader password $6$opaque", User{Username: "reader", Privilege: 0}},
+		{"username reader privilege 5 password $6$opaque", account{Username: "reader", Privilege: 5}},
+		{"username reader password $6$opaque", account{Username: "reader", Privilege: 0}},
 	} {
 		got, neighbors, err := userConfiguration("username operator password $6$other\n"+tc.line, "reader")
 		if err != nil || got == nil || got.user != tc.want || !got.hasPassword {
@@ -37,10 +39,13 @@ func TestUserOwnership(t *testing.T) {
 }
 
 func TestUserTransportAccount(t *testing.T) {
-	d := &Device{config: Config{AllowAAAChanges: true, RESTCONF: &restconf.Config{Username: "automation"}}, discoveryGate: make(chan struct{}, 1)}
+	d, err := fastiron.New(fastiron.Config{Host: "switch.invalid", Transport: "restconf", Persistence: "never", AllowAAAChanges: true, RESTCONF: &restconf.Config{URL: "https://switch.invalid/restconf/data", Timeout: time.Second, Username: "automation"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, present := range []bool{true, false} {
 		for _, name := range []string{"automation", "AUTOMATION"} {
-			if _, err := d.ApplyUser(context.Background(), User{Username: name}, "test-password", present); err == nil || !strings.Contains(err.Error(), "transport account") {
+			if _, err := applyUser(context.Background(), d, account{Username: name}, "test-password", present); err == nil || !strings.Contains(err.Error(), "transport account") {
 				t.Fatal("transport account mutation was not rejected before device access")
 			}
 		}

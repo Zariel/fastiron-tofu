@@ -1,4 +1,4 @@
-package provider
+package aaa
 
 import (
 	"context"
@@ -10,23 +10,23 @@ import (
 )
 
 type (
-	usersDataSource struct{ device *fastiron.Device }
+	UsersDataSource struct{ device *fastiron.Device }
 	usersModel      struct {
 		Users map[string]types.Int64 `tfsdk:"users"`
 	}
 )
 
-func (d *usersDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *UsersDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_aaa_users"
 }
 
-func (d *usersDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *UsersDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured local usernames and privilege levels without exposing passwords or password hashes.", Attributes: map[string]schema.Attribute{
 		"users": schema.MapAttribute{Computed: true, ElementType: types.Int64Type, Description: "Username to configured privilege level. Native levels include 0 (super user), 4 (port configuration), 5 (read only), 6 (cloud user), and 7 (no syslog access)."},
 	}}
 }
 
-func (d *usersDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *UsersDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -37,8 +37,8 @@ func (d *usersDataSource) Configure(_ context.Context, req datasource.ConfigureR
 	}
 }
 
-func (d *usersDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	users, err := d.device.Users(ctx)
+func (d *UsersDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+	users, err := readUsers(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read local users", err.Error())
 		return

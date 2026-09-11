@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -11,9 +11,11 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-func ValidateAAAServer(s AAAServer) error {
+func validateServer(s server) error {
 	if s.Kind != "radius" && s.Kind != "tacacs" {
 		return errors.New("AAA server kind must be radius or tacacs")
 	}
@@ -46,14 +48,14 @@ func ValidateAAAServer(s AAAServer) error {
 }
 
 type nativeAAAServer struct {
-	server   AAAServer
+	server   server
 	hasKey   bool
 	position int
 }
 
 // nativeAAA rejects settings the RESTCONF server payload cannot preserve. Secret
 // values stay local; errors never include the source configuration line.
-func nativeAAA(output string, desired AAAServer) (*nativeAAAServer, []string, error) {
+func nativeAAA(output string, desired server) (*nativeAAAServer, []string, error) {
 	var current *nativeAAAServer
 	var neighbors []string
 	for _, line := range strings.Split(output, "\n") {
@@ -76,7 +78,7 @@ func nativeAAA(output string, desired AAAServer) (*nativeAAAServer, []string, er
 		if current != nil {
 			return nil, nil, errors.New("duplicate native AAA server identity")
 		}
-		s := AAAServer{Kind: desired.Kind, Address: desired.Address, AuthPort: 49, Purpose: "default"}
+		s := server{Kind: desired.Kind, Address: desired.Address, AuthPort: 49, Purpose: "default"}
 		if s.Kind == "radius" {
 			s.AuthPort, s.AcctPort = 1812, 1813
 		}
@@ -120,7 +122,7 @@ func nativeAAA(output string, desired AAAServer) (*nativeAAAServer, []string, er
 				return nil, nil, errors.New("native AAA server has settings not supported by RESTCONF ownership")
 			}
 		}
-		if err := ValidateAAAServer(s); err != nil {
+		if err := validateServer(s); err != nil {
 			return nil, nil, errors.New("native AAA server has invalid configuration")
 		}
 		current.server = s
@@ -128,14 +130,14 @@ func nativeAAA(output string, desired AAAServer) (*nativeAAAServer, []string, er
 	return current, neighbors, nil
 }
 
-// ApplyAAAServer owns one server. TACACS currently requires a per-server key.
+// applyServer owns one server. TACACS currently requires a per-server key.
 // A nil RADIUS secret requires a server without a per-server key; removing an
 // existing RADIUS key must be expressed as an explicit server replacement.
-func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *string, present bool) (*AAAServer, error) {
+func applyServer(ctx context.Context, d *fastiron.Device, desired server, secret *string, present bool) (*server, error) {
 	if err := d.CheckAAAChanges(); err != nil {
 		return nil, err
 	}
-	if err := ValidateAAAServer(desired); err != nil {
+	if err := validateServer(desired); err != nil {
 		return nil, err
 	}
 	// Omitting a TACACS key can still create a native key clause. Until a
@@ -160,19 +162,19 @@ func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *
 	if _, err = d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	servers, err := d.AAAServers(ctx)
+	servers, err := readServers(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	output, err := d.cli.Run(ctx, true, "show running-config")
+	output, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	native, neighbors, err := nativeAAA(output[0], desired)
+	native, neighbors, err := nativeAAA(output, desired)
 	if err != nil {
 		return nil, err
 	}
-	var current *AAAServer
+	var current *server
 	for _, s := range servers {
 		if s.Kind == desired.Kind && s.Address == desired.Address {
 			current = &s
@@ -216,8 +218,8 @@ func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *
 			method = http.MethodDelete
 			endpoint = path.Join(endpoint, "server-group="+group, "servers", "server="+url.PathEscape(desired.Address))
 		}
-		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
-		observed, readErr := d.AAAServers(ctx)
+		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
+		observed, readErr := readServers(ctx, d)
 		if readErr != nil {
 			return current, errors.Join(writeErr, readErr)
 		}
@@ -227,11 +229,11 @@ func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *
 				current = &s
 			}
 		}
-		output, nativeErr := d.cli.Run(ctx, true, "show running-config")
+		output, nativeErr := d.RunningConfig(ctx)
 		if nativeErr != nil {
 			return current, errors.Join(writeErr, nativeErr)
 		}
-		native, after, parseErr := nativeAAA(output[0], desired)
+		native, after, parseErr := nativeAAA(output, desired)
 		if parseErr != nil {
 			return current, errors.Join(writeErr, parseErr)
 		}
@@ -252,8 +254,5 @@ func (d *Device) ApplyAAAServer(ctx context.Context, desired AAAServer, secret *
 			return current, writeErr
 		}
 	}
-	if d.config.Persistence == "after_each_write" {
-		return current, d.save(ctx)
-	}
-	return current, nil
+	return current, d.Persist(ctx)
 }

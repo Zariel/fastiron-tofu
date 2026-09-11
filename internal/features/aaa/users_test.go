@@ -1,4 +1,4 @@
-package fastiron
+package aaa
 
 import (
 	"context"
@@ -9,17 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func TestUsers(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		want       []User
+		want       []account
 		failure    bool
 	}{
-		{"empty", `{"openconfig-system:users":{}}`, []User{}, false},
-		{"privileges", `{"openconfig-system:users":{"user":[{"username":"viewer","config":{"username":"viewer","password":"opaque-password-hash","icx-openconfig-aaa-aug:privilege":5}},{"username":"super","config":{"username":"super","icx-openconfig-aaa-aug:privilege":0}}]}}`, []User{{Username: "super", Privilege: 0}, {Username: "viewer", Privilege: 5}}, false},
+		{"empty", `{"openconfig-system:users":{}}`, []account{}, false},
+		{"privileges", `{"openconfig-system:users":{"user":[{"username":"viewer","config":{"username":"viewer","password":"opaque-password-hash","icx-openconfig-aaa-aug:privilege":5}},{"username":"super","config":{"username":"super","icx-openconfig-aaa-aug:privilege":0}}]}}`, []account{{Username: "super", Privilege: 0}, {Username: "viewer", Privilege: 5}}, false},
 		{"missing root", `{}`, nil, true},
 		{"missing privilege", `{"openconfig-system:users":{"user":[{"username":"viewer","config":{"username":"viewer"}}]}}`, nil, true},
 		{"identity mismatch", `{"openconfig-system:users":{"user":[{"username":"viewer","config":{"username":"super","icx-openconfig-aaa-aug:privilege":0}}]}}`, nil, true},
@@ -34,11 +35,11 @@ func TestUsers(t *testing.T) {
 				fmt.Fprint(w, tc.body)
 			}))
 			defer server.Close()
-			d, err := New(Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
+			d, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL + "/restconf/data", InsecureSkipVerify: true, Timeout: time.Second}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := d.Users(context.Background())
+			got, err := readUsers(context.Background(), d)
 			if (err != nil) != tc.failure || !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("users=%v error=%v", got, err)
 			}

@@ -248,3 +248,8 @@ func (d *Device) CheckAAAChanges() error {
 	}
 	return nil
 }
+
+// IsTransportAccount identifies accounts used by either configured connection.
+func (d *Device) IsTransportAccount(username string) bool {
+	return d.config.RESTCONF != nil && strings.EqualFold(username, d.config.RESTCONF.Username) || d.config.SSH != nil && strings.EqualFold(username, d.config.SSH.Username)
+}
