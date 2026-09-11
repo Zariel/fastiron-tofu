@@ -12,6 +12,7 @@ import (
 )
 
 type Config struct {
+	AllowAAAChanges              bool
 	Host, Transport, Persistence string
 	RESTCONF                     *restconf.Config
 	SSH                          *ssh.Config
