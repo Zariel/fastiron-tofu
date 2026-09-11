@@ -13,7 +13,6 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
-
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -95,18 +94,13 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 		return &current, errors.New("enable the corresponding global authentication feature before enabling a port")
 	}
 
-	if current.Dot1XEnabled != desired.Dot1XEnabled || current.MACEnabled != desired.MACEnabled {
-		for _, line := range unowned {
-			// FastIron requires reapplying this global action after port enablement
-			// changes. Preserve its behavior until that RESTCONF sequence is supported.
-			if strings.HasPrefix(line, "auth-fail-action ") || strings.HasPrefix(line, "auth-timeout-action ") {
-				return &current, errors.New("port enablement changes with a global authentication failure or timeout action require reapplying that action; this combination is not yet supported")
-			}
-		}
+	actions, actionErr := globalActions(unowned)
+	if actionErr != nil && (current.Dot1XEnabled != desired.Dot1XEnabled || current.MACEnabled != desired.MACEnabled) {
+		return &current, actionErr
 	}
 
-	// Each request owns only one port. Native verification catches projection-only
-	// success, and stops dependent writes after an ambiguous or unrelated change.
+	// Port requests own one port; action reapplication preserves global policy.
+	// Native verification stops dependent writes after unrelated or ambiguous changes.
 	write := func(method, endpoint string, body any, expected *interfaceConfig, allowMissing bool) error {
 		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
 		if allowMissing && errors.Is(writeErr, restconf.ErrNotFound) {
@@ -167,6 +161,16 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 			return &current, err
 		}
 	}
+
+	if actionErr == nil && len(actions) > 0 {
+		// Repeat on retries even if a previous request already changed the flags.
+		// Unchanged global configuration cannot prove that reapplication succeeded.
+		expected := current
+		if err := write(http.MethodPatch, root, map[string]any{"config": actions}, &expected, false); err != nil {
+			return &current, err
+		}
+	}
+
 	if current.PortControl != desired.PortControl {
 		endpoint := path.Join(root, "dot1x/port-control")
 		// A stale desired-mode entry can suppress PATCH. Clear only that port's

@@ -329,7 +329,7 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.auth != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/authentication/config/") {
+	if s.auth != nil && (r.URL.Path == "/restconf/data/authentication/config" || strings.HasPrefix(r.URL.Path, "/restconf/data/authentication/config/")) {
 		s.auth.rest(w, r)
 		return
 	}

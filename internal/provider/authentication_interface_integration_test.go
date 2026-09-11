@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -20,6 +21,9 @@ type (
 		running, startup                  map[string]authenticationPort
 		projected                         map[string]bool
 		failPatch, failClear, ignorePatch bool
+		failAction                        bool
+		actionPayload                     map[string]any
+		actionPorts                       map[string]authenticationPort
 	}
 )
 
@@ -48,6 +52,30 @@ func authenticationConfig(ports map[string]authenticationPort, extra string) str
 }
 
 func (s *authenticationSwitch) rest(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/restconf/data/authentication/config" && r.Method == "PATCH" {
+		var payload map[string]any
+		if json.NewDecoder(r.Body).Decode(&payload) != nil {
+			http.Error(w, "bad action payload", 400)
+			return
+		}
+		if s.failAction {
+			s.failAction = false
+			http.Error(w, "ambiguous action reapplication", 500)
+			return
+		}
+		config, ok := payload["config"].(map[string]any)
+		if !ok || len(payload) != 1 {
+			http.Error(w, "missing action config", 400)
+			return
+		}
+		if s.actionPayload == nil {
+			s.actionPayload = map[string]any{}
+		}
+		maps.Copy(s.actionPayload, config)
+		s.actionPorts = maps.Clone(s.running)
+		w.WriteHeader(204)
+		return
+	}
 	endpoint := strings.TrimPrefix(r.URL.Path, "/restconf/data/authentication/config/")
 	if r.Method == "DELETE" {
 		leaf, name, ok := strings.Cut(endpoint, "=")
@@ -56,6 +84,7 @@ func (s *authenticationSwitch) rest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		p := s.running[name]
+		previous := p
 		switch {
 		case leaf == "dot1x/ethernet":
 			p.dot1x = false
@@ -68,6 +97,9 @@ func (s *authenticationSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "unknown leaf", 400)
 			return
+		}
+		if p.dot1x != previous.dot1x || p.mac != previous.mac {
+			s.actionPayload = nil
 		}
 		s.running[name] = p
 		if s.failClear {
@@ -90,6 +122,7 @@ func (s *authenticationSwitch) rest(w http.ResponseWriter, r *http.Request) {
 	for family, values := range body {
 		for field, name := range values {
 			p := s.running[name]
+			previous := p
 			if !s.ignorePatch {
 				switch family {
 				case "dot1x":
@@ -107,6 +140,9 @@ func (s *authenticationSwitch) rest(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "unknown family", 400)
 					return
 				}
+			}
+			if p.dot1x != previous.dot1x || p.mac != previous.mac {
+				s.actionPayload = nil
 			}
 			s.running[name] = p
 		}
@@ -166,7 +202,7 @@ func TestOpenTofuAuthenticationInterface(t *testing.T) {
 	run(0, "apply", "-auto-approve", "-no-color")
 	check(authenticationPort{true, true, "force-unauthorized"})
 
-	for _, action := range []string{"auth-fail-action restricted-vlan", "auth-timeout-action success"} {
+	for _, action := range []string{"auth-fail-action restricted-vlan voice voice-vlan", "auth-timeout-action critical-vlan voice voice-vlan"} {
 		s.mu.Lock()
 		s.auth.extra = " " + action + "\n"
 		s.mu.Unlock()
@@ -261,4 +297,80 @@ func TestOpenTofuAuthenticationInterface(t *testing.T) {
 	}
 	s.mu.Unlock()
 	run(0, "plan", "-detailed-exitcode", "-no-color")
+}
+
+func TestOpenTofuAuthenticationActions(t *testing.T) {
+	s := newSwitch(t)
+	neighbor := authenticationPort{true, true, "auto"}
+	s.auth = &authenticationSwitch{
+		running:   map[string]authenticationPort{"ethernet 1/1/3": neighbor},
+		startup:   map[string]authenticationPort{"ethernet 1/1/3": neighbor},
+		projected: map[string]bool{},
+		extra:     " restricted-vlan 3056\n critical-vlan 3057\n auth-fail-action restricted-vlan\n auth-timeout-action critical-vlan\n",
+	}
+	write, run, base := tofuFixture(t, s)
+	base = strings.Replace(base, `provider "fastiron" {`, `provider "fastiron" {
+ allow_aaa_changes = true`, 1)
+	config := func(enabled bool, mode string) {
+		write("main.tf", base+fmt.Sprintf(`resource "fastiron_authentication_interface" "test" {
+ interface = "ethernet 1/1/2"
+ dot1x_enabled = %t
+ mac_authentication_enabled = %t
+ port_control = %q
+}
+`, enabled, enabled, mode))
+	}
+	var expectedPayload map[string]any
+	if err := json.Unmarshal([]byte(`{"fail-action":{"fail-action":"restricted-vlan"},"timeout-action":{"critical-vlan":true}}`), &expectedPayload); err != nil {
+		t.Fatal(err)
+	}
+	config(true, "auto")
+	run(0, "init", "-no-color")
+	for _, enabled := range []bool{true, false} {
+		mode := "force-authorized"
+		if enabled {
+			mode = "auto"
+		}
+		config(enabled, mode)
+		s.mu.Lock()
+		s.auth.failAction = true
+		previousSaved := s.auth.startup["ethernet 1/1/2"]
+		s.mu.Unlock()
+
+		// Global text remains unchanged on failure; retry must still reapply policy
+		// after the port flags have already reached the requested state.
+		output := run(1, "apply", "-auto-approve", "-no-color")
+		if !strings.Contains(output, "authentication PATCH /authentication/config: RESTCONF returned HTTP 500") {
+			t.Fatalf("unexpected failure: %s", output)
+		}
+		s.mu.Lock()
+		pending := s.auth.running["ethernet 1/1/2"]
+		savedAfterFailure := s.auth.startup["ethernet 1/1/2"]
+		s.mu.Unlock()
+		if savedAfterFailure != previousSaved {
+			t.Fatal("saved port configuration before action reapplication succeeded")
+		}
+		if pending.dot1x != enabled || pending.mac != enabled {
+			t.Fatal("action reapplication preceded the port enablement changes")
+		}
+
+		run(0, "apply", "-auto-approve", "-no-color")
+		s.mu.Lock()
+		applied := s.auth.actionPorts["ethernet 1/1/2"]
+		current, saved := s.auth.running["ethernet 1/1/2"], s.auth.startup["ethernet 1/1/2"]
+		payloadMatches := reflect.DeepEqual(s.auth.actionPayload, expectedPayload)
+		neighborPreserved := s.auth.running["ethernet 1/1/3"] == neighbor && s.auth.startup["ethernet 1/1/3"] == neighbor && s.auth.actionPorts["ethernet 1/1/3"] == neighbor
+		s.mu.Unlock()
+		if applied.dot1x != enabled || applied.mac != enabled {
+			t.Fatal("retry did not reapply actions to the current port configuration")
+		}
+		if current != (authenticationPort{enabled, enabled, mode}) || saved != current {
+			t.Fatalf("port configuration running=%v startup=%v", current, saved)
+		}
+		if !payloadMatches || !neighborPreserved {
+			t.Fatal("action reapplication changed policy or neighboring ports")
+		}
+		run(0, "plan", "-detailed-exitcode", "-no-color")
+	}
+	run(0, "destroy", "-auto-approve", "-no-color")
 }
