@@ -31,7 +31,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | AAA policy | Partial | Ordered login methods, default dot1x authentication and CoA settings. Extended authentication services remain. |
 | FlexAuth interfaces | Partial | Dot1x/MAC enablement, port-control, discovery, and basic global action reapplication. Voice-VLAN action variants remain. |
 | FlexAuth global policy | Partial | Global VLANs, order, basic actions, enablement, MAC options, session limit, reauthentication and discovery. Guest-VLAN writes, voice action variants and additional timers remain. |
-| ACLs and bindings | Not yet | IPv4 standard/extended, IPv6 and MAC ACLs. |
+| ACLs and bindings | Partial | [Numbered IPv4 standard ACLs](docs/guides/acls.md) and source rules. Extended IPv4, IPv6, MAC ACLs, bindings and additional rule options remain. |
 | BGP | Not yet | Planned for SSH configuration support. |
 | Routing policy | Not yet | Prefix lists, route maps, AS-path filters and community lists. |
 | Global system settings | Not yet | Hostname and other system configuration fields. |

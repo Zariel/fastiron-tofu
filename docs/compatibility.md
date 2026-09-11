@@ -4,7 +4,7 @@ The provider has no firmware or model allowlist and does not require an expected
 
 ## Tested platform
 
-Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, build `SPR09010kB114ae.bin`) on an ICX 7150-C12. ICX 7250 testing has not yet run. These are tested versions, not requirements.
+Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, build `SPR09010kB114ae.bin`) on an ICX 7150-C12P. ICX 7250 testing has not yet run. These are tested versions, not requirements.
 
 ## Available configuration resources
 
@@ -27,6 +27,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | AAA servers | Individual RADIUS/TACACS server addresses, protocol ports, purposes and shared keys |
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
+| Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
 Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md).
@@ -34,6 +35,8 @@ Data sources report active firmware, DNS servers, LLDP interface settings, PoE i
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits
+
+- ACL support currently covers numbered standard IPv4 ACLs and source-address rules; see [ACL ownership and limits](guides/acls.md). Other families, bindings and additional rule settings remain.
 
 - Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
