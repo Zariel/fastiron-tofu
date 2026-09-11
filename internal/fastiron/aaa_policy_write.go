@@ -1,0 +1,204 @@
+package fastiron
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"path"
+	"slices"
+	"strings"
+)
+
+func ValidateAAAPolicy(p AAAPolicy) error {
+	if len(p.LoginMethods) < 1 || len(p.LoginMethods) > 3 {
+		return errors.New("login_methods must contain one to three distinct methods")
+	}
+	seen := map[string]bool{}
+	for _, method := range p.LoginMethods {
+		if !slices.Contains([]string{"local", "radius", "tacacs+"}, method) || seen[method] {
+			return errors.New("login_methods must be distinct local, radius or tacacs+ methods in attempt order")
+		}
+		seen[method] = true
+	}
+	if p.Dot1XDefault != "" && p.Dot1XDefault != "none" && p.Dot1XDefault != "radius" {
+		return errors.New("dot1x_default must be unset, none or radius")
+	}
+	seen = map[string]bool{}
+	for _, action := range p.CoAIgnore {
+		if !slices.Contains([]string{"disable-port", "dm-request", "flip-port", "modify-acl", "reauth-host"}, action) || seen[action] {
+			return errors.New("coa_ignore must contain distinct supported CoA actions")
+		}
+		seen[action] = true
+	}
+	return nil
+}
+
+func nativeAAAPolicy(output string) (*AAAPolicy, []string, error) {
+	p := &AAAPolicy{}
+	var neighbors []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(output, "\n") {
+		f := strings.Fields(line)
+		line = strings.Join(f, " ")
+		key := ""
+		switch {
+		case strings.HasPrefix(line, "aaa authentication login "):
+			key = "login"
+			if len(f) < 5 || f[3] != "default" {
+				return nil, nil, errors.New("native login policy has settings outside RESTCONF ownership")
+			}
+			p.LoginMethods = slices.Clone(f[4:])
+		case strings.HasPrefix(line, "aaa authentication dot1x "):
+			key = "dot1x"
+			if len(f) != 5 || f[3] != "default" {
+				return nil, nil, errors.New("native dot1x policy has settings outside RESTCONF ownership")
+			}
+			p.Dot1XDefault = f[4]
+		case strings.HasPrefix(line, "aaa authorization coa "):
+			if len(f) == 4 && f[3] == "enable" {
+				key = "coa-enable"
+				p.CoAEnabled = true
+			} else if len(f) >= 5 && f[3] == "ignore" {
+				p.CoAIgnore = append(p.CoAIgnore, f[4:]...)
+			} else {
+				return nil, nil, errors.New("native CoA policy has settings outside RESTCONF ownership")
+			}
+		default:
+			neighbors = append(neighbors, line)
+		}
+		if key != "" {
+			if seen[key] {
+				return nil, nil, errors.New("duplicate native AAA policy configuration")
+			}
+			seen[key] = true
+		}
+	}
+	if err := ValidateAAAPolicy(*p); err != nil {
+		return nil, nil, errors.New("native AAA policy has unsupported or incomplete settings")
+	}
+	slices.Sort(p.CoAIgnore)
+	return p, neighbors, nil
+}
+
+func sameAAAPolicy(a, b AAAPolicy) bool {
+	return slices.Equal(a.LoginMethods, b.LoginMethods) && a.Dot1XDefault == b.Dot1XDefault && a.CoAEnabled == b.CoAEnabled && slices.Equal(a.CoAIgnore, b.CoAIgnore)
+}
+
+// AAAConfiguration distinguishes an absent native dot1x policy from explicit
+// none authentication, which RESTCONF reports identically.
+func (d *Device) AAAConfiguration(ctx context.Context) (*AAAPolicy, error) {
+	if _, err := d.Discover(ctx); err != nil {
+		return nil, err
+	}
+	p, _, err := d.aaaConfiguration(ctx)
+	return p, err
+}
+
+func (d *Device) aaaConfiguration(ctx context.Context) (*AAAPolicy, []string, error) {
+	projected, err := d.AAAPolicy(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	output, err := d.cli.Run(ctx, true, "show running-config")
+	if err != nil {
+		return nil, nil, err
+	}
+	native, neighbors, err := nativeAAAPolicy(output[0])
+	if err != nil {
+		return nil, nil, err
+	}
+	comparable := *native
+	if comparable.Dot1XDefault == "" {
+		comparable.Dot1XDefault = "none"
+	}
+	if !sameAAAPolicy(comparable, *projected) {
+		return native, nil, errors.New("native and RESTCONF AAA policy disagree; retry after synchronization")
+	}
+	return native, neighbors, nil
+}
+
+func (d *Device) ApplyAAAPolicy(ctx context.Context, desired AAAPolicy) (*AAAPolicy, error) {
+	if err := d.CheckAAAChanges(); err != nil {
+		return nil, err
+	}
+	if err := ValidateAAAPolicy(desired); err != nil {
+		return nil, err
+	}
+	desired.CoAIgnore = slices.Clone(desired.CoAIgnore)
+	slices.Sort(desired.CoAIgnore)
+
+	unlock, err := d.lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	if _, err := d.Discover(ctx); err != nil {
+		return nil, err
+	}
+	current, neighbors, err := d.aaaConfiguration(ctx)
+	if err != nil {
+		return current, err
+	}
+
+	// Verify each native command family before moving to the next. In particular,
+	// CoA's parent PATCH can update the REST projection without applying ignores.
+	write := func(method, endpoint string, body any, expected AAAPolicy) error {
+		writeErr := d.rest.Do(ctx, method, endpoint, body, nil)
+		observed, after, readErr := d.aaaConfiguration(ctx)
+		if observed != nil {
+			current = observed
+		}
+		if readErr != nil {
+			return errors.Join(writeErr, readErr)
+		}
+		if !slices.Equal(neighbors, after) {
+			return errors.Join(writeErr, errors.New("AAA policy operation changed unrelated native configuration"))
+		}
+		if !sameAAAPolicy(*current, expected) {
+			return errors.Join(writeErr, errors.New("AAA policy did not converge"))
+		}
+		return writeErr
+	}
+	root := "/system/aaa"
+	if !slices.Equal(current.CoAIgnore, desired.CoAIgnore) {
+		flags := map[string]bool{}
+		for _, action := range []string{"disable-port", "dm-request", "flip-port", "modify-acl", "reauth-host"} {
+			flags[action] = slices.Contains(desired.CoAIgnore, action)
+		}
+		expected := *current
+		expected.CoAIgnore = desired.CoAIgnore
+		if err := write(http.MethodPatch, path.Join(root, "authorization/coa/ignore"), map[string]any{"ignore": flags}, expected); err != nil {
+			return current, err
+		}
+	}
+	if current.CoAEnabled != desired.CoAEnabled {
+		expected := *current
+		expected.CoAEnabled = desired.CoAEnabled
+		if err := write(http.MethodPatch, path.Join(root, "authorization/coa"), map[string]any{"coa": map[string]bool{"enable": desired.CoAEnabled}}, expected); err != nil {
+			return current, err
+		}
+	}
+	if current.Dot1XDefault != desired.Dot1XDefault {
+		expected := *current
+		expected.Dot1XDefault = desired.Dot1XDefault
+		method, endpoint := http.MethodDelete, path.Join(root, "authentication/dot1x")
+		var body any
+		if desired.Dot1XDefault != "" {
+			method, endpoint = http.MethodPatch, path.Join(root, "authentication")
+			body = map[string]any{"authentication": map[string]any{"icx-openconfig-aaa-aug:dot1x": map[string]string{"default": desired.Dot1XDefault}}}
+		}
+		if err := write(method, endpoint, body, expected); err != nil {
+			return current, err
+		}
+	}
+	// Login policy changes run last because they can change transport access.
+	if !slices.Equal(current.LoginMethods, desired.LoginMethods) {
+		if err := write(http.MethodPut, path.Join(root, "authentication/login"), map[string]any{"login": map[string]any{"default": desired.LoginMethods}}, desired); err != nil {
+			return current, err
+		}
+	}
+	if d.config.Persistence == "after_each_write" {
+		return current, d.save(ctx)
+	}
+	return current, nil
+}
