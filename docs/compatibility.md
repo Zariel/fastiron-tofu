@@ -20,6 +20,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | OSPF | Default-VRF area existence and interface bindings |
 | Static routing | One IPv4 prefix and gateway relationship in the default VRF |
 | DNS | Individual server addresses |
+| AAA servers | Individual RADIUS/TACACS server addresses, protocol ports, purposes and shared keys |
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
 | Persistence | Automatic saves or explicit configuration-save resource |
@@ -29,6 +30,8 @@ Data sources report active firmware, DNS servers, LLDP interface settings, PoE i
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits
+
+- AAA user/policy configuration and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
 - Ethernet speed, duplex and clock settings are not yet managed. On the tested `09.0.10kT213` build, RESTCONF auto-negotiation updates and individual leaf deletions did not restore native automatic speed. Deleting the Ethernet container restored speed but also changed an unrelated DHCP-client setting, so it is unsuitable for narrowly owned resource cleanup.
 - Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).
