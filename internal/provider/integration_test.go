@@ -1,14 +1,10 @@
 package provider
 
 import (
-	"bufio"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"maps"
 	"net"
 	"net/http"
@@ -25,8 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
+	"github.com/zariel/fastiron-tofu/internal/testswitch"
 )
 
 // This simulator exercises the real plugin protocol, not hardware compatibility.
@@ -80,76 +75,10 @@ func newSwitch(t *testing.T) *testSwitch {
 	s.addresses = map[string]int{}
 	s.lldp, s.lldpPort = true, true
 	s.poe = true
-	s.server = httptest.NewTLSServer(http.HandlerFunc(s.restconf))
-	t.Cleanup(s.server.Close)
-	_, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	signer, err := ssh.NewSignerFromKey(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg := &ssh.ServerConfig{PasswordCallback: func(ssh.ConnMetadata, []byte) (*ssh.Permissions, error) { return nil, nil }}
-	cfg.AddHostKey(signer)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.sshAddress = listener.Addr().String()
-	s.knownHosts = knownhosts.Line([]string{s.sshAddress}, signer.PublicKey())
-	var connections sync.Map
-	var workers sync.WaitGroup
-	workers.Go(func() {
-		for {
-			raw, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			connections.Store(raw, true)
-			workers.Go(func() {
-				defer connections.Delete(raw)
-				defer raw.Close()
-				conn, chans, reqs, err := ssh.NewServerConn(raw, cfg)
-				if err != nil {
-					return
-				}
-				defer conn.Close()
-				go ssh.DiscardRequests(reqs)
-				for request := range chans {
-					channel, reqs, err := request.Accept()
-					if err != nil {
-						return
-					}
-					for req := range reqs {
-						if req.Type == "pty-req" {
-							req.Reply(true, nil)
-							continue
-						}
-						if req.Type != "shell" {
-							req.Reply(false, nil)
-							continue
-						}
-						req.Reply(true, nil)
-						go ssh.DiscardRequests(reqs)
-						io.WriteString(channel, "switch#")
-						scanner := bufio.NewScanner(channel)
-						for scanner.Scan() {
-							command := scanner.Text()
-							output := s.command(command)
-							fmt.Fprintf(channel, "%s\r\n%s\r\nswitch#", command, strings.ReplaceAll(output, "\n", "\r\n"))
-						}
-						return
-					}
-				}
-			})
-		}
-	})
-	t.Cleanup(func() {
-		listener.Close()
-		connections.Range(func(k, v any) bool { k.(net.Conn).Close(); return true })
-		workers.Wait()
-	})
+	transport := testswitch.New(t, s.command)
+	transport.HandleFunc("/", s.restconf)
+	s.server = transport.REST
+	s.sshAddress, s.knownHosts = transport.SSHAddress, transport.KnownHosts
 	return s
 }
 
