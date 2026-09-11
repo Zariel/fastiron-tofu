@@ -76,4 +76,6 @@ tofu import fastiron_mac_access_group.lag 'lag 1 in'
 
 The provider verifies native configuration and removes stale REST entries left behind by binding changes. `persistence_pending` indicates that reconciliation, stale-entry cleanup or saving needs a retry. Refresh retains pending cleanup after a failed deletion so the next apply can finish it.
 
+Hardware workflows on the [tested firmware](../compatibility.md) covered all three binding families: creation with ACL dependencies, default direction, changes and changes back, import, external drift correction, interface/direction replacement, and deletion before ACL parents. Each phase checked running/startup configuration over serial, REST entries, neighboring bindings and a no-change plan.
+
 Bindings that contain additional native settings, including `logging enable`, cannot currently be adopted by these resources. VLAN and VE binding configuration is not yet implemented. VE REST requests returned HTTP 500 during testing; the VLAN/VE binding API needs further investigation.
