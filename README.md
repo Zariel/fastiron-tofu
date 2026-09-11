@@ -29,7 +29,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Local users | Implemented | Usernames, privileges and passwords; privilege discovery. External password changes cannot currently be detected. |
 | RADIUS/TACACS servers | Partial | Addresses, protocol ports, purposes and shared keys. Keyless TACACS, additional options and remote secret drift detection remain. |
 | AAA policy | Partial | Ordered login methods, default dot1x authentication and CoA settings. Extended authentication services remain. |
-| FlexAuth interfaces | In progress | Discovery is available. Per-port dot1x/MAC enablement and port-control writes are undergoing hardware lifecycle verification. |
+| FlexAuth interfaces | Partial | Dot1x/MAC enablement, port-control and discovery. Global policy and failure/timeout action integration remain. |
 | FlexAuth global policy | Not yet | Global settings and failure/timeout action integration remain. |
 | ACLs and bindings | Not yet | IPv4 standard/extended, IPv6 and MAC ACLs. |
 | BGP | Not yet | Planned for SSH configuration support. |
