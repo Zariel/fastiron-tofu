@@ -44,7 +44,7 @@ def redact(output):
     # Configuration secret fields are redacted as whole lines, including hashes.
     secret = re.compile(
         r"(?i)\b(?:password|secret|community|authentication-key|"
-        r"auth-key|key-string|private-key|shared-secret)\b"
+        r"auth-key|key-string|private-key|shared-secret|key)\b"
     )
     lines = ["[secret configuration redacted]" if secret.search(line) else line for line in output.splitlines()]
     for name in ("FASTIRON_PASSWORD", "FASTIRON_ENABLE_PASSWORD"):

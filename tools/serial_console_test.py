@@ -78,6 +78,16 @@ class ConsoleTest(unittest.TestCase):
         with self.assertRaisesRegex(ConsoleError, "control characters"):
             console.send("show version\rwrite memory")
 
+    def test_aaa_keys(self):
+        for command in (
+            "radius-server host 192.0.2.53 auth-port 1812 key test-radius-value",
+            "tacacs-server host 192.0.2.54 auth-port 49 key 2 encoded-value",
+            "radius-server key global-radius-value",
+            "tacacs-server key global-tacacs-value",
+        ):
+            with self.subTest(command=command.split(" key")[0]):
+                self.assertEqual(redact(command), "[secret configuration redacted]")
+
 
 if __name__ == "__main__":
     unittest.main()
