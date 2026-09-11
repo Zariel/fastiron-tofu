@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -24,7 +25,10 @@ type Client struct {
 	config         *gossh.ClientConfig
 	timeout        time.Duration
 	enablePassword string
+	gate           chan struct{}
 }
+
+var endpoints sync.Map
 
 func New(cfg Config) (*Client, error) {
 	if _, _, err := net.SplitHostPort(cfg.Address); err != nil {
@@ -66,7 +70,16 @@ func New(cfg Config) (*Client, error) {
 	if len(auth) == 0 {
 		return nil, errors.New("SSH requires a password or private key")
 	}
-	return &Client{address: cfg.Address, timeout: cfg.Timeout, enablePassword: cfg.EnablePassword, config: &gossh.ClientConfig{User: cfg.Username, Auth: auth, HostKeyCallback: hostKey, Timeout: cfg.Timeout}}, nil
+	host, port, _ := net.SplitHostPort(cfg.Address)
+	key := net.JoinHostPort(strings.ToLower(strings.TrimSuffix(host, ".")), port)
+	gate, _ := endpoints.LoadOrStore(key, make(chan struct{}, 1))
+	return &Client{
+		address:        cfg.Address,
+		timeout:        cfg.Timeout,
+		enablePassword: cfg.EnablePassword,
+		gate:           gate.(chan struct{}),
+		config:         &gossh.ClientConfig{User: cfg.Username, Auth: auth, HostKeyCallback: hostKey, Timeout: cfg.Timeout},
+	}, nil
 }
 
 // Run uses an isolated shell so failed commands cannot leave a later operation
@@ -79,6 +92,15 @@ func (c *Client) Run(ctx context.Context, privileged bool, commands ...string) (
 	}
 	if c.enablePassword != "" && !validLine(c.enablePassword) {
 		return nil, errors.New("enable password contains unsupported control characters")
+	}
+	// Concurrent CLI sessions can duplicate or omit running-config sections while
+	// still returning a complete prompt. Serialize across clients for this endpoint.
+	// Queueing uses the caller's deadline; the SSH timeout bounds an active session.
+	select {
+	case c.gate <- struct{}{}:
+		defer func() { <-c.gate }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
