@@ -30,7 +30,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | RADIUS/TACACS servers | Partial | Addresses, protocol ports, purposes and shared keys. Keyless TACACS, additional options and remote secret drift detection remain. |
 | AAA policy | Partial | Ordered login methods, default dot1x authentication and CoA settings. Extended authentication services remain. |
 | FlexAuth interfaces | Partial | Dot1x/MAC enablement, port-control, discovery, and basic global action reapplication. Voice-VLAN action variants remain. |
-| FlexAuth global policy | Partial | Global VLAN, order, action and feature-setting discovery. Global configuration resources and additional timers remain. |
+| FlexAuth global policy | Partial | Global VLANs, order, basic actions, enablement, MAC options, session limit, reauthentication and discovery. Guest-VLAN writes, voice action variants and additional timers remain. |
 | ACLs and bindings | Not yet | IPv4 standard/extended, IPv6 and MAC ACLs. |
 | BGP | Not yet | Planned for SSH configuration support. |
 | Routing policy | Not yet | Prefix lists, route maps, AS-path filters and community lists. |

@@ -24,7 +24,40 @@ The data source reads native configuration over SSH. On the tested firmware, cha
 
 Discovery requires the provider's SSH credentials and host trust configuration. It does not require `allow_aaa_changes` and does not modify or save switch configuration. These are configuration flags: global feature initialization, AAA policy, VLAN requirements, and connected clients determine whether authentication actually takes place.
 
-This is separate from [AAA login, default dot1x, and CoA policy](aaa.md). Global settings can be read with `fastiron_authentication`; global configuration resources remain under development. Hardware workflows verified enablement, repeated mode changes, import, disablement, destroy and recreation, with independent running/startup checks and neighboring-port preservation. Client authentication exchanges and reboot persistence were not tested.
+This is separate from [AAA login, default dot1x, and CoA policy](aaa.md). `fastiron_authentication` provides a global resource and data source. Guest-VLAN writes, voice action variants, and additional timers remain unsupported by the global resource. Hardware workflows verified enablement, repeated mode changes, import, disablement, destroy and recreation, with independent running/startup checks and neighboring-port preservation. Client authentication exchanges and reboot persistence were not tested.
+
+## Configure global authentication
+
+Set `allow_aaa_changes = true` on the provider. Manage global initialization separately from port settings:
+
+```hcl
+resource "fastiron_vlan" "authentication" {
+  vlan_id = 100
+  name    = "AUTHENTICATION"
+}
+
+resource "fastiron_authentication" "switch" {
+  auth_default_vlan          = fastiron_vlan.authentication.vlan_id
+  dot1x_enabled              = true
+  mac_authentication_enabled = true
+}
+```
+
+The global resource owns `auth_default_vlan`, `restricted_vlan`, `critical_vlan`, `voice_vlan`, `auth_order`, `max_sessions`, `re_authentication`, `dot1x_enabled`, `mac_authentication_enabled`, `mac_dot1x_disable`, `mac_dot1x_override`, `failure_action`, and `timeout_action`.
+
+Optional VLANs and actions are unconfigured when omitted. Authentication order defaults to `dot1x mac-auth`, `max_sessions` defaults to 2, and boolean settings default to false. Every referenced VLAN must already exist. Global enablement requires `auth_default_vlan`. `failure_action = "restricted-vlan"` requires `restricted_vlan`; `timeout_action = "critical-vlan"` requires `critical_vlan`. Other timeout actions are `success` and `failure`.
+
+Guest VLAN and additional timers, including `reauth-period`, remain outside this resource's ownership and are preserved. The tested firmware's guest-VLAN DELETE can clear the REST view while leaving native configuration unchanged, so guest-VLAN writes are not exposed here. Existing global action variants with `voice voice-vlan` prevent global writes; their RESTCONF lifecycle is not yet supported.
+
+Destroy resets owned settings to their defaults. Disabling a global authentication feature is rejected while a port still has that feature enabled, because FastIron would remove its port configuration. Declare the interface resource's dependency on the global resource so OpenTofu disables ports before resetting global settings.
+
+Changed actions are cleared before removing their VLAN prerequisites and applied after the remaining settings. These transitions may briefly use the switch's default action. After a failure, `persistence_pending` records that reconciliation or saving is incomplete. Retry the apply: unchanged native action text does not prove a failed action application succeeded, so desired actions are reapplied before saving. Writes are verified against native configuration, and unrelated changes stop the operation before persistence.
+
+Import the global configuration with:
+
+```sh
+tofu import fastiron_authentication.switch authentication
+```
 
 ## Configure one interface
 
@@ -36,6 +69,8 @@ resource "fastiron_authentication_interface" "access" {
   dot1x_enabled              = true
   mac_authentication_enabled = true
   port_control               = "auto"
+
+  depends_on = [fastiron_authentication.switch]
 }
 ```
 

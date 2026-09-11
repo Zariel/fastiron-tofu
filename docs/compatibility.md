@@ -21,6 +21,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Static routing | One IPv4 prefix and gateway relationship in the default VRF |
 | DNS | Individual server addresses |
 | Local users | Individual usernames, privileges and passwords |
+| Global authentication | Authentication VLANs, global enablement, order, basic actions, MAC options, session limit and reauthentication |
 | Interface authentication | Dot1x/MAC enablement and port-control on one Ethernet interface; global initialization is separate |
 | AAA policy | Ordered login methods, default dot1x authentication, CoA enable and ignored actions |
 | AAA servers | Individual RADIUS/TACACS server addresses, protocol ports, purposes and shared keys |
@@ -28,14 +29,15 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | PoE | Ethernet administrative enable state |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
-Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [per-port FlexAuth configuration](guides/authentication.md).
+Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md).
 
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits
 
-- Extended AAA authentication services, global FlexAuth policy and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
+- Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
+- Global FlexAuth guest-VLAN writes, voice action variants and additional timers are not yet supported; see [authentication ownership and limits](guides/authentication.md).
 - Ethernet speed, duplex and clock settings are not yet managed. On the tested `09.0.10kT213` build, RESTCONF auto-negotiation updates and individual leaf deletions did not restore native automatic speed. Deleting the Ethernet container restored speed but also changed an unrelated DHCP-client setting, so it is unsuitable for narrowly owned resource cleanup.
 - Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).
 - OSPF currently manages area existence and interface bindings; see [OSPF ownership and limits](guides/ospf.md).
