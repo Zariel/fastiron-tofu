@@ -32,10 +32,12 @@ import (
 // This simulator exercises the real plugin protocol, not hardware compatibility.
 // Its running and startup maps provide an independent observation path.
 type testSwitch struct {
-	stp        *stpSwitch
-	stpPorts   *stpPortSwitch
-	aaaServers string
-	aaa        *aaaSwitch
+	stp          *stpSwitch
+	stpPorts     *stpPortSwitch
+	aaaServers   string
+	users        string
+	userAccounts *userSwitch
+	aaa          *aaaSwitch
 
 	ospf *ospfSwitch
 
@@ -160,11 +162,15 @@ func (s *testSwitch) command(command string) string {
 		if s.falseSave {
 			return "Write startup-config done."
 		}
+		usersUnchanged := s.userAccounts == nil || maps.Equal(s.userAccounts.running, s.userAccounts.startup)
+		if s.userAccounts != nil {
+			s.userAccounts.startup = maps.Clone(s.userAccounts.running)
+		}
 		aaaUnchanged := s.aaa == nil || maps.Equal(s.aaa.running, s.aaa.startup)
 		if s.aaa != nil {
 			s.aaa.startup = maps.Clone(s.aaa.running)
 		}
-		unchanged := aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
+		unchanged := usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
 		if s.lags != nil {
 			lagConfig := s.lags.configuration()
 			unchanged = unchanged && lagConfig == s.startupLAG
@@ -199,6 +205,9 @@ func (s *testSwitch) command(command string) string {
 		return "Write startup-config done."
 	case "show running-config":
 		text := s.configuration(s.running, s.ethernet, s.memberships)
+		if s.userAccounts != nil {
+			text = strings.TrimSuffix(text, "end") + userConfig(s.userAccounts.running, s.userAccounts.protected) + "end"
+		}
 		if s.aaa != nil {
 			text = strings.TrimSuffix(text, "end") + aaaConfiguration(s.aaa.running) + "end"
 		}
@@ -219,6 +228,9 @@ func (s *testSwitch) command(command string) string {
 		}
 		return strings.TrimSuffix(text, "end") + managementConfiguration(s.managementAddresses) + "end"
 	case "show configuration":
+		if s.userAccounts != nil {
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + userConfig(s.userAccounts.startup, s.userAccounts.protected) + "end"
+		}
 		if s.aaa != nil {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + aaaConfiguration(s.aaa.startup) + "end"
 		}
@@ -290,6 +302,14 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.userAccounts != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/system/aaa/authentication/users") {
+		s.userAccounts.rest(w, r)
+		return
+	}
+	if s.users != "" && r.Method == "GET" && r.URL.Path == "/restconf/data/system/aaa/authentication/users" {
+		fmt.Fprint(w, s.users)
+		return
+	}
 	if s.aaa != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/system/aaa/server-groups") {
 		s.aaa.rest(w, r)
 		return
