@@ -86,8 +86,18 @@ output "local_user_privileges" {
   value = data.fastiron_aaa_users.switch.users
 }
 
-data "fastiron_aaa" "switch" {}
+data "fastiron_aaa" "switch" {
+  depends_on = [fastiron_aaa.policy]
+}
 
 output "policy" {
   value = data.fastiron_aaa.switch
+}
+
+resource "fastiron_aaa" "policy" {
+  login_methods = ["radius", "local"]
+  coa_enabled   = true
+  coa_ignore    = ["dm-request"]
+
+  depends_on = [fastiron_aaa_radius_server.authentication]
 }

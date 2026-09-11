@@ -21,6 +21,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Static routing | One IPv4 prefix and gateway relationship in the default VRF |
 | DNS | Individual server addresses |
 | Local users | Individual usernames, privileges and passwords |
+| AAA policy | Ordered login methods, default dot1x authentication, CoA enable and ignored actions |
 | AAA servers | Individual RADIUS/TACACS server addresses, protocol ports, purposes and shared keys |
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
@@ -32,7 +33,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 
 ## Limits
 
-- AAA authentication-policy configuration and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
+- Extended AAA authentication services, interface port-access policy and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
 - Ethernet speed, duplex and clock settings are not yet managed. On the tested `09.0.10kT213` build, RESTCONF auto-negotiation updates and individual leaf deletions did not restore native automatic speed. Deleting the Ethernet container restored speed but also changed an unrelated DHCP-client setting, so it is unsuitable for narrowly owned resource cleanup.
 - Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).

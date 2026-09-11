@@ -1,4 +1,4 @@
-# AAA servers and local users
+# AAA configuration
 
 The `fastiron_aaa_radius_server` and `fastiron_aaa_tacacs_server` resources each own one server. Enable AAA writes explicitly:
 
@@ -70,7 +70,7 @@ output "aaa_servers" {
 
 If discovery must reflect servers changed in the same apply, add `depends_on` referencing those resources to the data source.
 
-Authentication-policy resources are not yet available. Keyed server CRUD and saved configuration have been tested; end-to-end authentication against a live RADIUS or TACACS service has not.
+Keyed server CRUD and saved configuration have been tested; end-to-end authentication against a live RADIUS or TACACS service has not.
 
 ## Local users
 
@@ -125,6 +125,46 @@ output "aaa_policy" {
 }
 ```
 
-The policy data source exposes `login_methods` in authentication attempt order, `dot1x_default` as reported by the switch, `coa_enabled`, and `coa_ignore` as a set of ignored Change of Authorization actions. CoA enable state and ignored actions are independent: disabling CoA can leave ignore settings configured.
+The policy data source exposes `login_methods` in authentication attempt order, `dot1x_default` with an absent RESTCONF policy normalized to `none`, `coa_enabled`, and `coa_ignore` as a set of ignored Change of Authorization actions. CoA enable state and ignored actions are independent: disabling CoA can leave ignore settings configured.
 
-Policy discovery does not require AAA write opt-in. It excludes account credentials and server keys and does not test an authentication server or establish that a client can authenticate. Missing required policy containers, login methods or CoA settings produce an error instead of reporting assumed defaults. Policy configuration resources remain under development.
+Policy discovery does not require AAA write opt-in. It excludes account credentials and server keys and does not test an authentication server or establish that a client can authenticate. Missing required policy containers, login methods or CoA settings produce an error instead of reporting assumed defaults.
+
+## Policy configuration
+
+`fastiron_aaa` owns the login authentication method list, default dot1x authentication policy, and CoA enable/ignore settings together. Configure only one instance per switch and enable `allow_aaa_changes` on the provider.
+
+```hcl
+resource "fastiron_aaa" "policy" {
+  login_methods = ["radius", "local"]
+  coa_enabled   = true
+  coa_ignore    = ["dm-request"]
+
+  depends_on = [fastiron_aaa_radius_server.authentication]
+}
+```
+
+`login_methods` is required: provide one to three distinct `local`, `radius`, or `tacacs+` methods in attempt order. The configured methods must permit the provider's credentials to authenticate. Configure the corresponding users and servers separately; explicit dependencies ensure a server exists before selecting it and remains until policy reset completes.
+
+`coa_enabled` defaults to false. `coa_ignore` defaults to an empty set and accepts `disable-port`, `dm-request`, `flip-port`, `modify-acl`, and `reauth-host`. Omitted CoA fields restore those defaults; this resource owns the entire CoA policy.
+
+`dot1x_default` has three distinct configurations:
+
+| Configuration | Native policy |
+|---|---|
+| Omitted or null | No configured default dot1x authentication policy |
+| `"radius"` | Authenticate dot1x clients through RADIUS |
+| `"none"` | Authenticate clients without checking their credentials |
+
+An empty string is invalid. The resource uses native configuration to distinguish absence from explicit `none`, because RESTCONF reports both as `none`. The data source's `dot1x_default` normalizes an absent RESTCONF policy to `none`, matching the firmware's default projection. Interface port-access authentication settings are independently configured.
+
+**Destroy resets login methods to `["local"]`, removes the dot1x policy, disables CoA, and clears ignored actions.** It does not restore the policy that preceded resource ownership. At least one usable local account must remain for local login. The tested firmware rejects deleting every login authentication method, so reset uses an explicit local method instead.
+
+Import the singleton policy with:
+
+```sh
+tofu import fastiron_aaa.policy aaa
+```
+
+Native login `privilege-mode`, extended dot1x method lists, and unsupported CoA options currently prevent resource operations. Other authentication services, account credentials, and server configuration remain independently managed. Login changes run after other policy updates; native verification detects incomplete writes before subsequent changes. Resolve the reported error and retry apply or destroy when `persistence_pending` is true.
+
+Hardware testing covered creation, local/RADIUS method ordering, import, explicit `none`, dot1x removal, no-change plans, reset, and saved configuration checked independently over serial. It did not exercise RADIUS client authentication or CoA packets against a live server. Enable/web/SNMP authentication method configuration and interface port-access policy are not yet managed by this resource.
