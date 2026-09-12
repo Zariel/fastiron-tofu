@@ -28,7 +28,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
-| ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet or LAG interfaces |
+| ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet, LAG or whole VLANs |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
 Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md).
@@ -37,7 +37,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 
 ## Limits
 
-- ACL support covers numbered standard IPv4 definitions and Ethernet/LAG access-group bindings; see [ACL ownership and limits](guides/acls.md). Other ACL definitions, VLAN/VE bindings and additional settings remain.
+- ACL support covers numbered standard IPv4 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). Other ACL definitions, VE targets, logging and VLAN port subsets are not implemented.
 
 - Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
