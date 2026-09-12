@@ -28,6 +28,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | LLDP | Global and Ethernet enable state |
 | PoE | Ethernet administrative enable state |
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
+| Extended IPv4 ACLs | Named or numbered ACLs with ordered prefixes, protocols, TCP/UDP ports and DSCP/priority markings |
 | ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet, LAG or whole VLANs |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
@@ -37,7 +38,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 
 ## Limits
 
-- ACL support covers numbered standard IPv4 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). Other ACL definitions, logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
+- ACL support covers numbered standard and named or numbered extended IPv4 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). IPv6/MAC definitions, logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
 
 - Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 

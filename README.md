@@ -33,7 +33,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | FlexAuth interfaces | Partial | Dot1x/MAC enablement, port-control, discovery, and basic global action reapplication. Voice-VLAN action variants remain. |
 | FlexAuth global policy | Partial | Global VLANs, order, basic actions, enablement, MAC options, session limit, reauthentication and discovery. Guest-VLAN writes, voice action variants and additional timers remain. |
 | IPv4 standard ACLs | Implemented | [Numbered ACLs](docs/guides/acls.md) with ordered source-prefix rules, including empty ACLs. Named standard ACLs are unavailable through the documented RESTCONF API. |
-| IPv4 extended ACLs | Not yet | Protocol, source/destination addresses, ports and marking fields. |
+| IPv4 extended ACLs | Implemented | [Ordered rules](docs/guides/acls.md) with prefixes, protocol numbers, TCP/UDP ports and DSCP/priority markings. Named/numbered and empty ACLs; logging is unavailable through the tested RESTCONF API. |
 | IPv6 ACLs | Not yet | IPv6 rule definitions. Existing ACLs can be bound through access-group resources. |
 | MAC ACLs | Not yet | MAC rule definitions. Existing ACLs can be bound through access-group resources. |
 | ACL bindings | Implemented | [IPv4, IPv6 and MAC access groups](docs/guides/acls.md) on Ethernet, LAG and whole VLANs, with lifecycle and reboot validation. Logging and VLAN port subsets are excluded. |
