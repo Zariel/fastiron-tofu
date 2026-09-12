@@ -168,3 +168,30 @@ func TestDefaultProperties(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultRoutedProperties(t *testing.T) {
+	before, err := nativeDefault("ver 09.0.10k\nvlan 1 name DEFAULT-VLAN by port\nvlan 53 name INFRA by port\ninterface ve 1\n ip address 192.0.2.1 255.255.255.0\ninterface ve 53\n port-name INFRA\nend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := "ver 09.0.10k\ndefault-vlan-id 3966\nvlan 53 name INFRA by port\nvlan 3966 name DEFAULT-VLAN by port\ninterface ve 53\n port-name INFRA\ninterface ve 3966\n ip address 192.0.2.1 255.255.255.0\nend"
+	for _, tc := range []struct {
+		name, configuration string
+		preserved           bool
+	}{
+		{"renumbered VE", moved, true},
+		{"VE address changed", strings.Replace(moved, "192.0.2.1", "192.0.2.2", 1), false},
+		{"other VE changed", strings.Replace(moved, "port-name INFRA", "port-name OTHER", 1), false},
+		{"VE removed", strings.Replace(moved, "interface ve 3966\n ip address 192.0.2.1 255.255.255.0\n", "", 1), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			after, err := nativeDefault(tc.configuration)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.preserves(before) != tc.preserved {
+				t.Fatalf("preserved=%v; want %v", after.preserves(before), tc.preserved)
+			}
+		})
+	}
+}

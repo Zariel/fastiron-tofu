@@ -16,9 +16,9 @@ import (
 )
 
 type defaultState struct {
-	id                  int64
-	vlans               map[int64]bool
-	properties, unowned []string
+	id                          int64
+	vlans                       map[int64]bool
+	properties, routed, unowned []string
 }
 
 func readDefault(ctx context.Context, device *fastiron.Device) (defaultState, error) {
@@ -43,11 +43,24 @@ func nativeDefault(configuration string) (defaultState, error) {
 	}
 	state := defaultState{id: id, vlans: map[int64]bool{}}
 	active := false
+	routed := false
 	for _, line := range strings.Split(configuration, "\n") {
 		if line[0] != ' ' && line[0] != '\t' {
 			active = false
+			routed = false
 		}
 		if strings.HasPrefix(line, "default-vlan-id ") {
+			continue
+		}
+		// The native default VLAN move also renumbers its associated VE.
+		// Preserve that interface's configuration independently of its position.
+		if line == "interface ve "+strconv.FormatInt(id, 10) {
+			routed = true
+			state.routed = append(state.routed, "interface ve")
+			continue
+		}
+		if routed {
+			state.routed = append(state.routed, line)
 			continue
 		}
 		if strings.HasPrefix(line, "vlan ") {
@@ -76,7 +89,7 @@ func nativeDefault(configuration string) (defaultState, error) {
 }
 
 func (state defaultState) preserves(previous defaultState) bool {
-	return slices.Equal(state.properties, previous.properties) && slices.Equal(state.unowned, previous.unowned)
+	return slices.Equal(state.properties, previous.properties) && slices.Equal(state.routed, previous.routed) && slices.Equal(state.unowned, previous.unowned)
 }
 
 func cleanDefaultEntries(ctx context.Context, device *fastiron.Device, current defaultState) error {
