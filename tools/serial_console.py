@@ -20,7 +20,8 @@ PASSWORD = re.compile(r"(?i)password:\s*$")
 ERROR = re.compile(
     r"(?im)^\s*(?:%\s*(?:error|invalid|unknown|incomplete|ambiguous)|"
     r"error\s*[:\-]|invalid (?:input|command)|unknown command|"
-    r"incomplete command|ambiguous command|not authorized|permission denied|login incorrect)"
+    r"incomplete command|ambiguous command|not authorized|permission denied|login incorrect|"
+    r"ipv6 unicast-routing must be enabled before)"
 )
 
 
