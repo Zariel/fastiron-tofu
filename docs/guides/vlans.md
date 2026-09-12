@@ -44,6 +44,6 @@ After a default-VLAN change, RESTCONF can temporarily list both the former and c
 
 Hardware checks on the [tested firmware](../compatibility.md) covered default and unnamed VLANs, refresh after a name change, missing-VLAN diagnostics, collection refresh after deletion, and no-change plans. Serial checks verified that discovery left running and saved configuration unchanged.
 
-Default selection checks covered creation, updates including ID 4095, import, correction after a CLI change, reset to 1 and deletion. Serial checks confirmed saved configuration after changes and exact restoration of the original running and startup configuration after cleanup. Reboot validation for default selection remains pending.
+Default selection checks covered creation, updates including ID 4095, import, correction after a CLI change, reset to 1 and deletion. A configured VE retained its port name and IPv4 address through selection, reboot, a post-reboot update and reset. Serial checks confirmed saved configuration after changes, identical native configuration across reboot, and exact restoration of the original running and startup configuration after cleanup.
 
 See the [discovery example](../../examples/vlan-discovery/main.tf) and [default selection example](../../examples/default-vlan/main.tf) for provider configuration.
