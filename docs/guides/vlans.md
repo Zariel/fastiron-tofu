@@ -2,6 +2,8 @@
 
 `fastiron_vlan` manages VLAN existence and name for IDs 2 through 4094. Memberships, spanning tree, ACL bindings and routed interfaces have separate resources. Remove dependent configuration before deleting a VLAN.
 
+The ordinary VLAN resource refuses the currently selected default VLAN, even when its ID is not 1. The exact name `DEFAULT-VLAN` is reserved: FastIron interprets it as a request to move the global default VLAN, rather than a normal name change. Lowercase and mixed-case variants remain ordinary names. Default-VLAN selection is not yet managed by the provider.
+
 The `fastiron_vlan` and `fastiron_vlans` data sources read IDs and names through RESTCONF without taking ownership or saving configuration. They can read the default VLAN, which the resource does not manage.
 
 ```hcl

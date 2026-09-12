@@ -36,6 +36,9 @@ func Validate(v Config) error {
 	if len(v.Name) > 32 || !regexp.MustCompile(`^[A-Za-z0-9_.:-]*$`).MatchString(v.Name) {
 		return errors.New("VLAN name must contain at most 32 letters, digits, underscores, dots, colons, or hyphens")
 	}
+	if v.Name == "DEFAULT-VLAN" {
+		return errors.New("DEFAULT-VLAN selects the default VLAN; ordinary VLAN resources cannot set it")
+	}
 	return nil
 }
 
@@ -91,6 +94,9 @@ func check(ctx context.Context, d *fastiron.Device, v Config) error {
 	if _, err := d.Discover(ctx); err != nil {
 		return err
 	}
+	if err := rejectDefault(ctx, d, v.ID); err != nil {
+		return err
+	}
 	_, err := Read(ctx, d, v.ID)
 	if errors.Is(err, fastiron.ErrNotFound) {
 		return nil
@@ -110,6 +116,11 @@ func apply(ctx context.Context, d *fastiron.Device, v Config) (*Config, error) {
 	}
 	defer unlock()
 	if _, err = d.Discover(ctx); err != nil {
+		return nil, err
+	}
+	// The global default may have changed since planning. Its implicit VLAN
+	// and membership belong to a different configuration domain.
+	if err := rejectDefault(ctx, d, v.ID); err != nil {
 		return nil, err
 	}
 	current, err := Read(ctx, d, v.ID)
@@ -177,8 +188,12 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 }
 
 func vlanChildren(config string, id int64) error {
-	if _, err := fastiron.NormalizeConfiguration(config); err != nil {
+	defaultVLAN, err := defaultID(config)
+	if err != nil {
 		return errors.New("cannot verify VLAN children in running configuration")
+	}
+	if id == defaultVLAN {
+		return errors.New("the default VLAN is not managed by fastiron_vlan")
 	}
 	inside := false
 	for _, line := range strings.Split(config, "\n") {

@@ -42,7 +42,7 @@ func (r *Resource) Schema(_ context.Context, _ resource.SchemaRequest, resp *res
 	resp.Schema = schema.Schema{Description: "Owns VLAN existence and its name. Membership, spanning tree, and routed interfaces are separate domains. Import with vlan <id>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: vlan <id>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"vlan_id":             schema.Int64Attribute{Required: true, Description: "VLAN identifier, 2 through 4094. The default VLAN is not managed.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
-		"name":                schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString(""), Description: "VLAN name. Omission clears the name; import requires matching HCL to preserve a non-default name."},
+		"name":                schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString(""), Description: "VLAN name. Omission clears the name; import requires matching HCL to preserve a non-default name. DEFAULT-VLAN is reserved for global default VLAN selection."},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
 }
