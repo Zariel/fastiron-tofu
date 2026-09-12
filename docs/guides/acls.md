@@ -174,7 +174,31 @@ output "acl_inventory" {
 }
 ```
 
-Each entry contains `name`, `kind` (`ipv4_standard`, `ipv4_extended`, `ipv6` or `mac`) and the native `id` used by resource imports. Results are sorted by kind and name. Names are not unique across kinds. Empty ACLs and ACLs with unsupported rule options are included; appearing in the inventory does not mean an ACL satisfies the resource's ownership restrictions. Individual typed rule queries are not yet available.
+Each entry contains `name`, `kind` (`ipv4_standard`, `ipv4_extended`, `ipv6` or `mac`) and the native `id` used by resource imports. Results are sorted by kind and name. Names are not unique across kinds. Empty ACLs and ACLs with unsupported rule options are included; appearing in the inventory does not mean an ACL satisfies the resource's ownership restrictions.
+
+Use `fastiron_acl` to read an individual ACL's supported rules:
+
+```hcl
+data "fastiron_acl" "hosts" {
+  kind = "mac"
+  name = "HOSTS"
+}
+
+output "host_rules" {
+  value = data.fastiron_acl.hosts.rules
+}
+```
+
+The query returns `id` and a `rules` list in evaluation order. Rule fields use the same formats as their corresponding resources, including `any`, canonical addresses and inclusive port ranges such as `3000..4000`. Missing optional numeric matches or markings are null; explicit zero values remain zero.
+
+| Kind | Applicable rule fields |
+|---|---|
+| `ipv4_standard` | `sequence`, `action`, `source` |
+| `ipv4_extended` | `sequence`, `action`, `source`, `destination`, `protocol`, `source_port`, `destination_port`, `dscp`, `dscp_marking`, `internal_priority_marking` |
+| `ipv6` | Extended IPv4 fields plus `log` |
+| `mac` | `action`, `source`, `source_mask`, `destination`, `destination_mask`, `ethertype`, `log` |
+
+Other fields are null. MAC order comes from list position; `sequence` is null because REST entry IDs can change after reboot. An existing empty ACL returns `rules = []`. A missing ACL or unsupported native rule option produces a diagnostic rather than an incomplete rule list. Both discovery data sources use SSH to read native running configuration and do not change or save it. See the [read-only discovery example](../../examples/acl-discovery/main.tf).
 
 ## Updates and persistence
 

@@ -31,6 +31,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Extended IPv4 ACLs | Named or numbered ACLs with ordered prefixes, protocols, TCP/UDP ports and DSCP/priority markings |
 | IPv6 ACLs | Named ACLs with prefixes, protocols, TCP/UDP ports, markings and syslog actions |
 | MAC ACLs | Ordered MAC rules with arbitrary address masks, EtherType matches and logging; lifecycle, reboot, post-reboot updates and bound replacement verified |
+| ACL discovery | Native identity inventory and ordered typed rule queries for standard IPv4, extended IPv4, IPv6 and MAC ACLs; populated, empty and missing-query behavior verified without configuration changes |
 | ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet, LAG or whole VLANs |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
