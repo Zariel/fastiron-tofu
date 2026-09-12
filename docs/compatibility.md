@@ -29,6 +29,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | PoE | Ethernet administrative enable state |
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
 | Extended IPv4 ACLs | Named or numbered ACLs with ordered prefixes, protocols, TCP/UDP ports and DSCP/priority markings |
+| IPv6 ACLs | Named ACLs with prefixes, protocols, TCP/UDP ports, markings and syslog actions |
 | ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet, LAG or whole VLANs |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
@@ -38,7 +39,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 
 ## Limits
 
-- ACL support covers numbered standard and named or numbered extended IPv4 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). IPv6/MAC definitions, logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
+- ACL support covers numbered standard and named or numbered extended IPv4 definitions, IPv6 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). MAC definitions, IPv4 logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
 
 - Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
@@ -50,6 +51,6 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 - VE administrative enable state is not currently managed.
 - DNS IPv4 succeeded on the tested build; its endpoint rejected IPv6 DNS addresses.
 - PoE tests used a disconnected port. Reported power measurements under load have not been validated.
-- Reboot persistence was verified for populated and empty standard IPv4 ACLs and IPv4 VLAN, IPv6 Ethernet and MAC LAG bindings, including unchanged native configuration and a no-change OpenTofu plan after reload. This does not constitute exhaustive reboot validation of every resource.
+- Reboot persistence was verified for populated and empty standard IPv4, extended IPv4 and IPv6 ACLs, and IPv4 VLAN, IPv6 Ethernet and MAC LAG bindings, including unchanged native configuration and a no-change OpenTofu plan after reload. This does not constitute exhaustive reboot validation of every resource.
 
 Each resource owns only its documented settings. VLAN and VE deletion reject remaining child configuration. Avoid declaring the same remote object in multiple resources or states. Provider operations are serialized per hostname within one provider process; separate states, processes, DNS aliases, and external configuration changes require operator coordination.
