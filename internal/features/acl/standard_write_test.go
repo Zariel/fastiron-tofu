@@ -235,6 +235,12 @@ func TestStandardReferences(t *testing.T) {
 		"PIM neighbor":       {"interface ve 5\n ip pim neighbor-filter 90\n", true},
 		"join policy":        {"router pim\n jp-policy 192.0.2.1 90\n", true},
 		"slow path":          {"router pim\n slow-path-forwarding filter 90\n", true},
+		"VRF join policy":    {"router pim vrf blue\n jp-policy 90\n", true},
+		"RP":                 {"router pim\n rp-address 192.0.2.1 90\n", true},
+		"anycast RP":         {"router pim\n anycast-rp 192.0.2.1 90\n", true},
+		"SSM":                {"router pim\n ssm-enable range 90\n", true},
+		"IPv6 join policy":   {"ipv6 router pim\n jp-policy 90\n", false},
+		"IPv6 slow path":     {"ipv6 router pim\n slow-path-forwarding filter 90\n", false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := &standardSwitch{running: populatedStandard + tc.config + neighbor}

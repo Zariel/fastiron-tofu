@@ -10,7 +10,6 @@ import (
 	"path"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -162,10 +161,8 @@ func deleteStandard(ctx context.Context, d *fastiron.Device, name string) error 
 	if current == nil {
 		return d.Persist(ctx)
 	}
-	for _, line := range unowned {
-		if standardReference(line, name) {
-			return errors.New("remove native ACL references before deleting the ACL")
-		}
+	if referencesACL(unowned, ipv4ACL, name) {
+		return errors.New("remove native ACL references before deleting the ACL")
 	}
 	writeErr := d.DoREST(ctx, http.MethodDelete, standardPath(name), nil, nil)
 	if errors.Is(writeErr, restconf.ErrNotFound) {
@@ -185,23 +182,4 @@ func deleteStandard(ctx context.Context, d *fastiron.Device, name string) error 
 		return writeErr
 	}
 	return d.Persist(ctx)
-}
-
-func standardReference(line, name string) bool {
-	fields := strings.Fields(line)
-	command := strings.Join(fields, " ")
-	for _, prefix := range []string{
-		"ip access-group ", "ip access-class ", "access-class ",
-		"ssh access-group ", "telnet access-group ", "web access-group ",
-		"ip igmp access-group ", "ip multicast-boundary ",
-		"ip pim neighbor-filter ", "slow-path-forwarding filter ",
-	} {
-		if command == prefix+name || strings.HasPrefix(command, prefix+name+" ") {
-			return true
-		}
-	}
-	if len(fields) >= 2 && fields[0] == "jp-policy" && fields[len(fields)-1] == name {
-		return true
-	}
-	return len(fields) >= 4 && fields[0] == "match" && fields[1] == "ip" && fields[2] == "address" && fields[3] != "prefix-list" && slices.Contains(fields[3:], name)
 }

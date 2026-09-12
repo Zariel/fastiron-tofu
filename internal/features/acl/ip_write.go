@@ -9,7 +9,6 @@ import (
 	"path"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -152,10 +151,8 @@ func deleteIP(ctx context.Context, d *fastiron.Device, family ipFamily, name str
 	if current == nil {
 		return d.Persist(ctx)
 	}
-	for _, line := range unowned {
-		if ipReference(line, family, name) {
-			return errors.New("remove native ACL references before deleting the ACL")
-		}
+	if referencesACL(unowned, family, name) {
+		return errors.New("remove native ACL references before deleting the ACL")
 	}
 	if err := checkIPSequences(ctx, d, family, name, current); err != nil {
 		return err
@@ -178,18 +175,4 @@ func deleteIP(ctx context.Context, d *fastiron.Device, family ipFamily, name str
 		return writeErr
 	}
 	return d.Persist(ctx)
-}
-
-func ipReference(line string, family ipFamily, name string) bool {
-	if family == ipv4ACL {
-		return standardReference(line, name)
-	}
-	fields := strings.Fields(line)
-	command := strings.Join(fields, " ")
-	for _, prefix := range []string{"ipv6 access-group ", "ipv6 access-class ", "ipv6 traffic-filter "} {
-		if command == prefix+name || strings.HasPrefix(command, prefix+name+" ") {
-			return true
-		}
-	}
-	return len(fields) >= 4 && fields[0] == "match" && fields[1] == "ipv6" && fields[2] == "address" && fields[3] != "prefix-list" && slices.Contains(fields[3:], name)
 }
