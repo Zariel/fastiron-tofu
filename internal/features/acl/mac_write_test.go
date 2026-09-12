@@ -21,6 +21,7 @@ type macSwitch struct {
 	entries        map[int64]macRESTEntry
 	present        bool
 	failAfterWrite bool
+	omitRESTLog    bool
 	deleted        []int64
 }
 
@@ -94,7 +95,11 @@ func (s *macSwitch) publish() {
 		entries := []macRESTEntry{}
 		for _, id := range slices.Sorted(maps.Keys(s.entries)) {
 			entry := s.entries[id]
-			entries = append(entries, entry)
+			restEntry := entry
+			if s.omitRESTLog {
+				restEntry.Actions.Config.Log = ""
+			}
+			entries = append(entries, restEntry)
 			action := "permit"
 			if strings.TrimPrefix(entry.Actions.Config.Forward, "openconfig-acl:") == "DROP" {
 				action = "deny"
@@ -240,5 +245,44 @@ func TestMACReference(t *testing.T) {
 	}
 	if s.writes != 0 || s.saves != 0 || s.running != s.startup {
 		t.Fatal("referenced MAC ACL was changed")
+	}
+}
+
+func TestMACReloadLogging(t *testing.T) {
+	for name, tc := range map[string]struct {
+		logged int
+		want   string
+	}{
+		"logged first": {0, " deny any any ether-type 86dd log\n deny any any ether-type 0800\n"},
+		"logged last":  {1, " deny any any ether-type 0800\n deny any any ether-type 86dd log\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			entries := []macRESTEntry{testMACEntry(10, "DROP", 2048), testMACEntry(20, "DROP", 2048)}
+			entries[tc.logged].Actions.Config.Log = "LOG_SYSLOG"
+			s := newMACSwitch(t, true, entries...)
+			s.omitRESTLog = true
+			s.publish()
+			desired := macConfig{Name: "TEST", Rules: []macRule{
+				{Action: "deny", EtherType: optionalInt{Value: 2048, Present: true}},
+				{Action: "deny", EtherType: optionalInt{Value: 2048, Present: true}},
+			}}
+			desired.Rules[tc.logged].Log = true
+			desired.Rules[tc.logged].EtherType.Value = 34525
+
+			if _, err := applyMAC(context.Background(), s.device, desired); err != nil {
+				t.Fatal(err)
+			}
+			want := absentStandard + "mac access-list TEST\n" + tc.want + neighbor
+			if s.running != want || s.startup != want {
+				t.Fatalf("logged rule update: running=%q startup=%q; want %q", s.running, s.startup, want)
+			}
+			writes := s.writes
+			if _, err := applyMAC(context.Background(), s.device, desired); err != nil {
+				t.Fatal(err)
+			}
+			if s.writes != writes {
+				t.Fatal("converged MAC ACL caused another write")
+			}
+		})
 	}
 }

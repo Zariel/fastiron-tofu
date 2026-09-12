@@ -89,9 +89,8 @@ func macEntries(ctx context.Context, device *fastiron.Device, name string, curre
 	if response.ACLs == nil {
 		return nil, errors.New("RESTCONF response omitted the ACL collection")
 	}
-	var entries []macEntry
+	var restEntries []macRESTEntry
 	found := false
-	ids := map[int64]bool{}
 	for _, acl := range response.ACLs.Sets {
 		if acl.Name != name || strings.TrimPrefix(acl.Type, "openconfig-acl:") != "ACL_L2" {
 			continue
@@ -100,25 +99,31 @@ func macEntries(ctx context.Context, device *fastiron.Device, name string, curre
 			return nil, errors.New("duplicate MAC ACL REST identity")
 		}
 		found = true
-		for _, entry := range acl.Entries.Rules {
-			rule, err := entry.rule()
-			if err != nil {
-				return nil, err
-			}
-			if ids[entry.ID] {
-				return nil, errors.New("duplicate MAC ACL REST entry ID")
-			}
-			ids[entry.ID] = true
-			entries = append(entries, macEntry{ID: entry.ID, Rule: rule})
-		}
+		restEntries = acl.Entries.Rules
 	}
-	slices.SortFunc(entries, func(a, b macEntry) int { return cmp.Compare(a.ID, b.ID) })
-	rules := make([]macRule, 0, len(entries))
-	for _, entry := range entries {
-		rules = append(rules, entry.Rule)
-	}
-	if found != (current != nil) || (current != nil && !slices.Equal(rules, current.Rules)) {
+
+	if found != (current != nil) || (current != nil && len(restEntries) != len(current.Rules)) {
 		return nil, fmt.Errorf("RESTCONF and native rules disagree for mac access-list %s; synchronize RESTCONF after CLI changes and retry", name)
+	}
+	slices.SortFunc(restEntries, func(a, b macRESTEntry) int { return cmp.Compare(a.ID, b.ID) })
+	entries := make([]macEntry, 0, len(restEntries))
+	for i, entry := range restEntries {
+		rule, err := entry.rule()
+		if err != nil {
+			return nil, err
+		}
+		if i > 0 && entry.ID == restEntries[i-1].ID {
+			return nil, errors.New("duplicate MAC ACL REST entry ID")
+		}
+		// Reload can omit REST logging metadata. Native configuration retains
+		// it, while ascending REST IDs retain native rule order.
+		if entry.Actions.Config.Log == "" {
+			rule.Log = current.Rules[i].Log
+		}
+		if rule != current.Rules[i] {
+			return nil, fmt.Errorf("RESTCONF and native rules disagree for mac access-list %s; synchronize RESTCONF after CLI changes and retry", name)
+		}
+		entries = append(entries, macEntry{ID: entry.ID, Rule: rule})
 	}
 	return entries, nil
 }

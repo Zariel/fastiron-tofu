@@ -23,12 +23,21 @@ func TestMACREST(t *testing.T) {
 		{Action: "deny", EtherType: optionalInt{Value: 2054, Present: true}},
 		{Action: "permit", EtherType: optionalInt{Value: 2048, Present: true}},
 	}}
+	logged := &macConfig{Name: "EDGE", Rules: []macRule{
+		{Action: "deny", EtherType: optionalInt{Value: 2054, Present: true}},
+		{Action: "permit", EtherType: optionalInt{Value: 2048, Present: true}, Log: true},
+	}}
 	for name, tc := range map[string]struct {
 		response string
 		current  *macConfig
 		wantErr  bool
 	}{
-		"unordered response": {response, current, false},
+		"unordered response":           {response, current, false},
+		"logging omitted after reload": {response, logged, false},
+		"explicit logging disagreement": {strings.Replace(response, `"forwarding-action":"openconfig-acl:ACCEPT"`,
+			`"forwarding-action":"openconfig-acl:ACCEPT","log-action":"openconfig-acl:LOG_NONE"`, 1), logged, true},
+		"unexpected logging": {strings.Replace(response, `"forwarding-action":"openconfig-acl:ACCEPT"`,
+			`"forwarding-action":"openconfig-acl:ACCEPT","log-action":"openconfig-acl:LOG_SYSLOG"`, 1), current, true},
 		"wrong rule order": {response, &macConfig{Name: "EDGE", Rules: []macRule{
 			{Action: "permit", EtherType: optionalInt{Value: 2048, Present: true}},
 			{Action: "deny", EtherType: optionalInt{Value: 2054, Present: true}},
@@ -67,7 +76,7 @@ func TestMACREST(t *testing.T) {
 				}
 				return
 			}
-			if len(entries) != 2 || entries[0].ID != 37 || entries[1].ID != 89 || entries[0].Rule != current.Rules[0] || entries[1].Rule != current.Rules[1] {
+			if len(entries) != 2 || entries[0].ID != 37 || entries[1].ID != 89 || entries[0].Rule != tc.current.Rules[0] || entries[1].Rule != tc.current.Rules[1] {
 				t.Fatalf("REST IDs do not follow native rule order: %+v", entries)
 			}
 		})
