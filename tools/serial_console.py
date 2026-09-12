@@ -140,8 +140,10 @@ class Console:
                 name = re.sub(r"\([^()]*\)$", "", prompt[:-1]).strip()
                 if self.prompt_name is not None and name != self.prompt_name:
                     continue
-                if "boot" in prompt.lower():
-                    raise ConsoleError("switch is at a boot-monitor prompt; no configuration commands were sent")
+                # Boot monitors use a root prompt; configuration names can
+                # contain "boot" without changing the switch's operating mode.
+                if re.search(r"(?:^|[- ])(?:boot|uboot)>$", prompt, re.IGNORECASE):
+                    raise ConsoleError("switch is at a boot-monitor prompt; batch stopped")
                 return prompt, output[:prompts[-1].start()]
         if self.debug and data:
             print("Console response: " + repr(redact(clean(data.decode(errors="replace")))[-1000:]), file=sys.stderr)

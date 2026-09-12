@@ -24,6 +24,9 @@ class ConsoleTest(unittest.TestCase):
             ("skip-page-display", "skip-page-display\r\nswitch#"),
             ("show hardware", "show hardware\r\nSerial #"),
             ("show version", "show version\r\nSW: Version 09.0.10kT213\r\nswitch#"),
+            ("configure terminal", "configure terminal\r\nswitch(config)#"),
+            ("ipv6 access-list TOFU-REBOOT-V6", "ipv6 access-list TOFU-REBOOT-V6\r\nswitch(config-ipv6-access-list TOFU-REBOOT-V6)#"),
+            ("end", "end\r\nswitch#"),
             ("bad command", "bad command\r\n% Invalid input: private-value\r\nswitch#"),
         ]
 
@@ -58,6 +61,9 @@ class ConsoleTest(unittest.TestCase):
                     console.login()
                     self.assertEqual(console.command("show hardware"), "Serial #:ABC123")
                     self.assertEqual(console.command("show version"), "SW: Version 09.0.10kT213")
+                    self.assertEqual(console.command("configure terminal"), "")
+                    self.assertEqual(console.command("ipv6 access-list TOFU-REBOOT-V6"), "")
+                    self.assertEqual(console.command("end"), "")
                     with self.assertRaisesRegex(ConsoleError, "batch stopped"):
                         console.command("bad command")
                 finally:
@@ -65,6 +71,19 @@ class ConsoleTest(unittest.TestCase):
                     worker.join(timeout=2)
                     self.assertFalse(worker.is_alive())
         self.assertEqual(commands, [command for command, _ in responses])
+
+    def test_boot_prompt(self):
+        for prompt in ("ICX7150-Boot>", "uboot>", "Boot>"):
+            with self.subTest(prompt=prompt):
+                master, slave = pty.openpty()
+                try:
+                    with Console(os.ttyname(slave), 9600, 1, 1) as console:
+                        os.write(master, prompt.encode())
+                        with self.assertRaisesRegex(ConsoleError, "boot-monitor"):
+                            console.read(1)
+                finally:
+                    os.close(master)
+                    os.close(slave)
 
     def test_redaction(self):
         with patch.dict(os.environ, {"FASTIRON_PASSWORD": "credential-marker"}):
