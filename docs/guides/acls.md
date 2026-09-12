@@ -160,6 +160,20 @@ Use `fastiron_mac_access_group` to bind the ACL. Remove bindings before deleting
 
 Hardware field and mutation checks verified exact and noncontiguous masks, logging, EtherType boundaries, duplicate rejection, ordered insertion and empty ACL retention. Provider checks passed for empty and populated creation, import, rule reordering, mask changes and logging removal, with native running/saved verification and no-change plans. Provider checks also covered empty transitions, repopulation, name replacement and deletion, restoring the original running and saved configuration. Reboot and bound replacement checks remain.
 
+## ACL inventory
+
+`fastiron_acls` lists ACL identities from native running configuration without managing rules or bindings:
+
+```hcl
+data "fastiron_acls" "switch" {}
+
+output "acl_inventory" {
+  value = data.fastiron_acls.switch.acls
+}
+```
+
+Each entry contains `name`, `kind` (`ipv4_standard`, `ipv4_extended`, `ipv6` or `mac`) and the native `id` used by resource imports. Results are sorted by kind and name. Names are not unique across kinds. Empty ACLs and ACLs with unsupported rule options are included; appearing in the inventory does not mean an ACL satisfies the resource's ownership restrictions. Individual typed rule queries are not yet available.
+
 ## Updates and persistence
 
 RESTCONF writes require SSH access for native configuration verification and saving. The provider verifies the resulting rules and checks that unrelated configuration is unchanged before persistence.

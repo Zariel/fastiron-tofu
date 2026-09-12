@@ -75,6 +75,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 func (p *fastironProvider) DataSources(context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		func() datasource.DataSource { return &system.CapabilitiesDataSource{} },
+		func() datasource.DataSource { return acl.NewInventoryDataSource() },
 		func() datasource.DataSource { return &dns.DataSource{} },
 		func() datasource.DataSource { return &lldp.DataSource{} },
 		func() datasource.DataSource { return &poe.DataSource{} },
