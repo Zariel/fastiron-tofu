@@ -86,6 +86,14 @@ func nativeIPRule(fields []string, family ipFamily) (ipRule, error) {
 		return r, err
 	}
 	for len(remaining) > 0 {
+		if remaining[0] == "log" {
+			if family != ipv6ACL || r.Log {
+				return r, errors.New("unsupported or duplicate native ACL logging")
+			}
+			r.Log = true
+			remaining = remaining[1:]
+			continue
+		}
 		if len(remaining) < 2 {
 			return r, errors.New("unsupported native ACL option")
 		}

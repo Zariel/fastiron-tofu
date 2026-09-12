@@ -37,6 +37,7 @@ type ipRule struct {
 	Protocol                    optionalInt
 	SourcePort, DestinationPort portMatch
 	DSCP, DSCPMark, Priority    optionalInt
+	Log                         bool
 }
 
 type ipConfig struct {
@@ -109,6 +110,9 @@ func validateIP(p ipConfig) error {
 		if rule.Action != "permit" && rule.Action != "deny" {
 			return errors.New("ACL action must be permit or deny")
 		}
+		if rule.Log && p.Family != ipv6ACL {
+			return errors.New("RESTCONF rule logging requires an IPv6 ACL")
+		}
 		for _, address := range []string{rule.Source, rule.Destination} {
 			if address == "any" {
 				continue
@@ -177,10 +181,14 @@ func ipPayload(p ipConfig) map[string]any {
 		if rule.Action == "deny" {
 			action = "DROP"
 		}
+		actions := map[string]string{"forwarding-action": action}
+		if rule.Log {
+			actions["log-action"] = "openconfig-acl:LOG_SYSLOG"
+		}
 		entry := map[string]any{
 			"sequence-id": sequence, "config": map[string]int64{"sequence-id": sequence},
 			family:    map[string]any{"config": fields},
-			"actions": map[string]any{"config": map[string]string{"forwarding-action": action}},
+			"actions": map[string]any{"config": actions},
 		}
 		ports := map[string]string{}
 		if rule.SourcePort.Present {

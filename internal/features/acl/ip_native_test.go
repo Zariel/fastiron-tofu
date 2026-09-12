@@ -133,3 +133,24 @@ func TestNativeUDPTime(t *testing.T) {
 		t.Fatalf("UDP service names = %+v", current)
 	}
 }
+
+func TestNativeIPv6Logging(t *testing.T) {
+	current, _, err := nativeIP(`ipv6 access-list EDGE
+ sequence 10 permit ipv6 2001:db8:1::/64 2001:db8:2::/64 log
+ sequence 20 deny ipv6 any any
+end`, ipv6ACL, "EDGE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[int64]ipRule{
+		10: {Sequence: 10, Action: "permit", Source: "2001:db8:1::/64", Destination: "2001:db8:2::/64", Log: true},
+		20: {Sequence: 20, Action: "deny", Source: "any", Destination: "any"},
+	}
+	if current == nil || !maps.Equal(current.Rules, want) {
+		t.Fatalf("IPv6 logging rules = %+v", current)
+	}
+
+	if _, _, err := nativeIP("ipv6 access-list EDGE\n sequence 10 deny ipv6 any any log log\nend", ipv6ACL, "EDGE"); err == nil {
+		t.Fatal("duplicate logging accepted")
+	}
+}

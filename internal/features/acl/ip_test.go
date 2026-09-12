@@ -50,6 +50,7 @@ func TestIPValidation(t *testing.T) {
 		"wrong address family": func(p *ipConfig) { r := p.Rules[10]; r.Source = "2001:db8::/64"; p.Rules[10] = r },
 		"host bits":            func(p *ipConfig) { r := p.Rules[10]; r.Source = "192.0.2.1/24"; p.Rules[10] = r },
 		"IPv4 protocol zero":   func(p *ipConfig) { r := p.Rules[10]; r.Protocol = optionalInt{0, true}; p.Rules[10] = r },
+		"IPv4 logging":         func(p *ipConfig) { r := p.Rules[10]; r.Log = true; p.Rules[10] = r },
 		"protocol 255":         func(p *ipConfig) { r := p.Rules[10]; r.Protocol = optionalInt{255, true}; p.Rules[10] = r },
 		"SCTP port": func(p *ipConfig) {
 			r := p.Rules[10]
@@ -94,5 +95,23 @@ func TestIPv6ProtocolZero(t *testing.T) {
 	want := `{"acl-sets":{"acl-set":[{"acl-entries":{"acl-entry":[{"actions":{"config":{"forwarding-action":"ACCEPT"}},"config":{"sequence-id":10},"ipv6":{"config":{"destination-address":"::/0","protocol":0,"source-address":"::/0"}},"sequence-id":10}]},"config":{"name":"EDGE","type":"ACL_IPV6"},"name":"EDGE","type":"ACL_IPV6"}]}}`
 	if string(raw) != want {
 		t.Fatalf("IPv6 protocol zero payload = %s", raw)
+	}
+}
+
+func TestIPv6LogPayload(t *testing.T) {
+	config := ipConfig{Family: ipv6ACL, Name: "EDGE", Rules: map[int64]ipRule{
+		10: {Sequence: 10, Action: "permit", Source: "2001:db8:1::/64", Destination: "2001:db8:2::/64", Log: true},
+		20: {Sequence: 20, Action: "deny", Source: "any", Destination: "any"},
+	}}
+	if err := validateIP(config); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(ipPayload(config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"acl-sets":{"acl-set":[{"acl-entries":{"acl-entry":[{"actions":{"config":{"forwarding-action":"ACCEPT","log-action":"openconfig-acl:LOG_SYSLOG"}},"config":{"sequence-id":10},"ipv6":{"config":{"destination-address":"2001:db8:2::/64","source-address":"2001:db8:1::/64"}},"sequence-id":10},{"actions":{"config":{"forwarding-action":"DROP"}},"config":{"sequence-id":20},"ipv6":{"config":{"destination-address":"::/0","source-address":"::/0"}},"sequence-id":20}]},"config":{"name":"EDGE","type":"ACL_IPV6"},"name":"EDGE","type":"ACL_IPV6"}]}}`
+	if string(raw) != want {
+		t.Fatalf("IPv6 logging payload = %s", raw)
 	}
 }
