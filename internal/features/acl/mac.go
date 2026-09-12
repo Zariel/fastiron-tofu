@@ -25,6 +25,24 @@ type macMatch struct {
 	Mask    macAddress
 }
 
+func parseMACMatch(address, mask string) (macMatch, error) {
+	if address == "any" && mask == "any" {
+		return macMatch{}, nil
+	}
+	parsedAddress, err := parseMAC(address)
+	if err != nil {
+		return macMatch{}, err
+	}
+	parsedMask, err := parseMAC(mask)
+	if err != nil {
+		return macMatch{}, err
+	}
+	if parsedMask == (macAddress{}) {
+		return macMatch{}, nil
+	}
+	return macMatch{Address: parsedAddress, Mask: parsedMask}, nil
+}
+
 type macRule struct {
 	Action              string
 	Source, Destination macMatch

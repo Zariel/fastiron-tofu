@@ -92,16 +92,6 @@ func nativeMACMatch(fields []string) (macMatch, []string, error) {
 	if len(fields) < 2 {
 		return match, nil, errors.New("incomplete native MAC ACL match")
 	}
-	address, err := parseMAC(fields[0])
-	if err != nil {
-		return match, nil, err
-	}
-	mask, err := parseMAC(fields[1])
-	if err != nil {
-		return match, nil, err
-	}
-	if mask == (macAddress{}) {
-		return match, fields[2:], nil
-	}
-	return macMatch{Address: address, Mask: mask}, fields[2:], nil
+	match, err := parseMACMatch(fields[0], fields[1])
+	return match, fields[2:], err
 }
