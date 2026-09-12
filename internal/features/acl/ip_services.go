@@ -580,6 +580,7 @@ var servicePorts = map[string]int64{
 	"ticf-1":          492,
 	"ticf-2":          493,
 	"timbuktu":        407,
+	"time":            37,
 	"timed":           525,
 	"tinc":            655,
 	"tn-tl-fd1":       476,

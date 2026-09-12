@@ -122,3 +122,14 @@ func TestNativeProtocolNames(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeUDPTime(t *testing.T) {
+	current, _, err := nativeIP("ip access-list extended EDGE\n sequence 10 permit udp any eq time any eq shell\nend", ipv4ACL, "EDGE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ipRule{Sequence: 10, Action: "permit", Source: "any", Destination: "any", Protocol: optionalInt{17, true}, SourcePort: portMatch{37, 37, true}, DestinationPort: portMatch{514, 514, true}}
+	if current == nil || current.Rules[10] != want {
+		t.Fatalf("UDP service names = %+v", current)
+	}
+}
