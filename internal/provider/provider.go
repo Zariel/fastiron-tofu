@@ -9,6 +9,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/authentication"
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
+	"github.com/zariel/fastiron-tofu/internal/features/igmp"
 	"github.com/zariel/fastiron-tofu/internal/features/lag"
 	"github.com/zariel/fastiron-tofu/internal/features/lldp"
 	"github.com/zariel/fastiron-tofu/internal/features/ospf"
@@ -46,6 +47,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &system.SaveResource{} },
 		func() resource.Resource { return &vlan.Resource{} },
 		func() resource.Resource { return vlan.NewDefaultResource() },
+		func() resource.Resource { return igmp.NewVLANResource() },
 		func() resource.Resource { return &ethernet.Resource{} },
 		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
