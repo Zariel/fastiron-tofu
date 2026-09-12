@@ -15,7 +15,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
@@ -62,11 +61,11 @@ func (r *ExtendedResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 		"rule": schema.SetNestedBlock{Description: "Rules are evaluated by sequence. Omitting all rules manages an empty ACL.", NestedObject: schema.NestedBlockObject{Attributes: map[string]schema.Attribute{
 			"sequence":                  schema.Int64Attribute{Required: true, Description: "Distinct sequence number from 1 through 65000."},
 			"action":                    schema.StringAttribute{Required: true, Description: "permit or deny."},
-			"source":                    schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("any"), Description: "any or a canonical IPv4 prefix, including /32 for one host. Defaults to any."},
-			"destination":               schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("any"), Description: "any or a canonical IPv4 prefix, including /32 for one host. Defaults to any."},
+			"source":                    schema.StringAttribute{Optional: true, Computed: true, Description: "any or a canonical IPv4 prefix, including /32 for one host. Defaults to any."},
+			"destination":               schema.StringAttribute{Optional: true, Computed: true, Description: "any or a canonical IPv4 prefix, including /32 for one host. Defaults to any."},
 			"protocol":                  schema.Int64Attribute{Optional: true, Description: "IP protocol number from 1 through 254, such as 6 for TCP or 17 for UDP. Omit to match all protocols."},
-			"source_port":               schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("any"), Description: "any, a canonical decimal port, or an inclusive lower..upper range. Numeric matches require TCP or UDP."},
-			"destination_port":          schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString("any"), Description: "any, a canonical decimal port, or an inclusive lower..upper range. Numeric matches require TCP or UDP."},
+			"source_port":               schema.StringAttribute{Optional: true, Computed: true, Description: "any, a canonical decimal port, or an inclusive lower..upper range. Numeric matches require TCP or UDP."},
+			"destination_port":          schema.StringAttribute{Optional: true, Computed: true, Description: "any, a canonical decimal port, or an inclusive lower..upper range. Numeric matches require TCP or UDP."},
 			"dscp":                      schema.Int64Attribute{Optional: true, Description: "DSCP match from 0 through 63. Omit to match any DSCP; zero is an explicit match."},
 			"dscp_marking":              schema.Int64Attribute{Optional: true, Description: "DSCP marking from 0 through 63. Omit to leave DSCP unchanged."},
 			"internal_priority_marking": schema.Int64Attribute{Optional: true, Description: "Internal priority marking from 0 through 7. Omit to leave priority unchanged."},
@@ -90,8 +89,7 @@ func (m extendedModel) desired(ctx context.Context) (ipConfig, bool, diag.Diagno
 	if m.Name.IsUnknown() || m.Rules.IsUnknown() {
 		return p, false, nil
 	}
-	var rules []extendedRuleModel
-	diagnostics := m.Rules.ElementsAs(ctx, &rules, false)
+	rules, diagnostics := extendedRules(ctx, m.Rules)
 	if diagnostics.HasError() {
 		return p, false, diagnostics
 	}
@@ -111,14 +109,6 @@ func (m extendedModel) desired(ctx context.Context) (ipConfig, bool, diag.Diagno
 			diagnostics.AddError("Duplicate ACL sequence", "Each rule must have a distinct sequence number.")
 			return p, false, diagnostics
 		}
-		source := rule.Source.ValueString()
-		if rule.Source.IsNull() {
-			source = "any"
-		}
-		destination := rule.Destination.ValueString()
-		if rule.Destination.IsNull() {
-			destination = "any"
-		}
 		sourcePort, err := configuredPort(rule.SourcePort)
 		if err != nil {
 			diagnostics.AddError("Invalid source port", err.Error())
@@ -130,7 +120,7 @@ func (m extendedModel) desired(ctx context.Context) (ipConfig, bool, diag.Diagno
 			return p, false, diagnostics
 		}
 		p.Rules[sequence] = ipRule{
-			Sequence: sequence, Action: rule.Action.ValueString(), Source: source, Destination: destination,
+			Sequence: sequence, Action: rule.Action.ValueString(), Source: rule.Source.ValueString(), Destination: rule.Destination.ValueString(),
 			Protocol:   optionalInt{rule.Protocol.ValueInt64(), !rule.Protocol.IsNull()},
 			SourcePort: sourcePort, DestinationPort: destinationPort,
 			DSCP:     optionalInt{rule.DSCP.ValueInt64(), !rule.DSCP.IsNull()},
@@ -158,19 +148,40 @@ func (r *ExtendedResource) ValidateConfig(ctx context.Context, req resource.Vali
 }
 
 func (r *ExtendedResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	if req.Plan.Raw.IsNull() || r.device == nil {
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+	var model extendedModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Set element identity changes when drift adds rules. Derive defaults from
+	// complete configured objects so a default cannot replace an explicit match.
+	if !model.Rules.IsUnknown() {
+		rules, diagnostics := extendedRules(ctx, model.Rules)
+		resp.Diagnostics.Append(diagnostics...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		planned, diagnostics := types.SetValueFrom(ctx, extendedRuleType, rules)
+		resp.Diagnostics.Append(diagnostics...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		model.Rules = planned
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("rule"), planned)...)
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("persistence_pending"), false)...)
+	if r.device == nil || resp.Diagnostics.HasError() {
 		return
 	}
 	if !r.device.RESTCONFEnabled() {
 		resp.Diagnostics.AddError("Extended ACL configuration is not supported by the configured transport", "RESTCONF is required.")
 		return
 	}
-	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("persistence_pending"), false)...)
-	var model extendedModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &model)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+
 	desired, known, diagnostics := model.desired(ctx)
 	resp.Diagnostics.Append(diagnostics...)
 	if !known || resp.Diagnostics.HasError() {
@@ -331,4 +342,21 @@ func optionalState(value optionalInt) types.Int64 {
 		return types.Int64Null()
 	}
 	return types.Int64Value(value.Value)
+}
+
+func extendedRules(ctx context.Context, value types.Set) ([]extendedRuleModel, diag.Diagnostics) {
+	var rules []extendedRuleModel
+	diagnostics := value.ElementsAs(ctx, &rules, false)
+	if diagnostics.HasError() {
+		return nil, diagnostics
+	}
+	for i := range rules {
+		rule := &rules[i]
+		for _, field := range []*types.String{&rule.Source, &rule.Destination, &rule.SourcePort, &rule.DestinationPort} {
+			if field.IsNull() {
+				*field = types.StringValue("any")
+			}
+		}
+	}
+	return rules, diagnostics
 }
