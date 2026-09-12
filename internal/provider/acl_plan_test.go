@@ -16,6 +16,17 @@ func TestOpenTofuACLDriftPlan(t *testing.T) {
 		kind, id, config, native, extra, field string
 		want                                   any
 	}{
+		"MAC source": {
+			kind: "mac_access_list", id: "mac access-list EDGE",
+			config: `name = "EDGE"
+rule {
+ action = "permit"
+ source = "02:00:00:00:00:01"
+}
+rule { action = "deny" }`,
+			native: " permit 0200.0000.0001 ffff.ffff.ffff any\n deny any any\n",
+			extra:  " permit any any ether-type 0806\n", field: "source", want: "02:00:00:00:00:01",
+		},
 		"extended port": {
 			kind: "ip_access_list_extended", id: "ip access-list extended EDGE",
 			config: `name = "EDGE"
@@ -95,6 +106,9 @@ rule {
 
 			mu.Lock()
 			native = strings.TrimSuffix(native, "end") + tc.extra + "end"
+			if tc.kind == "mac_access_list" {
+				native = "ver 09.0.10kT213\n" + tc.id + "\n" + tc.extra + tc.native + "end"
+			}
 			mu.Unlock()
 			run(2, "plan", "-detailed-exitcode", "-out=plan.tfplan", "-no-color")
 			rules := plannedACLRules(t, run(0, "show", "-json", "plan.tfplan"), address)
@@ -102,8 +116,8 @@ rule {
 				t.Fatalf("planned rules = %+v", rules)
 			}
 			found := false
-			for _, rule := range rules {
-				if rule["sequence"] != float64(10) {
+			for index, rule := range rules {
+				if (tc.kind == "mac_access_list" && index != 0) || (tc.kind != "mac_access_list" && rule["sequence"] != float64(10)) {
 					continue
 				}
 				found = true
@@ -121,13 +135,14 @@ rule {
 func TestOpenTofuACLUnknownMatch(t *testing.T) {
 	t.Run("IPv4 source", func(t *testing.T) { testACLUnknown(t, "ip_access_list_extended", "source", `"192.0.2.0/24"`) })
 	t.Run("IPv6 logging", func(t *testing.T) { testACLUnknown(t, "ipv6_access_list", "log", "true") })
+	t.Run("MAC source", func(t *testing.T) { testACLUnknown(t, "mac_access_list", "source", `"02:00:00:00:00:01"`) })
 }
 
 func testACLUnknown(t *testing.T, kind, field, input string) {
 	t.Helper()
 	s := newSwitch(t)
 	write, run, base := tofuFixture(t, s)
-	write("main.tf", base+fmt.Sprintf(`resource "terraform_data" "prefix" {
+	config := fmt.Sprintf(`resource "terraform_data" "prefix" {
  input = %s
 }
 resource "fastiron_%s" "test" {
@@ -140,7 +155,12 @@ resource "fastiron_%s" "test" {
   destination_port = "443"
  }
 }
-`, input, kind, field))
+`, input, kind, field)
+	if kind == "mac_access_list" {
+		config = strings.ReplaceAll(config, "  sequence = 10\n", "")
+		config = strings.ReplaceAll(config, "  protocol = 6\n  destination_port = \"443\"\n", "")
+	}
+	write("main.tf", base+config)
 	run(0, "init", "-no-color")
 	run(2, "plan", "-detailed-exitcode", "-out=plan.tfplan", "-no-color")
 	type change struct {
@@ -168,6 +188,9 @@ resource "fastiron_%s" "test" {
 		case []any:
 			if len(unknown) != 1 || unknown[0].(map[string]any)[field] != true {
 				t.Fatalf("unknown %s was defaulted: %+v", field, unknown)
+			}
+			if kind == "mac_access_list" && field == "source" && unknown[0].(map[string]any)["source_mask"] != true {
+				t.Fatalf("MAC mask was defaulted before its address became known: %+v", unknown)
 			}
 		default:
 			t.Fatalf("unknown %s absent from plan: %+v", field, unknown)
@@ -218,6 +241,8 @@ func TestOpenTofuACLDefaults(t *testing.T) {
 		"IPv4 any":   {"ip_access_list_extended", anyRule},
 		"IPv6 empty": {"ipv6_access_list", ""},
 		"IPv6 any":   {"ipv6_access_list", anyRule},
+		"MAC empty":  {"mac_access_list", ""},
+		"MAC any":    {"mac_access_list", "rule { action = \"permit\" }\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			write("main.tf", base+"resource \"fastiron_"+tc.kind+"\" \"test\" {\n name = \"EDGE\"\n"+tc.body+"}\n")
@@ -232,10 +257,14 @@ func TestOpenTofuACLDefaults(t *testing.T) {
 			if len(rules) != 1 {
 				t.Fatalf("defaulted rule = %+v", rules)
 			}
-			if tc.kind == "ipv6_access_list" && rules[0]["log"] != false {
+			if tc.kind != "ip_access_list_extended" && rules[0]["log"] != false {
 				t.Fatalf("logging default = %v", rules[0]["log"])
 			}
-			for _, field := range []string{"source", "destination", "source_port", "destination_port"} {
+			fields := []string{"source", "destination", "source_port", "destination_port"}
+			if tc.kind == "mac_access_list" {
+				fields = []string{"source", "destination", "source_mask", "destination_mask"}
+			}
+			for _, field := range fields {
 				if rules[0][field] != "any" {
 					t.Fatalf("default %s = %v", field, rules[0][field])
 				}

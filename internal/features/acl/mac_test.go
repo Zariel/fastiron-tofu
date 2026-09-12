@@ -41,7 +41,7 @@ end`, "EDGE")
 
 func TestNativeMACUnsupported(t *testing.T) {
 	for _, rule := range []string{
-		"remark unmanaged", "permit any any mirror", "permit any any log log",
+		"remark unmanaged", "enable accounting", "permit any any mirror", "permit any any log log",
 		"permit any any ether-type 0500", "permit any any ether-type 0800 ether-type 0806",
 		"permit any", "permit invalid ffff.ffff.ffff any",
 		"permit 02:00:00:00:00:00:00:01 ffff.ffff.ffff any",

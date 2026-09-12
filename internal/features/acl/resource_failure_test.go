@@ -22,6 +22,7 @@ func TestACLAbsentUpdate(t *testing.T) {
 		"standard": {&StandardResource{}, "ip access-list standard 90", "sequence 10 permit any", "ACL_IPV4", standardRuleType},
 		"extended": {NewExtendedResource(), "ip access-list extended EDGE", "sequence 10 permit ip any any", "ACL_IPV4", ipRuleType(ipv4ACL)},
 		"IPv6":     {NewIPv6Resource(), "ipv6 access-list EDGE", "sequence 10 permit ipv6 any any", "ACL_IPV6", ipRuleType(ipv6ACL)},
+		"MAC":      {NewMACResource(), "mac access-list EDGE", "permit any any ether-type 0800", "ACL_L2", macRuleType()},
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
@@ -32,6 +33,11 @@ func TestACLAbsentUpdate(t *testing.T) {
 			s.restACLs = map[string]any{"openconfig-acl:acl-sets": map[string]any{"acl-set": []any{
 				map[string]any{"name": aclName, "type": tc.restType, "acl-entries": map[string]any{"acl-entry": []any{map[string]int64{"sequence-id": 10}}}},
 			}}}
+			if name == "MAC" {
+				s.restACLs = map[string]any{"openconfig-acl:acl-sets": map[string]any{"acl-set": []any{
+					map[string]any{"name": aclName, "type": tc.restType, "acl-entries": map[string]any{"acl-entry": []macRESTEntry{testMACEntry(10, "ACCEPT", 2048)}}},
+				}}}
+			}
 			device := s.device(t, func(w http.ResponseWriter, r *http.Request) {
 				s.running = absentStandard + neighbor
 				http.Error(w, "failed after removing parent", http.StatusInternalServerError)
@@ -44,7 +50,10 @@ func TestACLAbsentUpdate(t *testing.T) {
 			var schema resource.SchemaResponse
 			tc.resource.Schema(ctx, resource.SchemaRequest{}, &schema)
 			state := tfsdk.State{Schema: schema.Schema}
-			model := ipModel{ID: types.StringValue(tc.identity), Name: types.StringValue(aclName), Rules: types.SetNull(tc.ruleType), PersistencePending: types.BoolValue(false)}
+			var model any = ipModel{ID: types.StringValue(tc.identity), Name: types.StringValue(aclName), Rules: types.SetNull(tc.ruleType), PersistencePending: types.BoolValue(false)}
+			if name == "MAC" {
+				model = macModel{ID: types.StringValue(tc.identity), Name: types.StringValue(aclName), Rules: types.ListNull(tc.ruleType), PersistencePending: types.BoolValue(false)}
+			}
 			if diagnostics := state.Set(ctx, model); diagnostics.HasError() {
 				t.Fatal(diagnostics)
 			}
@@ -55,14 +64,18 @@ func TestACLAbsentUpdate(t *testing.T) {
 			}
 
 			plan := tfsdk.Plan{Raw: observed.State.Raw, Schema: schema.Schema}
-			var rules types.Set
+			var rules []types.Object
 			if diagnostics := plan.GetAttribute(ctx, path.Root("rule"), &rules); diagnostics.HasError() {
 				t.Fatal(diagnostics)
 			}
-			rule := rules.Elements()[0].(types.Object)
+			rule := rules[0]
 			attributes := rule.Attributes()
 			attributes["action"] = types.StringValue("deny")
-			planned := types.SetValueMust(tc.ruleType, []attr.Value{types.ObjectValueMust(rule.AttributeTypes(ctx), attributes)})
+			values := []attr.Value{types.ObjectValueMust(rule.AttributeTypes(ctx), attributes)}
+			var planned attr.Value = types.SetValueMust(tc.ruleType, values)
+			if name == "MAC" {
+				planned = types.ListValueMust(tc.ruleType, values)
+			}
 			if diagnostics := plan.SetAttribute(ctx, path.Root("rule"), planned); diagnostics.HasError() {
 				t.Fatal(diagnostics)
 			}
