@@ -47,6 +47,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 
 - Global FlexAuth guest-VLAN writes, voice action variants and additional timers are not yet supported; see [authentication ownership and limits](guides/authentication.md).
 - Ethernet speed, duplex and clock settings are not yet managed. On the tested `09.0.10kT213` build, RESTCONF auto-negotiation updates and individual leaf deletions did not restore native automatic speed. Deleting the Ethernet container restored speed but also changed an unrelated DHCP-client setting, so it is unsuitable for narrowly owned resource cleanup.
+- Management-VLAN selection is not exposed. On the tested router image, the documented RESTCONF management-VLAN paths returned HTTP 400 with `unknown resource`, and the native `management-vlan` command was rejected. The command reference limits this feature to switch images.
 - Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).
 - OSPF currently manages area existence and interface bindings; see [OSPF ownership and limits](guides/ospf.md).
 - Static routes currently support IPv4 gateways in the default VRF; see [route ownership and limits](guides/routes.md).

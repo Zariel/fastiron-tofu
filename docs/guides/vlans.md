@@ -4,6 +4,8 @@
 
 The ordinary VLAN resource refuses the currently selected default VLAN, even when its ID is not 1. The exact name `DEFAULT-VLAN` is reserved: FastIron interprets it as a request to move the global default VLAN, rather than a normal name change. Lowercase and mixed-case variants remain ordinary names. Default-VLAN selection is not yet managed by the provider.
 
+Management-VLAN selection is also not exposed. Its documented RESTCONF paths and native command were unavailable on the tested router image; see [compatibility limits](../compatibility.md).
+
 The `fastiron_vlan` and `fastiron_vlans` data sources read IDs and names through RESTCONF without taking ownership or saving configuration. They can read the default VLAN, which the resource does not manage.
 
 ```hcl
