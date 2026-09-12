@@ -27,6 +27,11 @@ provider "fastiron" {
   }
 }
 
+resource "fastiron_igmp_snooping" "global" {
+  querier_mode = "active"
+  version      = 3
+}
+
 resource "fastiron_vlan" "media" {
   vlan_id = var.vlan_id
   name    = "MEDIA"

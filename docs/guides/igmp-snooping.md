@@ -1,4 +1,17 @@
-# VLAN IGMP snooping
+# IGMP snooping
+
+`fastiron_igmp_snooping` owns the switch's global IGMP snooping mode and version. Declare one per switch:
+
+```hcl
+resource "fastiron_igmp_snooping" "global" {
+  querier_mode = "active"
+  version      = 3
+}
+```
+
+Global `querier_mode` accepts `active`, `passive` or `disabled`, defaulting to `disabled`. Global `version` accepts `2` or `3`, defaulting to `2`. Deleting the resource restores these defaults and preserves VLAN overrides and other multicast settings, including timers. Disabled mode clears explicit global snooping enablement; it does not remove independently configured VLAN policies.
+
+Import with `tofu import fastiron_igmp_snooping.global global`. Match the imported settings in HCL to retain them; omitted global attributes select their defaults.
 
 `fastiron_vlan_igmp_snooping` owns the IGMP querier mode and version overrides on an existing VLAN. VLAN existence and other multicast settings have separate ownership.
 
@@ -21,7 +34,7 @@ Import with `tofu import fastiron_vlan_igmp_snooping.media 'vlan 53'`. Match the
 
 A failed operation can leave `persistence_pending = true` with the observed native settings. Reapply to finish reconciliation or saving. The provider may briefly reset a changed override while replacing its RESTCONF entry; unchanged fields and separately owned configuration are preserved. Resetting a native-only disable override briefly uses passive mode.
 
-The tested VLAN RESTCONF API maps `querier-mode: disabled` to passive mode, so this resource does not offer explicit disabling. Refresh can report `disabled` when a native disable override exists; choose a supported mode or omit the field to reset it. Global IGMP configuration, per-port versions, multicast group tables and other snooping controls are not yet exposed.
+The tested RESTCONF API can map `querier-mode: disabled` to passive mode. The global resource disables explicit global enablement by removing its configured mode. The VLAN resource does not offer explicit disabling: refresh can report `disabled` when a native disable override exists; choose a supported mode or omit the field to reset it. Per-port versions, multicast group tables and other snooping controls are not exposed by these resources.
 
 The data source reads configured VLAN overrides without taking ownership or saving configuration:
 
