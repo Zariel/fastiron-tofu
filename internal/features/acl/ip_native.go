@@ -120,8 +120,8 @@ func nativeProtocol(value string, family ipFamily) (optionalInt, error) {
 	if value == "icmp" && family == ipv6ACL {
 		return optionalInt{58, true}, nil
 	}
-	protocols := map[string]int64{"icmp": 1, "igmp": 2, "tcp": 6, "udp": 17, "ipv6": 41, "rsvp": 46, "gre": 47, "esp": 50, "ah": 51, "ospf": 89, "pim": 103, "sctp": 132, "divert": 254}
-	if number, ok := protocols[value]; ok {
+
+	if number, ok := protocolNumbers[value]; ok {
 		return optionalInt{number, true}, nil
 	}
 	number, err := strconv.ParseInt(value, 10, 64)

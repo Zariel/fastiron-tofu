@@ -108,3 +108,17 @@ end`, ipv4ACL, "EDGE")
 		t.Fatalf("native service matches = %+v", current)
 	}
 }
+
+func TestNativeProtocolNames(t *testing.T) {
+	for name, number := range map[string]int64{"ipencap": 4, "ipip": 94, "ahp": 51, "ipv6-icmp": 58, "st2": 5, "st": 118, "divert": 254, "253": 253} {
+		t.Run(name, func(t *testing.T) {
+			current, _, err := nativeIP("ip access-list extended 100\n sequence 10 permit "+name+" any any\nend", ipv4ACL, "100")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if current == nil || current.Rules[10].Protocol != (optionalInt{number, true}) {
+				t.Fatalf("native %s ACL = %+v", name, current)
+			}
+		})
+	}
+}
