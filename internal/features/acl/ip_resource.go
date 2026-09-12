@@ -285,6 +285,9 @@ func (r *ipResource) Update(ctx context.Context, req resource.UpdateRequest, res
 		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 	}
 	if err != nil {
+		// An update may remove the parent before failing. Preserve its unsaved
+		// absence through refresh so a subsequent destroy can persist it.
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot update IP ACL", err.Error())
 	}
 }
@@ -297,8 +300,8 @@ func (r *ipResource) Read(ctx context.Context, req resource.ReadRequest, resp *r
 	}
 	observed, err := readIP(ctx, r.device, r.family, model.Name.ValueString())
 	if errors.Is(err, fastiron.ErrNotFound) {
-		// A failed save after deletion must retain state so a destroy retry can save
-		// the verified absence instead of silently forgetting the pending operation.
+		// An unsaved deletion must retain state so a later destroy can save the
+		// verified absence instead of forgetting the pending operation.
 		if !model.PersistencePending.ValueBool() {
 			resp.State.RemoveResource(ctx)
 		}
