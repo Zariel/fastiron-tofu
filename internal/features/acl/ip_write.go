@@ -60,6 +60,14 @@ func applyIP(ctx context.Context, d *fastiron.Device, desired ipConfig) (*ipConf
 	if err != nil {
 		return nil, err
 	}
+	if current != nil && maps.Equal(current.Rules, desired.Rules) {
+		return current, d.Persist(ctx)
+	}
+	// CLI edits can reach native configuration before RESTCONF's database. A
+	// mutation against stale sequences can also rewrite otherwise untouched rules.
+	if err := checkIPSequences(ctx, d, desired.Family, desired.Name, current); err != nil {
+		return current, err
+	}
 
 	// A 404 is also returned when an ACL deletion is refused because it is bound.
 	// Native readback, including neighboring ACLs and bindings, determines the result.
@@ -148,6 +156,9 @@ func deleteIP(ctx context.Context, d *fastiron.Device, family ipFamily, name str
 		if ipReference(line, family, name) {
 			return errors.New("remove native ACL references before deleting the ACL")
 		}
+	}
+	if err := checkIPSequences(ctx, d, family, name, current); err != nil {
+		return err
 	}
 	writeErr := d.DoREST(ctx, http.MethodDelete, family.path(name), nil, nil)
 	if errors.Is(writeErr, restconf.ErrNotFound) {

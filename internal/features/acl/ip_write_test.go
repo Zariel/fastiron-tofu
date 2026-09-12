@@ -2,6 +2,7 @@ package acl
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -175,5 +176,34 @@ func TestIPRemovalPreservesOtherRules(t *testing.T) {
 	}
 	if s.writes != 1 || s.saves != 0 || s.startup != before {
 		t.Fatalf("unverified change persisted: writes=%d saves=%d", s.writes, s.saves)
+	}
+}
+
+func TestIPStaleSequences(t *testing.T) {
+	for name, body := range map[string]string{
+		"missing native entry": `{"openconfig-acl:acl-sets":{"acl-set":[{"name":"EDGE","type":"ACL_IPV4","acl-entries":{}}]}}`,
+		"extra cached entry":   `{"openconfig-acl:acl-sets":{"acl-set":[{"name":"EDGE","type":"ACL_IPV4","acl-entries":{"acl-entry":[{"sequence-id":10},{"sequence-id":20}]}}]}}`,
+		"absent cached ACL":    `{"openconfig-acl:acl-sets":{}}`,
+		"missing collection":   `{}`,
+		"duplicate sequence":   `{"openconfig-acl:acl-sets":{"acl-set":[{"name":"EDGE","type":"ACL_IPV4","acl-entries":{"acl-entry":[{"sequence-id":10},{"sequence-id":10}]}}]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := &standardSwitch{running: populatedIP + neighbor}
+			s.restACLs = json.RawMessage(body)
+			device := s.device(t, func(w http.ResponseWriter, r *http.Request) {
+				t.Error("out-of-sync ACL was mutated")
+				w.WriteHeader(500)
+			})
+			desired := ipConfig{Family: ipv4ACL, Name: "EDGE", Rules: map[int64]ipRule{}}
+			if _, err := applyIP(context.Background(), device, desired); err == nil {
+				t.Fatal("stale RESTCONF view accepted for update")
+			}
+			if err := deleteIP(context.Background(), device, ipv4ACL, "EDGE"); err == nil {
+				t.Fatal("stale RESTCONF view accepted for deletion")
+			}
+			if s.writes != 0 || s.saves != 0 || s.running != populatedIP+neighbor || s.startup != populatedIP+neighbor {
+				t.Fatal("mismatch changed switch state")
+			}
+		})
 	}
 }

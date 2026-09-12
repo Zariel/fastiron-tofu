@@ -6,6 +6,8 @@ import (
 	"encoding/pem"
 	"net/http"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -29,6 +31,7 @@ type standardSwitch struct {
 	running, startup string
 	writes, saves    int
 	failSave         bool
+	restACLs         any
 }
 
 func (s *standardSwitch) device(t *testing.T, handler http.HandlerFunc) *fastiron.Device {
@@ -60,6 +63,16 @@ func (s *standardSwitch) device(t *testing.T, handler http.HandlerFunc) *fastiro
 	server.HandleFunc("/restconf/data/acl/", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if r.Method == http.MethodGet {
+			response := s.restACLs
+			if response == nil {
+				response = fixtureACLs(s.running)
+			}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				t.Error(err)
+			}
+			return
+		}
 		s.writes++
 		handler(w, r)
 	})
@@ -73,6 +86,21 @@ func (s *standardSwitch) device(t *testing.T, handler http.HandlerFunc) *fastiro
 		t.Fatal(err)
 	}
 	return device
+}
+
+func fixtureACLs(running string) map[string]any {
+	sets := []any{}
+	blocks := regexp.MustCompile(`(?m)^ip access-list extended ([^\n]+)\n((?: [^\n]*\n)*)`)
+	sequences := regexp.MustCompile(`(?m)^ sequence (\d+) `)
+	for _, block := range blocks.FindAllStringSubmatch(running, -1) {
+		entries := []any{}
+		for _, match := range sequences.FindAllStringSubmatch(block[2], -1) {
+			sequence, _ := strconv.ParseInt(match[1], 10, 64)
+			entries = append(entries, map[string]int64{"sequence-id": sequence})
+		}
+		sets = append(sets, map[string]any{"name": block[1], "type": "openconfig-acl:ACL_IPV4", "acl-entries": map[string]any{"acl-entry": entries}})
+	}
+	return map[string]any{"openconfig-acl:acl-sets": map[string]any{"acl-set": sets}}
 }
 
 func TestStandardPartialWrite(t *testing.T) {
