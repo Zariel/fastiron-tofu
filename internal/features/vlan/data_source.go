@@ -36,7 +36,7 @@ func (d *dataSource) Metadata(_ context.Context, req datasource.MetadataRequest,
 
 func (d *dataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	attributes := map[string]schema.Attribute{
-		"vlan_id": schema.Int64Attribute{Required: !d.collection, Computed: d.collection, Description: "VLAN ID from 1 through 4094. Includes the default VLAN, which the resource does not manage."},
+		"vlan_id": schema.Int64Attribute{Required: !d.collection, Computed: d.collection, Description: "VLAN ID from 1 through 4095. Includes the default VLAN, which can use 4095 and is not managed by the ordinary VLAN resource."},
 		"name":    schema.StringAttribute{Computed: true, Description: "Reported VLAN name, or an empty string when unnamed."},
 	}
 	description := "Reads a VLAN's ID and name through RESTCONF without taking ownership. A missing VLAN produces a diagnostic."
@@ -106,7 +106,7 @@ func readAll(ctx context.Context, device *fastiron.Device) (map[string]vlanStatu
 	}
 	vlans := map[string]vlanStatus{}
 	for _, entry := range response.VLANs.VLAN {
-		if entry.ID < 1 || entry.ID > 4094 || entry.Config.ID != entry.ID {
+		if entry.ID < 1 || entry.ID > 4095 || entry.Config.ID != entry.ID {
 			return nil, errors.New("RESTCONF VLAN collection contains an invalid or inconsistent identity")
 		}
 		key := strconv.FormatInt(entry.ID, 10)

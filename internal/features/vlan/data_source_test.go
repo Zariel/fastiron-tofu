@@ -24,17 +24,19 @@ func TestVLANDiscovery(t *testing.T) {
 		want         map[string]vlanStatus
 		wantErr      bool
 	}{
-		"collection":            {collection: true, parent: collection, want: map[string]vlanStatus{"1": {1, "DEFAULT-VLAN"}, "50": {50, ""}, "53": {53, "INFRA"}}},
-		"empty collection":      {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[]}}`, want: map[string]vlanStatus{}},
-		"missing container":     {collection: true, parent: `{}`, wantErr: true},
-		"duplicate identity":    {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[{"vlan-id":1,"config":{"vlan-id":1}},{"vlan-id":1,"config":{"vlan-id":1}}]}}`, wantErr: true},
-		"inconsistent identity": {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[{"vlan-id":1,"config":{"vlan-id":2}}]}}`, wantErr: true},
-		"invalid identity":      {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[{"vlan-id":4095,"config":{"vlan-id":4095}}]}}`, wantErr: true},
-		"default":               {id: 1, item: `{"openconfig-network-instance:vlan":[{"vlan-id":1,"config":{"vlan-id":1,"name":"DEFAULT-VLAN"}}]}`, want: map[string]vlanStatus{"selected": {1, "DEFAULT-VLAN"}}},
-		"unnamed":               {id: 50, item: `{"openconfig-network-instance:vlan":[{"vlan-id":50,"config":{"vlan-id":50}}]}`, want: map[string]vlanStatus{"selected": {50, ""}}},
-		"collection fallback":   {id: 53, parent: collection, want: map[string]vlanStatus{"selected": {53, "INFRA"}}},
-		"missing VLAN":          {id: 54, parent: collection, wantErr: true},
-		"unavailable endpoint":  {id: 54, wantErr: true},
+		"collection":                   {collection: true, parent: collection, want: map[string]vlanStatus{"1": {1, "DEFAULT-VLAN"}, "50": {50, ""}, "53": {53, "INFRA"}}},
+		"empty collection":             {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[]}}`, want: map[string]vlanStatus{}},
+		"missing container":            {collection: true, parent: `{}`, wantErr: true},
+		"duplicate identity":           {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[{"vlan-id":1,"config":{"vlan-id":1}},{"vlan-id":1,"config":{"vlan-id":1}}]}}`, wantErr: true},
+		"inconsistent identity":        {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[{"vlan-id":1,"config":{"vlan-id":2}}]}}`, wantErr: true},
+		"invalid identity":             {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[{"vlan-id":4096,"config":{"vlan-id":4096}}]}}`, wantErr: true},
+		"default":                      {id: 1, item: `{"openconfig-network-instance:vlan":[{"vlan-id":1,"config":{"vlan-id":1,"name":"DEFAULT-VLAN"}}]}`, want: map[string]vlanStatus{"selected": {1, "DEFAULT-VLAN"}}},
+		"relocated default":            {id: 4095, item: `{"openconfig-network-instance:vlan":[{"vlan-id":4095,"config":{"vlan-id":4095,"name":"DEFAULT-VLAN"}}]}`, want: map[string]vlanStatus{"selected": {4095, "DEFAULT-VLAN"}}},
+		"relocated default collection": {collection: true, parent: `{"openconfig-network-instance:vlans":{"vlan":[{"vlan-id":4095,"config":{"vlan-id":4095,"name":"DEFAULT-VLAN"}}]}}`, want: map[string]vlanStatus{"4095": {4095, "DEFAULT-VLAN"}}},
+		"unnamed":                      {id: 50, item: `{"openconfig-network-instance:vlan":[{"vlan-id":50,"config":{"vlan-id":50}}]}`, want: map[string]vlanStatus{"selected": {50, ""}}},
+		"collection fallback":          {id: 53, parent: collection, want: map[string]vlanStatus{"selected": {53, "INFRA"}}},
+		"missing VLAN":                 {id: 54, parent: collection, wantErr: true},
+		"unavailable endpoint":         {id: 54, wantErr: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

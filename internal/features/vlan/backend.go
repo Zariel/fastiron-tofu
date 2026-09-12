@@ -43,8 +43,8 @@ func Validate(v Config) error {
 }
 
 func Read(ctx context.Context, d *fastiron.Device, id int64) (Config, error) {
-	if id < 1 || id > 4094 {
-		return Config{}, errors.New("vlan_id must be between 1 and 4094")
+	if id < 1 || id > 4095 {
+		return Config{}, errors.New("vlan_id must be between 1 and 4095")
 	}
 
 	if !d.RESTCONFEnabled() {

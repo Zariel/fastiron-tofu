@@ -24,7 +24,9 @@ output "selected_name" {
 }
 ```
 
-The collection's `vlans` map uses decimal VLAN IDs as keys. Each value contains an integer `vlan_id` and a string `name`. An unnamed VLAN has an empty name. The individual query accepts IDs 1 through 4094 and reports a diagnostic when the requested VLAN is absent. Neither query includes membership, management/default VLAN selection, or other VLAN policies.
+The collection's `vlans` map uses decimal VLAN IDs as keys. Each value contains an integer `vlan_id` and a string `name`. An unnamed VLAN has an empty name. The individual query accepts IDs 1 through 4095, including 4095 when used by the default VLAN, and reports a diagnostic when the requested VLAN is absent. Neither query includes membership, management/default VLAN selection, or other VLAN policies.
+
+After a default-VLAN change, RESTCONF can temporarily list both the former and current default entries. Names alone therefore do not identify the active default. Ordinary VLAN write protection uses the native global setting.
 
 Hardware checks on the [tested firmware](../compatibility.md) covered default and unnamed VLANs, refresh after a name change, missing-VLAN diagnostics, collection refresh after deletion, and no-change plans. Serial checks verified that discovery left running and saved configuration unchanged.
 
