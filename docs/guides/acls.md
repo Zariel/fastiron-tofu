@@ -158,7 +158,9 @@ tofu import fastiron_mac_access_list.hosts 'mac access-list HOSTS'
 
 Use `fastiron_mac_access_group` to bind the ACL. Remove bindings before deleting the definition. MAC writes require agreement between the native rules and the RESTCONF view before mutation, including matches, actions and order. The tested firmware omits RESTCONF logging metadata after reboot; the provider reads the logging flag from native configuration while verifying the remaining fields and rule order. Failed operations can leave a partial rule list; reapply to converge and save it.
 
-Hardware field and mutation checks verified exact and noncontiguous masks, logging, EtherType boundaries, duplicate rejection, ordered insertion and empty ACL retention. Provider checks passed for empty and populated creation, import, rule reordering, mask changes and logging removal, with native running/saved verification and no-change plans. Provider checks also covered empty transitions, repopulation, name replacement and deletion, restoring the original running and saved configuration. Reboot and bound replacement checks remain.
+Hardware field and mutation checks verified exact and noncontiguous masks, logging, EtherType boundaries, duplicate rejection, ordered insertion and empty ACL retention. Names of 47, 48 and 64 characters were accepted by both RESTCONF and native CLI. Provider checks passed for empty and populated creation, import, rule reordering, mask changes and logging removal, with native running/saved verification and no-change plans. Checks also covered empty transitions, repopulation, name replacement and deletion.
+
+Populated and empty MAC ACLs and an Ethernet binding survived reboot with unchanged native and saved configuration and a no-change OpenTofu plan. A subsequent EtherType update and bound name replacement with `create_before_destroy` passed, including hardware binding and persistence checks. Deletion restored the original running and saved configuration. These checks verify configuration and hardware programming, not packet-filtering behavior.
 
 ## ACL inventory
 
