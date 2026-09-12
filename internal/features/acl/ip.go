@@ -121,6 +121,9 @@ func validateIP(p ipConfig) error {
 			if err != nil || prefix.Bits() == 0 || prefix.Masked().String() != address || prefix.Addr().Is4() != (p.Family == ipv4ACL) {
 				return fmt.Errorf("ACL sequence %d addresses must be any or canonical IPv%d prefixes", sequence, p.Family)
 			}
+			if prefix.Addr().Is4In6() {
+				return errors.New("IPv4-mapped IPv6 prefixes are unsupported because native save/reload can discard their rules")
+			}
 		}
 		if rule.Protocol.Present && (rule.Protocol.Value < 0 || rule.Protocol.Value > 254 || (p.Family == ipv4ACL && rule.Protocol.Value == 0)) {
 			return errors.New("protocol must be 0 through 254; omit it for an IPv4 all-protocol match")

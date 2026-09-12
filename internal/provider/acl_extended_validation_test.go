@@ -59,3 +59,32 @@ rule {
 		t.Fatalf("invalid ACL performed %d writes", s.writes)
 	}
 }
+
+func TestOpenTofuIPv6Mapped(t *testing.T) {
+	s := newSwitch(t)
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base)
+	run(0, "init", "-no-color")
+	for field, prefix := range map[string]string{"source": "::ffff:192.0.2.0/120", "destination": "::ffff:198.51.100.1/128"} {
+		t.Run(field, func(t *testing.T) {
+			write("main.tf", base+`resource "fastiron_ipv6_access_list" "test" {
+ name = "EDGE"
+ rule {
+ sequence = 10
+ action = "permit"
+ `+field+` = "`+prefix+`"
+ }
+}
+`)
+			output := run(1, "plan", "-no-color")
+			if !strings.Contains(strings.Join(strings.Fields(output), " "), "native save/reload can discard their rules") {
+				t.Fatalf("missing persistence diagnostic: %s", output)
+			}
+		})
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.writes != 0 {
+		t.Fatal("unsupported mapped prefix reached the switch")
+	}
+}
