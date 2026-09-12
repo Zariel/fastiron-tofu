@@ -12,7 +12,10 @@ import (
 )
 
 func TestOpenTofuACLDriftPlan(t *testing.T) {
-	for name, tc := range map[string]struct{ kind, id, config, native, extra, field, want string }{
+	for name, tc := range map[string]struct {
+		kind, id, config, native, extra, field string
+		want                                   any
+	}{
 		"extended port": {
 			kind: "ip_access_list_extended", id: "ip access-list extended EDGE",
 			config: `name = "EDGE"
@@ -28,6 +31,23 @@ rule {
 }`,
 			native: " sequence 10 permit tcp any any eq ssl\n sequence 30 deny ip any any\n",
 			extra:  " sequence 40 permit icmp any any\n", field: "destination_port", want: "443",
+		},
+		"IPv6 logging": {
+			kind: "ipv6_access_list", id: "ipv6 access-list EDGE",
+			config: `name = "EDGE"
+rule {
+ sequence = 10
+ action = "permit"
+ protocol = 6
+ destination_port = "443"
+ log = true
+}
+rule {
+ sequence = 30
+ action = "deny"
+}`,
+			native: " sequence 10 permit tcp any any eq ssl log\n sequence 30 deny ipv6 any any\n",
+			extra:  " sequence 40 permit icmp any any\n", field: "log", want: true,
 		},
 		"standard source": {
 			kind: "ip_access_list_standard", id: "ip access-list standard 90",
@@ -99,22 +119,28 @@ rule {
 }
 
 func TestOpenTofuACLUnknownMatch(t *testing.T) {
+	t.Run("IPv4 source", func(t *testing.T) { testACLUnknown(t, "ip_access_list_extended", "source", `"192.0.2.0/24"`) })
+	t.Run("IPv6 logging", func(t *testing.T) { testACLUnknown(t, "ipv6_access_list", "log", "true") })
+}
+
+func testACLUnknown(t *testing.T, kind, field, input string) {
+	t.Helper()
 	s := newSwitch(t)
 	write, run, base := tofuFixture(t, s)
-	write("main.tf", base+`resource "terraform_data" "prefix" {
- input = "192.0.2.0/24"
+	write("main.tf", base+fmt.Sprintf(`resource "terraform_data" "prefix" {
+ input = %s
 }
-resource "fastiron_ip_access_list_extended" "test" {
+resource "fastiron_%s" "test" {
  name = "EDGE"
  rule {
   sequence = 10
   action = "permit"
-  source = terraform_data.prefix.output
+  %s = terraform_data.prefix.output
   protocol = 6
   destination_port = "443"
  }
 }
-`)
+`, input, kind, field))
 	run(0, "init", "-no-color")
 	run(2, "plan", "-detailed-exitcode", "-out=plan.tfplan", "-no-color")
 	type change struct {
@@ -131,7 +157,7 @@ resource "fastiron_ip_access_list_extended" "test" {
 		t.Fatal(err)
 	}
 	for _, r := range plan.Changes {
-		if r.Address != "fastiron_ip_access_list_extended.test" {
+		if r.Address != "fastiron_"+kind+".test" {
 			continue
 		}
 		switch unknown := r.Change.Unknown["rule"].(type) {
@@ -140,11 +166,11 @@ resource "fastiron_ip_access_list_extended" "test" {
 				t.Fatal("unknown rule became known")
 			}
 		case []any:
-			if len(unknown) != 1 || unknown[0].(map[string]any)["source"] != true {
-				t.Fatalf("unknown source was defaulted: %+v", unknown)
+			if len(unknown) != 1 || unknown[0].(map[string]any)[field] != true {
+				t.Fatalf("unknown %s was defaulted: %+v", field, unknown)
 			}
 		default:
-			t.Fatalf("unknown source absent from plan: %+v", unknown)
+			t.Fatalf("unknown %s absent from plan: %+v", field, unknown)
 		}
 		return
 	}
@@ -186,12 +212,18 @@ func TestOpenTofuACLDefaults(t *testing.T) {
 	write, run, base := tofuFixture(t, s)
 	write("main.tf", base)
 	run(0, "init", "-no-color")
-	for name, body := range map[string]string{"empty": "", "any": "rule {\n sequence = 10\n action = \"permit\"\n}\n"} {
+	anyRule := "rule {\n sequence = 10\n action = \"permit\"\n}\n"
+	for name, tc := range map[string]struct{ kind, body string }{
+		"IPv4 empty": {"ip_access_list_extended", ""},
+		"IPv4 any":   {"ip_access_list_extended", anyRule},
+		"IPv6 empty": {"ipv6_access_list", ""},
+		"IPv6 any":   {"ipv6_access_list", anyRule},
+	} {
 		t.Run(name, func(t *testing.T) {
-			write("main.tf", base+"resource \"fastiron_ip_access_list_extended\" \"test\" {\n name = \"EDGE\"\n"+body+"}\n")
+			write("main.tf", base+"resource \"fastiron_"+tc.kind+"\" \"test\" {\n name = \"EDGE\"\n"+tc.body+"}\n")
 			run(2, "plan", "-detailed-exitcode", "-out=plan.tfplan", "-no-color")
-			rules := plannedACLRules(t, run(0, "show", "-json", "plan.tfplan"), "fastiron_ip_access_list_extended.test")
-			if name == "empty" {
+			rules := plannedACLRules(t, run(0, "show", "-json", "plan.tfplan"), "fastiron_"+tc.kind+".test")
+			if tc.body == "" {
 				if rules == nil || len(rules) != 0 {
 					t.Fatalf("empty ACL rules = %#v", rules)
 				}
@@ -199,6 +231,9 @@ func TestOpenTofuACLDefaults(t *testing.T) {
 			}
 			if len(rules) != 1 {
 				t.Fatalf("defaulted rule = %+v", rules)
+			}
+			if tc.kind == "ipv6_access_list" && rules[0]["log"] != false {
+				t.Fatalf("logging default = %v", rules[0]["log"])
 			}
 			for _, field := range []string{"source", "destination", "source_port", "destination_port"} {
 				if rules[0][field] != "any" {

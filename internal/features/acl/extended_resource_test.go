@@ -20,15 +20,16 @@ func TestExtendedDestroyRetry(t *testing.T) {
 		s.running = absentStandard + neighbor
 		w.WriteHeader(204)
 	})
-	r := &ExtendedResource{device: device}
+	r := NewExtendedResource()
+	r.device = device
 	var schema resource.SchemaResponse
 	r.Schema(ctx, resource.SchemaRequest{}, &schema)
 	state := tfsdk.State{Schema: schema.Schema}
-	rules, diagnostics := types.SetValueFrom(ctx, extendedRuleType, []extendedRuleModel{{Sequence: types.Int64Value(10), Action: types.StringValue("permit"), Source: types.StringValue("any"), Destination: types.StringValue("any"), Protocol: types.Int64Value(6), SourcePort: types.StringValue("any"), DestinationPort: types.StringValue("443")}})
+	rules, diagnostics := types.SetValueFrom(ctx, ipRuleType(ipv4ACL), []ipRuleFields{{Sequence: types.Int64Value(10), Action: types.StringValue("permit"), Source: types.StringValue("any"), Destination: types.StringValue("any"), Protocol: types.Int64Value(6), SourcePort: types.StringValue("any"), DestinationPort: types.StringValue("443")}})
 	if diagnostics.HasError() {
 		t.Fatal(diagnostics)
 	}
-	model := extendedModel{ID: types.StringValue("ip access-list extended EDGE"), Name: types.StringValue("EDGE"), Rules: rules, PersistencePending: types.BoolValue(false)}
+	model := ipModel{ID: types.StringValue("ip access-list extended EDGE"), Name: types.StringValue("EDGE"), Rules: rules, PersistencePending: types.BoolValue(false)}
 	if diagnostics := state.Set(ctx, model); diagnostics.HasError() {
 		t.Fatal(diagnostics)
 	}
