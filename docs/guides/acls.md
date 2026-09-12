@@ -107,7 +107,7 @@ The rule fields follow the extended IPv4 table, with these differences:
 
 - Use IPv6 prefixes, including `/128` for one host. Addresses still default to `any`. IPv4-mapped prefixes such as `::ffff:192.0.2.0/120` are rejected: the tested firmware saves a representation that it drops during reload.
 - `protocol` accepts 0 through 254. Zero is an explicit IPv6 protocol match; omit the field to match all protocols. ICMPv6 is protocol 58.
-- `log` enables syslog for matching packets and defaults to `false`. The tested RESTCONF implementation applies this option to IPv6 rules.
+- `log` marks matching packets for syslog and defaults to `false`. The tested RESTCONF implementation applies this option to IPv6 rules. FastIron also requires `logging enable` on the ACL binding; bindings with that additional setting currently need to be managed outside the provider.
 - IPv6 ACLs require names rather than numbered IPv4 identities. Names may contain up to 47 bytes.
 
 Import uses the native identity:

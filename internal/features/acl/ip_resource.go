@@ -100,7 +100,7 @@ func (r *ipResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *r
 		"internal_priority_marking": schema.Int64Attribute{Optional: true, Description: "Internal priority marking from 0 through 7. Omit to leave priority unchanged."},
 	}
 	if r.family == ipv6ACL {
-		ruleAttributes["log"] = schema.BoolAttribute{Optional: true, Computed: true, Description: "Log matching packets to syslog. Defaults to false."}
+		ruleAttributes["log"] = schema.BoolAttribute{Optional: true, Computed: true, Description: "Mark matching packets for syslog. Logging must also be enabled on the ACL binding. Defaults to false."}
 	}
 	resp.Schema = schema.Schema{Description: "Owns one " + family + " ACL and its ordered packet rules. Bindings are separate; delete requires removing references first.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: " + r.family.header("<name>") + ".", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
