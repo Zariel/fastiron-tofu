@@ -45,7 +45,7 @@ func Read(ctx context.Context, d *fastiron.Device, id int64) (Config, error) {
 	}
 
 	if !d.RESTCONFEnabled() {
-		return Config{}, errors.New("RESTCONF is required for VLAN configuration")
+		return Config{}, errors.New("RESTCONF is required for VLAN reads")
 	}
 	var response struct {
 		VLANs []vlanEntry `json:"openconfig-network-instance:vlan"`

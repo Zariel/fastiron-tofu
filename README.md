@@ -13,7 +13,7 @@ Plugin binary: `terraform-provider-fastiron`.
 
 | Feature | Supported / implemented | Notes |
 |---|---|---|
-| VLANs | Implemented | Create, name and delete VLANs. |
+| VLANs | Implemented | Create, name and delete VLANs; [single and collection discovery](docs/guides/vlans.md), including the default VLAN. |
 | VLAN membership | Implemented | Individual tagged or untagged Ethernet and LAG memberships. |
 | Additional VLAN policies | Not yet | Management/default VLAN selection, voice VLANs and IGMP snooping. |
 | LAGs | Implemented | Static/dynamic mode, name, members and discovery. Detached ports follow native behavior and become disabled. |
