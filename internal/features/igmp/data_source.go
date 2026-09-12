@@ -2,6 +2,7 @@ package igmp
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -10,8 +11,11 @@ import (
 )
 
 type (
-	vlanDataSource struct{ device *fastiron.Device }
-	vlanQuery      struct {
+	vlanDataSource struct {
+		device     *fastiron.Device
+		collection bool
+	}
+	vlanQuery struct {
 		VLANID  types.Int64  `tfsdk:"vlan_id"`
 		Mode    types.String `tfsdk:"querier_mode"`
 		Version types.Int64  `tfsdk:"version"`
@@ -20,18 +24,31 @@ type (
 
 func NewVLANDataSource() *vlanDataSource { return &vlanDataSource{} }
 
+func NewInventoryDataSource() *vlanDataSource { return &vlanDataSource{collection: true} }
+
 var _ datasource.DataSourceWithConfigure = (*vlanDataSource)(nil)
 
 func (d *vlanDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_vlan_igmp_snooping"
+	if d.collection {
+		resp.TypeName = req.ProviderTypeName + "_igmp_snooping_vlans"
+	}
 }
 
 func (d *vlanDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Reads native IGMP snooping overrides on an existing VLAN without taking ownership or saving configuration. Null fields inherit global settings.", Attributes: map[string]schema.Attribute{
-		"vlan_id":      schema.Int64Attribute{Required: true, Description: "Existing VLAN identifier, 1 through 4095."},
+	attributes := map[string]schema.Attribute{
+		"vlan_id":      schema.Int64Attribute{Required: !d.collection, Computed: d.collection, Description: "Existing VLAN identifier, 1 through 4095."},
 		"querier_mode": schema.StringAttribute{Computed: true, Description: "Configured active, passive or disabled override. Null means the global mode is inherited."},
 		"version":      schema.Int64Attribute{Computed: true, Description: "Configured version 2 or 3 override. Null means the global version is inherited."},
-	}}
+	}
+	description := "Reads native IGMP snooping overrides on an existing VLAN without taking ownership or saving configuration. Null fields inherit global settings."
+	if d.collection {
+		attributes = map[string]schema.Attribute{
+			"vlans": schema.MapNestedAttribute{Computed: true, Description: "Native VLANs keyed by decimal VLAN ID, including the default VLAN and VLANs with inherited settings.", NestedObject: schema.NestedAttributeObject{Attributes: attributes}},
+		}
+		description = "Reads native IGMP snooping overrides for every configured VLAN without taking ownership or saving configuration. Includes CLI-only overrides omitted by RESTCONF; null fields inherit global settings."
+	}
+	resp.Schema = schema.Schema{Description: description, Attributes: attributes}
 }
 
 func (d *vlanDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -47,6 +64,22 @@ func (d *vlanDataSource) Configure(_ context.Context, req datasource.ConfigureRe
 }
 
 func (d *vlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	if d.collection {
+		observed, err := readInventory(ctx, d.device)
+		if err != nil {
+			resp.Diagnostics.AddError("Cannot read VLAN IGMP inventory", err.Error())
+			return
+		}
+		vlans := make(map[string]vlanQuery, len(observed))
+		for id, current := range observed {
+			vlans[strconv.FormatInt(id, 10)] = queryState(id, current)
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, struct {
+			VLANs map[string]vlanQuery `tfsdk:"vlans"`
+		}{VLANs: vlans})...)
+		return
+	}
+
 	var query vlanQuery
 	resp.Diagnostics.Append(req.Config.Get(ctx, &query)...)
 	if resp.Diagnostics.HasError() {
@@ -58,13 +91,16 @@ func (d *vlanDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		resp.Diagnostics.AddError("Cannot read VLAN IGMP overrides", err.Error())
 		return
 	}
-	query.Mode = types.StringNull()
-	query.Version = types.Int64Null()
+	resp.Diagnostics.Append(resp.State.Set(ctx, queryState(query.VLANID.ValueInt64(), observed.settings))...)
+}
+
+func queryState(id int64, observed settings) vlanQuery {
+	query := vlanQuery{VLANID: types.Int64Value(id), Mode: types.StringNull(), Version: types.Int64Null()}
 	if observed.Mode != "" {
 		query.Mode = types.StringValue(observed.Mode)
 	}
 	if observed.Version != 0 {
 		query.Version = types.Int64Value(observed.Version)
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, query)...)
+	return query
 }

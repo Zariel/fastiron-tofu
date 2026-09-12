@@ -12,6 +12,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 |---|---|
 | VLAN | Existence and name |
 | VLAN membership | One tagged or untagged Ethernet or LAG relationship |
+| IGMP snooping | Global mode/version and independent VLAN mode/version overrides; see [IGMP policy and inheritance](guides/igmp-snooping.md) |
 | LAG | Existence, name, dynamic/static mode, and Ethernet membership |
 | Ethernet | Port name and administrative enable state |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
@@ -35,11 +36,13 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet, LAG or whole VLANs |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
-Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md).
+Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md). [IGMP queries](guides/igmp-snooping.md) report native global settings and individual or all-VLAN overrides, including CLI-only overrides omitted by RESTCONF.
 
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, native configuration verification, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits
+
+- IGMP resources own global and VLAN querier mode and version. The tested RESTCONF API cannot reliably configure explicit per-VLAN disabling: its disabled value can select passive mode instead. Per-port versions, multicast group tables and other multicast controls are outside these resources. Queries report configured policy rather than effective forwarding.
 
 - ACL support covers numbered standard and named or numbered extended IPv4 definitions, IPv6 and MAC definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). IPv4 logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
 
