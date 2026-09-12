@@ -37,7 +37,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 
 ## Limits
 
-- ACL support covers numbered standard IPv4 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). Other ACL definitions, VE targets, logging and VLAN port subsets are not implemented.
+- ACL support covers numbered standard IPv4 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). Other ACL definitions, logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
 
 - Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 
@@ -49,6 +49,6 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 - VE administrative enable state is not currently managed.
 - DNS IPv4 succeeded on the tested build; its endpoint rejected IPv6 DNS addresses.
 - PoE tests used a disconnected port. Reported power measurements under load have not been validated.
-- Reboot persistence testing has not yet completed; saved configuration was checked independently over serial.
+- Reboot persistence was verified for populated and empty standard IPv4 ACLs and IPv4 VLAN, IPv6 Ethernet and MAC LAG bindings, including unchanged native configuration and a no-change OpenTofu plan after reload. This does not constitute exhaustive reboot validation of every resource.
 
 Each resource owns only its documented settings. VLAN and VE deletion reject remaining child configuration. Avoid declaring the same remote object in multiple resources or states. Provider operations are serialized per hostname within one provider process; separate states, processes, DNS aliases, and external configuration changes require operator coordination.

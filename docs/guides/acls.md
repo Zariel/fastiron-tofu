@@ -39,7 +39,9 @@ FastIron requires removing a filter before changing it. Updates delete changed o
 
 Omitting every `rule` manages an empty ACL. The tested firmware cannot create an empty ACL directly through RESTCONF, so creation briefly installs an owned `deny any` rule, removes it, and then saves the empty ACL. Removing the last rule from an existing ACL also leaves an empty ACL; destroying the resource removes the ACL itself.
 
-Hardware workflows on the [tested firmware](../compatibility.md) covered creation, rule changes and sequence moves, import, drift correction, bound-deletion refusal, empty ACL transitions, name replacement, recreation and deletion. Running and startup configuration were checked independently over serial, including preservation of neighboring ACLs and bindings. Packet-filtering behavior and reboot persistence have not yet been tested.
+Hardware workflows on the [tested firmware](../compatibility.md) covered creation, rule changes and sequence moves, import, drift correction, bound-deletion refusal, empty ACL transitions, name replacement, recreation and deletion. Running and startup configuration were checked independently over serial, including preservation of neighboring ACLs and bindings.
+
+A reboot workflow verified a standard ACL with non-default rule sequences, an empty standard ACL, an IPv4 VLAN binding, an IPv6 Ethernet binding and a MAC LAG binding. Running and saved configuration remained unchanged after reload, and `tofu plan` reported no changes. Packet-filtering behavior has not yet been tested.
 
 The [example](../../examples/acl/main.tf) includes provider configuration.
 
@@ -80,4 +82,4 @@ Hardware workflows on the [tested firmware](../compatibility.md) covered all thr
 
 VLAN bindings apply to the whole VLAN and do not require a VE. Direct REST/native checks covered creation and deletion for all supported families and directions. An OpenTofu workflow verified IPv4 VLAN binding creation with its ACL and VLAN parents, default direction, import, external drift correction, direction replacement, recreation after external VLAN deletion, and deletion before its parents. Each phase checked running/startup configuration over serial, REST entries, neighboring bindings, VLAN names and a no-change plan.
 
-Bindings that contain additional native settings, including `logging enable` or a VLAN port subset, cannot currently be adopted by these resources. VE binding configuration is not yet implemented. VE REST requests returned HTTP 500 during testing and need further investigation.
+Bindings that contain additional native settings, including `logging enable` or a VLAN port subset, cannot be adopted by these resources. Use `vlan <id>` for whole-VLAN filtering, including routed VLANs; `ve <id>` is not an accepted resource target.

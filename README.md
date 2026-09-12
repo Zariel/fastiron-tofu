@@ -36,7 +36,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | IPv4 extended ACLs | Not yet | Protocol, source/destination addresses, ports and marking fields. |
 | IPv6 ACLs | Not yet | IPv6 rule definitions. Existing ACLs can be bound through access-group resources. |
 | MAC ACLs | Not yet | MAC rule definitions. Existing ACLs can be bound through access-group resources. |
-| ACL bindings | Partial | [IPv4, IPv6 and MAC access groups](docs/guides/acls.md) on Ethernet, LAG and whole VLANs, with lifecycle validation. VE targets, logging and VLAN port subsets are not implemented. |
+| ACL bindings | Implemented | [IPv4, IPv6 and MAC access groups](docs/guides/acls.md) on Ethernet, LAG and whole VLANs, with lifecycle and reboot validation. Logging and VLAN port subsets are excluded. |
 | BGP | Not yet | Planned for SSH configuration support. |
 | Routing policy | Not yet | Prefix lists, route maps, AS-path filters and community lists. |
 | Global system settings | Not yet | Hostname and other system configuration fields. |
@@ -46,7 +46,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | DHCP and neighbor security | Not yet | DHCPv4/v6 snooping, ARP/IPv6 neighbor inspection and IP source guards. |
 | MAC address tables | Not yet | Static entries and static/dynamic table discovery. |
 | Stacking | Not yet | Stack configuration. |
-| Configuration saving | Implemented | Automatic saves or an explicit save resource. Saved contents are verified; reboot persistence testing remains. |
+| Configuration saving | Implemented | Automatic saves or an explicit save resource. Saved contents are verified; ACL and binding reboot validation passed. |
 | Firmware discovery | Implemented | Reports the active firmware; no expected-version input. |
 | RESTCONF configuration | Partial | Used by the available resources above. Remaining endpoint and data-source coverage is still being implemented. |
 | SSH discovery and verification | Implemented | Native configuration reads, firmware discovery, ownership checks and saving. |
