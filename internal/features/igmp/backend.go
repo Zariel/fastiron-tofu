@@ -109,30 +109,11 @@ func parse(configuration string, id int64) (nativeState, error) {
 			state.unowned = append(state.unowned, line)
 			continue
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 || fields[0] != "multicast" {
-			state.unowned = append(state.unowned, line)
-			continue
+		owned, err := parseOverride(line, &state.settings)
+		if err != nil {
+			return nativeState{}, err
 		}
-		switch fields[1] {
-		case "active", "passive", "disable-igmp-snoop":
-			if len(fields) != 2 || state.Mode != "" {
-				return nativeState{}, errors.New("native IGMP mode is ambiguous or unsupported")
-			}
-			state.Mode = fields[1]
-			if state.Mode == "disable-igmp-snoop" {
-				state.Mode = "disabled"
-			}
-		case "version":
-			if len(fields) != 3 || state.Version != 0 {
-				return nativeState{}, errors.New("native IGMP version is ambiguous or unsupported")
-			}
-			version, err := strconv.ParseInt(fields[2], 10, 64)
-			if err != nil || (version != 2 && version != 3) {
-				return nativeState{}, errors.New("native IGMP version is unsupported")
-			}
-			state.Version = version
-		default:
+		if !owned {
 			state.unowned = append(state.unowned, line)
 		}
 	}
