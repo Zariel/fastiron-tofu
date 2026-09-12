@@ -154,3 +154,26 @@ func TestIPSequenceMove(t *testing.T) {
 		t.Fatalf("saved configuration = %s", s.startup)
 	}
 }
+
+func TestIPRemovalPreservesOtherRules(t *testing.T) {
+	before := emptyIP + " sequence 30 deny ip any any\n sequence 40 permit icmp any any\n" + neighbor
+	s := &standardSwitch{running: before}
+	device := s.device(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("unexpected request %s", r.Method)
+		}
+		s.running = emptyIP + " sequence 30 deny ip host 0.0.0.0 host 0.0.0.0 dscp-matching 0 dscp-marking 0 internal-priority-marking 0\n" + neighbor
+		w.WriteHeader(204)
+	})
+	desired := ipConfig{Family: ipv4ACL, Name: "EDGE", Rules: map[int64]ipRule{30: {Sequence: 30, Action: "deny", Source: "any", Destination: "any"}}}
+	observed, err := applyIP(context.Background(), device, desired)
+	if err == nil || observed == nil {
+		t.Fatalf("unintended rule change: observed=%+v error=%v", observed, err)
+	}
+	if observed.Rules[30].Source != "0.0.0.0/32" || !observed.Rules[30].DSCP.Present {
+		t.Fatalf("observed rule lost the unintended change: %+v", observed.Rules[30])
+	}
+	if s.writes != 1 || s.saves != 0 || s.startup != before {
+		t.Fatalf("unverified change persisted: writes=%d saves=%d", s.writes, s.saves)
+	}
+}
