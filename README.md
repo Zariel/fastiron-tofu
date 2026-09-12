@@ -17,7 +17,8 @@ Plugin binary: `terraform-provider-fastiron`.
 | Default VLAN selection | Implemented | [Global default ID](docs/guides/vlans.md), including 4095; preserves the default VLAN and associated VE settings. Deletion resets to VLAN 1. |
 | VLAN membership | Implemented | Individual tagged or untagged Ethernet and LAG memberships. |
 | IGMP snooping | Implemented | [Global/VLAN mode and version, plus native queries](docs/guides/igmp-snooping.md). Lifecycle, reboot and discovery validated; default VLANs 1 and 4095 covered. Explicit per-VLAN disabling and other multicast controls are outside this RESTCONF scope. |
-| Additional VLAN policies | Not yet | Management VLAN selection and voice VLANs. |
+| Interface voice VLAN | Implemented | [Local Ethernet policy and native query](docs/guides/voice-vlan.md), including drift, import, replacement and saved deletion. FlexAuth voice actions and LLDP-MED remain separate. |
+| Management VLAN selection | Not yet | Unavailable through the tested router image's documented RESTCONF paths; see [compatibility limits](docs/compatibility.md). |
 | LAGs | Implemented | Static/dynamic mode, name, members and discovery. Detached ports follow native behavior and become disabled. |
 | Ethernet interfaces | Partial | Port name and administrative enable state. Speed, duplex, clock, storm control, protected ports, jumbo frames and DSCP trust remain. |
 | Routed VLAN interfaces (VE) | Partial | Existence, VLAN binding and port name. Administrative enable state remains. |

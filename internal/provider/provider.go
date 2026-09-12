@@ -19,6 +19,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/system"
 	"github.com/zariel/fastiron-tofu/internal/features/ve"
 	"github.com/zariel/fastiron-tofu/internal/features/vlan"
+	"github.com/zariel/fastiron-tofu/internal/features/voicevlan"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -50,6 +51,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return igmp.NewVLANResource() },
 		func() resource.Resource { return igmp.NewGlobalResource() },
 		func() resource.Resource { return &ethernet.Resource{} },
+		func() resource.Resource { return voicevlan.NewResource() },
 		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
 		func() resource.Resource { return lldp.NewGlobalResource() },
@@ -89,6 +91,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &dns.DataSource{} },
 		func() datasource.DataSource { return &lldp.DataSource{} },
 		func() datasource.DataSource { return &poe.DataSource{} },
+		func() datasource.DataSource { return voicevlan.NewDataSource() },
 		func() datasource.DataSource { return &address.DataSource{} },
 		func() datasource.DataSource { return &lag.DataSource{} },
 		func() datasource.DataSource { return &route.DataSource{} },

@@ -1,0 +1,61 @@
+package voicevlan
+
+import (
+	"context"
+
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+)
+
+type interfaceDataSource struct{ device *fastiron.Device }
+
+func NewDataSource() *interfaceDataSource { return &interfaceDataSource{} }
+
+var _ datasource.DataSourceWithConfigure = (*interfaceDataSource)(nil)
+
+func (d *interfaceDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_interface_voice_vlan"
+}
+
+func (d *interfaceDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{Description: "Reads the native local IP voice VLAN on an Ethernet interface without taking ownership or saving configuration.", Attributes: map[string]schema.Attribute{
+		"interface": schema.StringAttribute{Required: true, Description: "ethernet <stack>/<slot>/<port>."},
+		"vlan_id":   schema.Int64Attribute{Computed: true, Description: "Local voice VLAN identifier, or null if no local policy is configured. This is not an operational phone or VLAN-membership query."},
+	}}
+}
+
+func (d *interfaceDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+	device, ok := req.ProviderData.(*fastiron.Device)
+	if !ok {
+		resp.Diagnostics.AddError("Invalid provider client", "Expected a FastIron device client.")
+		return
+	}
+	d.device = device
+}
+
+func (d *interfaceDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var query struct {
+		Interface types.String `tfsdk:"interface"`
+		VLANID    types.Int64  `tfsdk:"vlan_id"`
+	}
+	resp.Diagnostics.Append(req.Config.Get(ctx, &query)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	observed, err := read(ctx, d.device, query.Interface.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Cannot read interface voice VLAN", err.Error())
+		return
+	}
+	query.VLANID = types.Int64Null()
+	if observed.vlanID != 0 {
+		query.VLANID = types.Int64Value(observed.vlanID)
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, query)...)
+}

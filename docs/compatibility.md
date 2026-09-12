@@ -15,6 +15,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | IGMP snooping | Global mode/version and independent VLAN mode/version overrides; see [IGMP policy and inheritance](guides/igmp-snooping.md) |
 | LAG | Existence, name, dynamic/static mode, and Ethernet membership |
 | Ethernet | Port name and administrative enable state |
+| Interface voice VLAN | [Local Ethernet IP voice VLAN policy](guides/voice-vlan.md), with native discovery, drift reconciliation, import, replacement and saved deletion |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
 | Spanning tree | Per-VLAN STP/RSTP mode and bridge priority; Ethernet admin-edge, BPDU guard and root guard |
@@ -37,6 +38,8 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Persistence | Automatic saves or explicit configuration-save resource |
 
 Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md). [IGMP queries](guides/igmp-snooping.md) report native global settings and individual or all-VLAN overrides, including CLI-only overrides omitted by RESTCONF.
+
+The [interface voice VLAN query](guides/voice-vlan.md) reports the configured local policy, including native-only settings; an absent policy returns null.
 
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, native configuration verification, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
