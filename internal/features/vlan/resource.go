@@ -41,7 +41,7 @@ func (r *Resource) Metadata(_ context.Context, req resource.MetadataRequest, res
 func (r *Resource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns VLAN existence and its name. Membership, spanning tree, and routed interfaces are separate domains. Import with vlan <id>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: vlan <id>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"vlan_id":             schema.Int64Attribute{Required: true, Description: "VLAN identifier, 2 through 4094. The default VLAN is not managed.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
+		"vlan_id":             schema.Int64Attribute{Required: true, Description: "VLAN identifier, 1 through 4094. The active default VLAN is managed separately.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 		"name":                schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString(""), Description: "VLAN name. Omission clears the name; import requires matching HCL to preserve a non-default name. DEFAULT-VLAN is reserved for global default VLAN selection."},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
@@ -164,7 +164,7 @@ func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp 
 func (r *Resource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id, err := strconv.ParseInt(strings.TrimPrefix(req.ID, "vlan "), 10, 64)
 	if err != nil || req.ID != "vlan "+strconv.FormatInt(id, 10) || Validate(Config{ID: id}) != nil {
-		resp.Diagnostics.AddError("Invalid VLAN import identity", "Use vlan <id>, with an ID between 2 and 4094.")
+		resp.Diagnostics.AddError("Invalid VLAN import identity", "Use vlan <id>, with an ID between 1 and 4094.")
 		return
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)

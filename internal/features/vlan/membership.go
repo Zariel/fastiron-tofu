@@ -60,7 +60,7 @@ func ReadSwitchport(ctx context.Context, d *fastiron.Device, name string) (switc
 		return switchport{}, errors.New("RESTCONF switchport response is missing its configuration container")
 	}
 	port := *response.Port.Config
-	if port.Access < 0 || port.Access > 4094 {
+	if port.Access < 0 || port.Access > 4095 {
 		return switchport{}, errors.New("RESTCONF switchport contains an invalid access VLAN")
 	}
 	for _, id := range port.Trunks {
@@ -105,12 +105,26 @@ func applyMembership(ctx context.Context, d *fastiron.Device, v membership, pres
 		return false, err
 	}
 	exists := port.contains(v)
+	configuration, err := d.RunningConfig(ctx)
+	if err != nil {
+		return exists, err
+	}
+	defaultVLAN, err := defaultID(configuration)
+	if err != nil {
+		return exists, err
+	}
+	// The implicit membership follows the global default selection. It is
+	// not a separately owned relationship, even when its ID is not 1.
+	if v.VLANID == defaultVLAN {
+		return exists, errors.New("default VLAN membership is implicit and cannot be managed separately")
+	}
+
 	if exists != present {
 		if present {
 			if _, err := Read(ctx, d, v.VLANID); err != nil {
 				return exists, fmt.Errorf("membership requires an existing VLAN: %w", err)
 			}
-			if v.Tagging == "untagged" && port.Access > 1 && port.Access != v.VLANID {
+			if v.Tagging == "untagged" && port.Access != 0 && port.Access != defaultVLAN && port.Access != v.VLANID {
 				return exists, errors.New("interface already belongs to another untagged VLAN; remove that membership first")
 			}
 			if (v.Tagging == "tagged" && port.Access == v.VLANID) || (v.Tagging == "untagged" && slices.Contains(port.Trunks, v.VLANID)) {

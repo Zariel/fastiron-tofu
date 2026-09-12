@@ -30,8 +30,8 @@ type vlanEntry struct {
 }
 
 func Validate(v Config) error {
-	if v.ID < 2 || v.ID > 4094 {
-		return errors.New("vlan_id must be between 2 and 4094; the default VLAN is not managed")
+	if v.ID < 1 || v.ID > 4094 {
+		return errors.New("vlan_id must be between 1 and 4094; the active default VLAN is managed separately")
 	}
 	if len(v.Name) > 32 || !regexp.MustCompile(`^[A-Za-z0-9_.:-]*$`).MatchString(v.Name) {
 		return errors.New("VLAN name must contain at most 32 letters, digits, underscores, dots, colons, or hyphens")
@@ -94,9 +94,8 @@ func check(ctx context.Context, d *fastiron.Device, v Config) error {
 	if _, err := d.Discover(ctx); err != nil {
 		return err
 	}
-	if err := rejectDefault(ctx, d, v.ID); err != nil {
-		return err
-	}
+	// A dependency may move the default before this resource applies. Check
+	// mutable ownership under the write lock, after dependencies have run.
 	_, err := Read(ctx, d, v.ID)
 	if errors.Is(err, fastiron.ErrNotFound) {
 		return nil

@@ -26,3 +26,22 @@ func TestOpenTofuDefaultVLANValidation(t *testing.T) {
 		t.Fatal("planning changed switch configuration")
 	}
 }
+
+func TestOpenTofuDefaultVLANDependency(t *testing.T) {
+	s := newSwitch(t)
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base+`resource "fastiron_default_vlan" "switch" {
+ vlan_id = 4095
+}
+resource "fastiron_vlan" "released" {
+ vlan_id = 1
+ name = "RELEASED"
+ depends_on = [fastiron_default_vlan.switch]
+}
+`)
+	run(0, "init", "-no-color")
+	run(0, "plan", "-no-color")
+	if s.writes != 0 {
+		t.Fatal("planning changed switch configuration")
+	}
+}

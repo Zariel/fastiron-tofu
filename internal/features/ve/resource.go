@@ -43,7 +43,7 @@ func (r *Resource) Metadata(_ context.Context, req resource.MetadataRequest, res
 func (r *Resource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns a VE interface and its port name. Addresses and protocol bindings are separate resources and block parent deletion. Import with ve <id>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: ve <id>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"ve_id":               schema.Int64Attribute{Required: true, Description: "VE identifier, 2 through 4094.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
+		"ve_id":               schema.Int64Attribute{Required: true, Description: "VE identifier, 1 through 4094.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 		"vlan_id":             schema.Int64Attribute{Required: true, Description: "Existing VLAN identifier. Must match ve_id.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 		"name":                schema.StringAttribute{Computed: true, Description: "Canonical interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"port_name":           schema.StringAttribute{Optional: true, Computed: true, Default: stringdefault.StaticString(""), Description: "Interface description. Omission clears it."},

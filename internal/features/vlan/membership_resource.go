@@ -34,7 +34,7 @@ func (r *MembershipResource) Metadata(_ context.Context, req resource.MetadataRe
 func (r *MembershipResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns one tagged or untagged VLAN-to-interface relationship. Other memberships remain independently managed. Removing an untagged membership restores the default VLAN. Import with vlan <id>|<interface>|<tagging>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"vlan_id":             schema.Int64Attribute{Required: true, Description: "VLAN identifier, 2 through 4094.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
+		"vlan_id":             schema.Int64Attribute{Required: true, Description: "VLAN identifier, 1 through 4094, excluding the active default VLAN.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet or LAG interface name, such as ethernet 1/1/2 or lag 5.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"tagging":             schema.StringAttribute{Required: true, Description: "tagged or untagged. A different existing untagged VLAN must be removed first.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
