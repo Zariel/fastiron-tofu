@@ -63,7 +63,7 @@ func (r *macResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 		Description: "Owns one MAC ACL and its complete ordered rule list. Bindings are separate; remove references before deletion.",
 		Attributes: map[string]schema.Attribute{
 			"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: mac access-list <name>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-			"name":                schema.StringAttribute{Required: true, Description: "MAC ACL name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+			"name":                schema.StringAttribute{Required: true, Description: "MAC ACL name beginning with an ASCII letter.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 			"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when reconciliation or saving must be retried after an error."},
 		},
 		Blocks: map[string]schema.Block{

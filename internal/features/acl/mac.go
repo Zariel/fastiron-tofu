@@ -70,6 +70,10 @@ func validateMAC(config macConfig) error {
 	if err := validateACLName(config.Name); err != nil {
 		return err
 	}
+	first := config.Name[0]
+	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')) {
+		return errors.New("MAC ACL names must begin with an ASCII letter")
+	}
 	seen := map[macRule]bool{}
 	for index, rule := range config.Rules {
 		if rule.Action != "permit" && rule.Action != "deny" {
