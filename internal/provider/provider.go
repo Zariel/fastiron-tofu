@@ -82,6 +82,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return acl.NewDataSource() },
 		func() datasource.DataSource { return vlan.NewDataSource() },
 		func() datasource.DataSource { return vlan.NewCollectionDataSource() },
+		func() datasource.DataSource { return igmp.NewVLANDataSource() },
 		func() datasource.DataSource { return &dns.DataSource{} },
 		func() datasource.DataSource { return &lldp.DataSource{} },
 		func() datasource.DataSource { return &poe.DataSource{} },

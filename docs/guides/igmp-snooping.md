@@ -21,7 +21,21 @@ Import with `tofu import fastiron_vlan_igmp_snooping.media 'vlan 53'`. Match the
 
 A failed operation can leave `persistence_pending = true` with the observed native settings. Reapply to finish reconciliation or saving. The provider may briefly reset a changed override while replacing its RESTCONF entry; unchanged fields and separately owned configuration are preserved. Resetting a native-only disable override briefly uses passive mode.
 
-The tested RESTCONF API maps `querier-mode: disabled` to passive mode, so this resource does not offer explicit disabling. Refresh can report `disabled` when a native disable override exists; choose a supported mode or omit the field to reset it. Global IGMP configuration, per-port versions, multicast group tables and other snooping controls are not yet exposed.
+The tested VLAN RESTCONF API maps `querier-mode: disabled` to passive mode, so this resource does not offer explicit disabling. Refresh can report `disabled` when a native disable override exists; choose a supported mode or omit the field to reset it. Global IGMP configuration, per-port versions, multicast group tables and other snooping controls are not yet exposed.
+
+The data source reads configured VLAN overrides without taking ownership or saving configuration:
+
+```hcl
+data "fastiron_vlan_igmp_snooping" "existing" {
+  vlan_id = 53
+}
+
+output "igmp_overrides" {
+  value = data.fastiron_vlan_igmp_snooping.existing
+}
+```
+
+Its `querier_mode` and `version` are null when inherited. It reports native disable overrides even when RESTCONF omits them, and reports an error if the VLAN is absent. Hardware checks covered inherited, disabled and passive modes, missing VLANs and no-change plans; running and saved configuration remained unchanged by every query.
 
 See [tested compatibility](../compatibility.md) for the firmware used during hardware validation.
 
