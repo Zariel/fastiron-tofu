@@ -30,6 +30,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
 | Extended IPv4 ACLs | Named or numbered ACLs with ordered prefixes, protocols, TCP/UDP ports and DSCP/priority markings |
 | IPv6 ACLs | Named ACLs with prefixes, protocols, TCP/UDP ports, markings and syslog actions |
+| MAC ACLs | Ordered MAC rules with arbitrary address masks, EtherType matches and logging; provider lifecycle validation is in progress |
 | ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet, LAG or whole VLANs |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
@@ -39,7 +40,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 
 ## Limits
 
-- ACL support covers numbered standard and named or numbered extended IPv4 definitions, IPv6 definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). MAC definitions, IPv4 logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
+- ACL support covers numbered standard and named or numbered extended IPv4 definitions, IPv6 and MAC definitions and Ethernet/LAG/VLAN access-group bindings; see [ACL ownership and limits](guides/acls.md). IPv4 logging and VLAN port subsets are not implemented. Use VLAN targets for whole-VLAN filtering, including routed VLANs.
 
 - Extended AAA authentication services and keyless TACACS are not yet supported; see [AAA ownership and secret handling](guides/aaa.md).
 

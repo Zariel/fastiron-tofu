@@ -23,7 +23,7 @@ resource "fastiron_ip_access_list_standard" "sources" {
 
 `name` is a string containing a canonical number from `1` through `99`. Each `rule` has a distinct `sequence` from 1 through 65000 and an `action` of `permit` or `deny`. Rules are evaluated in sequence order. `source` defaults to `any`; otherwise use a canonical IPv4 network prefix, including `/32` for a single host. Duplicate action/source combinations at different sequence numbers are rejected by the tested firmware.
 
-The resource owns the complete ACL rule set. Import only ACLs whose rules this resource can represent. Existing remarks, logging, mirroring, noncontiguous wildcard masks, or other unsupported rule settings produce an error before mutation. Named standard ACLs and MAC ACL definitions are not implemented. Access-group resources can bind existing ACLs of each family.
+The resource owns the complete ACL rule set. Import only ACLs whose rules this resource can represent. Existing remarks, logging, mirroring, noncontiguous wildcard masks, or other unsupported rule settings produce an error before mutation. Named standard ACLs are not implemented. Access-group resources can bind existing ACLs of each family.
 
 Defining an ACL does not attach it to an interface. Existing bindings remain unchanged during rule updates. Remove references to the ACL before destroying it; deletion checks interface access groups, multicast filters, access classes and route-map references. Changing `name` replaces the resource.
 
@@ -76,7 +76,7 @@ Import uses the native identity:
 tofu import fastiron_ip_access_list_extended.web 'ip access-list extended WEB'
 ```
 
-The same ownership, binding, replacement and persistence rules apply to standard IPv4, extended IPv4 and IPv6 ACL resources. Existing unsupported rule options prevent adoption. IPv4 logging and descriptions are not exposed because the tested RESTCONF implementation accepts these fields without applying them; TCP flags, ICMP type/code filters and noncontiguous wildcard masks are also outside the supported rule model.
+The same ownership, binding, replacement and persistence rules apply to standard IPv4, extended IPv4, IPv6 and MAC ACL resources. Existing unsupported rule options prevent adoption. IPv4 logging and descriptions are not exposed because the tested RESTCONF implementation accepts these fields without applying them; TCP flags, ICMP type/code filters and noncontiguous wildcard masks are also outside the supported rule model.
 
 ## IPv6 ACLs
 
@@ -118,6 +118,48 @@ tofu import fastiron_ipv6_access_list.dns 'ipv6 access-list IPV6-DNS'
 
 Bind the ACL with `fastiron_ipv6_access_group`. The resource does not attach it automatically. Remove references before deletion. The deletion guard checks interface bindings, access classes, route maps, MLD filters, multicast boundaries, PIM neighbor filters and PIM policies. PIM references are checked within their IPv4 or IPv6 router context, including VRFs. IPv6 descriptions, TCP flags, ICMP type/code filters, hop-limit matching and flow-label matching are outside the supported RESTCONF rule model. Existing unsupported options prevent adoption.
 
+## MAC ACLs
+
+`fastiron_mac_access_list` owns one named MAC ACL and its complete ordered rule list:
+
+```hcl
+resource "fastiron_mac_access_list" "hosts" {
+  name = "HOSTS"
+
+  rule {
+    action    = "permit"
+    source    = "02:00:00:00:00:01"
+    ethertype = 2048
+  }
+
+  rule {
+    action = "deny"
+  }
+}
+```
+
+Rules are evaluated in declaration order. Use a nonempty ACL name without whitespace, slashes or control characters. Changing the name replaces the resource. Omit every rule to manage an empty ACL.
+
+| Rule field | Values and defaults |
+|---|---|
+| `action` | Required `permit` or `deny`. |
+| `source`, `destination` | Lowercase colon-separated 48-bit MAC address, or default `any`. |
+| `source_mask`, `destination_mask` | Lowercase colon-separated MAC bit mask. One bits select address bits to compare. Defaults to `ff:ff:ff:ff:ff:ff` for an explicit address, or `any` when its address is `any`. Noncontiguous masks are supported. Use `any` for both fields instead of a zero mask. |
+| `ethertype` | Decimal EtherType from 1536 through 65535; for example, `2048` for IPv4, `2054` for ARP or `34525` for IPv6. Omit to match all EtherTypes. The tested RESTCONF implementation rejected `65535`; values through `65534` passed boundary checks. |
+| `log` | Mark matching packets for syslog; default `false`. Logging must also be enabled on the binding, which currently requires managing that binding outside the provider. |
+
+Duplicate complete rules are rejected. Rules with different logging flags are distinct. Existing accounting, mirroring or other unsupported native settings prevent adoption. RESTCONF accepts descriptions without applying them, so descriptions are not exposed.
+
+Import preserves native rule order:
+
+```sh
+tofu import fastiron_mac_access_list.hosts 'mac access-list HOSTS'
+```
+
+Use `fastiron_mac_access_group` to bind the ACL. Remove bindings before deleting the definition. MAC writes require agreement between the native rules and the RESTCONF view before mutation, including matches, actions and order. Failed operations can leave a partial rule list; reapply to converge and save it.
+
+Hardware field and mutation checks verified exact and noncontiguous masks, logging, EtherType boundaries, duplicate rejection, ordered insertion and empty ACL retention. Provider checks passed for empty and populated creation, import, rule reordering, mask changes and logging removal, with native running/saved verification and no-change plans. The complete provider lifecycle and reboot workflow are still being validated.
+
 ## Updates and persistence
 
 RESTCONF writes require SSH access for native configuration verification and saving. The provider verifies the resulting rules and checks that unrelated configuration is unchanged before persistence.
@@ -138,7 +180,7 @@ IPv6 workflows covered empty and populated creation, import, sequence and markin
 
 A reboot workflow verified a standard ACL with non-default rule sequences, an empty standard ACL, an IPv4 VLAN binding, an IPv6 Ethernet binding and a MAC LAG binding. Running and saved configuration remained unchanged after reload, and `tofu plan` reported no changes. Packet-filtering behavior has not yet been tested.
 
-The [standard ACL example](../../examples/acl/main.tf), [extended ACL example](../../examples/acl-extended/main.tf) and [IPv6 ACL example](../../examples/acl-ipv6/main.tf) include provider configuration.
+The [standard ACL example](../../examples/acl/main.tf), [extended ACL example](../../examples/acl-extended/main.tf), [IPv6 ACL example](../../examples/acl-ipv6/main.tf) and [MAC ACL example](../../examples/acl-mac/main.tf) include provider configuration.
 
 ## Bind ACLs to interfaces
 
@@ -154,13 +196,15 @@ resource "fastiron_ip_access_group" "sources" {
 
 The reference to the ACL resource gives OpenTofu the dependency needed to create the ACL before binding it and remove the binding before destroying the ACL.
 
+When renaming an ACL that remains bound, add `lifecycle { create_before_destroy = true }` to its definition resource. This lets OpenTofu create the new ACL and update dependent bindings before deleting the old definition. Otherwise remove the bindings before replacing the ACL.
+
 | Resource | ACL family | Directions |
 |---|---|---|
 | `fastiron_ip_access_group` | Standard or extended IPv4 | `in`, `out` |
 | `fastiron_ipv6_access_group` | IPv6 | `in`, `out` |
 | `fastiron_mac_access_group` | MAC | `in` |
 
-`interface` is a canonical Ethernet, LAG or VLAN name, such as `ethernet 1/1/9`, `lag 1` or `vlan 100`. `direction` defaults to `in`. The ACL and target LAG or VLAN must exist when the binding is applied; use resource references when creating them in the same apply. MAC ACL definitions currently need to be created outside this provider.
+`interface` is a canonical Ethernet, LAG or VLAN name, such as `ethernet 1/1/9`, `lag 1` or `vlan 100`. `direction` defaults to `in`. The ACL and target LAG or VLAN must exist when the binding is applied; use resource references when creating them in the same apply. Use an ACL resource reference when creating the definition in the same configuration.
 
 Each resource owns one interface/family/direction slot. Declare only one resource for each slot. Other families, the opposite direction, other interfaces and ACL rules remain independently owned. Changing `acl` replaces the active binding in place. Changing `interface` or `direction` replaces the resource. Destroy removes the binding currently occupying the owned slot, including a binding changed outside OpenTofu.
 

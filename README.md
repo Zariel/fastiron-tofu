@@ -35,7 +35,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | IPv4 standard ACLs | Implemented | [Numbered ACLs](docs/guides/acls.md) with ordered source-prefix rules, including empty ACLs. Named standard ACLs are unavailable through the documented RESTCONF API. |
 | IPv4 extended ACLs | Implemented | [Ordered rules](docs/guides/acls.md) with prefixes, protocol numbers, TCP/UDP ports and DSCP/priority markings. Named/numbered and empty ACLs; logging is unavailable through the tested RESTCONF API. |
 | IPv6 ACLs | Implemented | [Ordered IPv6 rules](docs/guides/acls.md) with prefixes, protocols, TCP/UDP ports, markings and syslog actions. Named and empty ACLs, with lifecycle, reference and reboot validation. |
-| MAC ACLs | Not yet | MAC rule definitions. Existing ACLs can be bound through access-group resources. |
+| MAC ACLs | Partial | [Ordered MAC rules](docs/guides/acls.md) with address masks, EtherType and logging. Provider lifecycle and reboot validation remain. |
 | ACL bindings | Implemented | [IPv4, IPv6 and MAC access groups](docs/guides/acls.md) on Ethernet, LAG and whole VLANs, with lifecycle and reboot validation. Logging and VLAN port subsets are excluded. |
 | BGP | Not yet | Planned for SSH configuration support. |
 | Routing policy | Not yet | Prefix lists, route maps, AS-path filters and community lists. |
