@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -139,7 +140,8 @@ func (m providerModel) config() (fastiron.Config, error) {
 		return strconv.FormatInt(n, 10)
 	}
 	host := str(m.Host, "FASTIRON_HOST", "")
-	if host == "" || strings.ContainsAny(host, "/\\@?# \t\r\n") || (strings.Contains(host, ":") && net.ParseIP(host) == nil) {
+	address, addressErr := netip.ParseAddr(host)
+	if host == "" || strings.ContainsAny(host, "/\\@?# \t\r\n") || (strings.Contains(host, ":") && (addressErr != nil || address.Zone() != "")) {
 		return fastiron.Config{}, errors.New("host must be a hostname or IP address without scheme, port, or credentials")
 	}
 	user := str(m.Username, "FASTIRON_USERNAME", "")

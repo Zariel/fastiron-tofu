@@ -28,6 +28,7 @@ func TestProviderConfig(t *testing.T) {
 	for _, model := range []providerModel{
 		{Host: types.StringValue("https://switch")},
 		{Host: types.StringValue("switch:443")},
+		{Host: types.StringValue("fe80::1%eth0")},
 		{OperationTimeout: types.StringValue("0s")},
 		{Host: types.StringUnknown()},
 		{AllowAAAChanges: types.BoolUnknown()},

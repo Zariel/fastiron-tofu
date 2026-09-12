@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"net/http"
+	"net/netip"
 	"strings"
 )
 
@@ -26,7 +27,7 @@ func (s *testSwitch) addressREST(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" && path == base {
 		entries := []any{}
 		for ip, bits := range addresses {
-			if strings.Contains(ip, ":") != ipv6 {
+			if netip.MustParseAddr(ip).Is6() != ipv6 {
 				continue
 			}
 			entry := map[string]any{"ip": ip, "config": map[string]any{"ip": ip, "prefix-length": bits}, "vrrp": map[string]any{}}
@@ -53,7 +54,8 @@ func (s *testSwitch) addressREST(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		entry := body.Address[0]
-		if entry.IP != entry.Config.IP || strings.Contains(entry.IP, ":") != ipv6 {
+		address, err := netip.ParseAddr(entry.IP)
+		if err != nil || entry.IP != entry.Config.IP || address.Is6() != ipv6 {
 			w.WriteHeader(400)
 			return
 		}

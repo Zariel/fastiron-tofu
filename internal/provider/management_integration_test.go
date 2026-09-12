@@ -3,6 +3,7 @@ package provider
 import (
 	"fmt"
 	"maps"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ func managementConfiguration(addresses map[string]int) string {
 	slices.Sort(ips)
 	for _, ip := range ips {
 		family := "ip"
-		if strings.Contains(ip, ":") {
+		if netip.MustParseAddr(ip).Is6() {
 			family = "ipv6"
 		}
 		text += fmt.Sprintf(" %s address %s/%d\n", family, ip, addresses[ip])
