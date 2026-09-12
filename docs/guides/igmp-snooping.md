@@ -28,7 +28,9 @@ resource "fastiron_vlan_igmp_snooping" "media" {
 }
 ```
 
-`querier_mode` accepts `active` or `passive`. `version` accepts `2` or `3`. Omit either attribute to inherit that setting from the global configuration. Omitting both attributes leaves both settings inherited; it does not remove the VLAN. Deleting the resource restores inheritance while preserving other multicast settings, such as tracking, and leaves the VLAN in place.
+`querier_mode` accepts `active` or `passive`. `version` accepts `2` or `3`. Omit either attribute to remove that VLAN override. Ordinary VLANs then inherit the global setting. Omitting both attributes or deleting the resource removes both overrides while preserving other multicast settings, such as tracking, and leaves the VLAN in place.
+
+On the tested router image, default VLAN 1 required an explicit mode to enable snooping: removing its override produced `no snoop : no local config` even with global active/version 3 configured. Explicit active/version 3 worked. This is native behavior; the provider does not synthesize a local override when a field is omitted. Null query fields mean no VLAN override, not proof of enabled snooping.
 
 Import with `tofu import fastiron_vlan_igmp_snooping.media 'vlan 53'`. Match the imported overrides in HCL to retain them. An omitted field plans removal of that override. Native changes are detected through SSH configuration reads, because RESTCONF can retain stale values or omit overrides configured through the CLI. Writes use RESTCONF and are independently verified before applying the provider's persistence policy.
 
@@ -60,7 +62,7 @@ output "igmp_overrides" {
 }
 ```
 
-Its `querier_mode` and `version` are null when inherited. It reports native disable overrides even when RESTCONF omits them, and reports an error if the VLAN is absent. Hardware checks covered inherited, disabled and passive modes, missing VLANs and no-change plans; running and saved configuration remained unchanged by every query.
+Its `querier_mode` and `version` are null when no VLAN override is configured. It reports native disable overrides even when RESTCONF omits them, and reports an error if the VLAN is absent. Hardware checks covered inherited, disabled and passive modes, missing VLANs and no-change plans; running and saved configuration remained unchanged by every query.
 
 To discover all configured VLANs and their overrides:
 

@@ -38,15 +38,15 @@ func (d *vlanDataSource) Metadata(_ context.Context, req datasource.MetadataRequ
 func (d *vlanDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	attributes := map[string]schema.Attribute{
 		"vlan_id":      schema.Int64Attribute{Required: !d.collection, Computed: d.collection, Description: "Existing VLAN identifier, 1 through 4095."},
-		"querier_mode": schema.StringAttribute{Computed: true, Description: "Configured active, passive or disabled override. Null means the global mode is inherited."},
-		"version":      schema.Int64Attribute{Computed: true, Description: "Configured version 2 or 3 override. Null means the global version is inherited."},
+		"querier_mode": schema.StringAttribute{Computed: true, Description: "Configured active, passive or disabled override. Null means no VLAN mode override; it does not establish whether snooping is operational."},
+		"version":      schema.Int64Attribute{Computed: true, Description: "Configured version 2 or 3 override. Null means no VLAN version override."},
 	}
-	description := "Reads native IGMP snooping overrides on an existing VLAN without taking ownership or saving configuration. Null fields inherit global settings."
+	description := "Reads native IGMP snooping overrides on an existing VLAN without taking ownership or saving configuration. Null fields indicate absent VLAN overrides."
 	if d.collection {
 		attributes = map[string]schema.Attribute{
-			"vlans": schema.MapNestedAttribute{Computed: true, Description: "Native VLANs keyed by decimal VLAN ID, including the default VLAN and VLANs with inherited settings.", NestedObject: schema.NestedAttributeObject{Attributes: attributes}},
+			"vlans": schema.MapNestedAttribute{Computed: true, Description: "Native VLANs keyed by decimal VLAN ID, including the default VLAN and VLANs without overrides.", NestedObject: schema.NestedAttributeObject{Attributes: attributes}},
 		}
-		description = "Reads native IGMP snooping overrides for every configured VLAN without taking ownership or saving configuration. Includes CLI-only overrides omitted by RESTCONF; null fields inherit global settings."
+		description = "Reads native IGMP snooping overrides for every configured VLAN without taking ownership or saving configuration. Includes CLI-only overrides omitted by RESTCONF; null fields indicate absent VLAN overrides."
 	}
 	resp.Schema = schema.Schema{Description: description, Attributes: attributes}
 }

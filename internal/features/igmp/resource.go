@@ -41,11 +41,11 @@ func (r *vlanResource) Metadata(_ context.Context, req resource.MetadataRequest,
 }
 
 func (r *vlanResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Owns IGMP snooping mode and version overrides on an existing VLAN. Omission and deletion restore inheritance from global settings. Other multicast settings remain separately owned. Import with vlan <id>.", Attributes: map[string]schema.Attribute{
+	resp.Schema = schema.Schema{Description: "Owns IGMP snooping mode and version overrides on an existing VLAN. Omission and deletion remove the VLAN overrides, leaving native default behavior. Other multicast settings remain separately owned. Import with vlan <id>.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: vlan <id>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"vlan_id":             schema.Int64Attribute{Required: true, Description: "Existing VLAN identifier, 1 through 4095.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
-		"querier_mode":        schema.StringAttribute{Optional: true, Description: "active or passive. Omit to inherit the global mode. Native disabled overrides are reported on refresh, but cannot be configured through the tested RESTCONF API."},
-		"version":             schema.Int64Attribute{Optional: true, Description: "IGMP version 2 or 3. Omit to inherit the global version."},
+		"querier_mode":        schema.StringAttribute{Optional: true, Description: "active or passive. Omit to remove the VLAN mode override. The tested default VLAN requires an explicit mode to enable snooping. Native disabled overrides are reported on refresh, but cannot be configured through the tested RESTCONF API."},
+		"version":             schema.Int64Attribute{Optional: true, Description: "IGMP version 2 or 3. Omit to remove the VLAN version override."},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
 }
@@ -74,10 +74,10 @@ func (r *vlanResource) ValidateConfig(ctx context.Context, req resource.Validate
 		}
 	}
 	if !model.Mode.IsNull() && !model.Mode.IsUnknown() && model.Mode.ValueString() != "active" && model.Mode.ValueString() != "passive" {
-		resp.Diagnostics.AddAttributeError(path.Root("querier_mode"), "Invalid IGMP mode", "Use active or passive, or omit the attribute to inherit the global mode.")
+		resp.Diagnostics.AddAttributeError(path.Root("querier_mode"), "Invalid IGMP mode", "Use active or passive, or omit the attribute to remove the VLAN mode override.")
 	}
 	if !model.Version.IsNull() && !model.Version.IsUnknown() && model.Version.ValueInt64() != 2 && model.Version.ValueInt64() != 3 {
-		resp.Diagnostics.AddAttributeError(path.Root("version"), "Invalid IGMP version", "Use 2 or 3, or omit the attribute to inherit the global version.")
+		resp.Diagnostics.AddAttributeError(path.Root("version"), "Invalid IGMP version", "Use 2 or 3, or omit the attribute to remove the VLAN version override.")
 	}
 }
 

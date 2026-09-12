@@ -40,10 +40,10 @@ func validate(id int64, desired settings) error {
 		return errors.New("vlan_id must be between 1 and 4095")
 	}
 	if desired.Mode != "" && desired.Mode != "active" && desired.Mode != "passive" {
-		return errors.New("querier_mode must be active or passive; omit it to inherit the global setting")
+		return errors.New("querier_mode must be active or passive; omit it to remove the VLAN override")
 	}
 	if desired.Version != 0 && desired.Version != 2 && desired.Version != 3 {
-		return errors.New("version must be 2 or 3; omit it to inherit the global setting")
+		return errors.New("version must be 2 or 3; omit it to remove the VLAN override")
 	}
 	return nil
 }
