@@ -1,0 +1,187 @@
+package protectedport
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/url"
+	"path"
+	"slices"
+	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/fastiron"
+	"github.com/zariel/fastiron-tofu/internal/interfaceid"
+	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
+)
+
+type nativeState struct {
+	enabled bool
+	unowned []string
+}
+
+func validateInterface(name string) error {
+	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
+		return nil
+	}
+	return errors.New("interface must be a canonical Ethernet or LAG name")
+}
+
+func read(ctx context.Context, device *fastiron.Device, name string) (nativeState, error) {
+	if err := validateInterface(name); err != nil {
+		return nativeState{}, err
+	}
+	if _, err := device.Discover(ctx); err != nil {
+		return nativeState{}, err
+	}
+	// Protection defaults are meaningful only after confirming the parent exists.
+	var interfaces struct {
+		Collection *struct {
+			Entries []struct {
+				Name   string `json:"name"`
+				Config *struct {
+					Name string `json:"name"`
+				} `json:"config"`
+			} `json:"interface"`
+		} `json:"openconfig-interfaces:interfaces"`
+	}
+	if err := device.DoREST(ctx, http.MethodGet, "/interfaces", nil, &interfaces); err != nil {
+		return nativeState{}, err
+	}
+	if interfaces.Collection == nil || len(interfaces.Collection.Entries) == 0 {
+		return nativeState{}, errors.New("RESTCONF interface collection is missing or empty")
+	}
+	found := false
+	for _, entry := range interfaces.Collection.Entries {
+		if entry.Name != name {
+			continue
+		}
+		if found || entry.Config == nil || entry.Config.Name != name {
+			return nativeState{}, errors.New("RESTCONF protected-port parent identity is inconsistent")
+		}
+		found = true
+	}
+	if !found {
+		return nativeState{}, fastiron.ErrNotFound
+	}
+	var response struct {
+		Protected json.RawMessage `json:"icx-openconfig-pp:protectedport"`
+	}
+	if err := device.DoREST(ctx, http.MethodGet, "/protectedport", nil, &response); err != nil {
+		return nativeState{}, err
+	}
+	if len(response.Protected) == 0 || string(response.Protected) == "null" {
+		return nativeState{}, errors.New("RESTCONF protected-port response omitted its container")
+	}
+	// This endpoint caches configured entries and omits native-only protection.
+	// Native configuration determines drift; the GET establishes RESTCONF availability.
+	configuration, err := device.RunningConfig(ctx)
+	if err != nil {
+		return nativeState{}, err
+	}
+	return parse(configuration, name)
+}
+
+func parse(configuration, name string) (nativeState, error) {
+	configuration, err := fastiron.NormalizeConfiguration(configuration)
+	if err != nil {
+		return nativeState{}, err
+	}
+	var state nativeState
+	inside, found := false, false
+	for _, line := range strings.Split(configuration, "\n") {
+		if line[0] != ' ' && line[0] != '\t' {
+			inside = line == "interface "+name
+			if inside && found {
+				return nativeState{}, errors.New("native configuration repeats the requested interface")
+			}
+			if inside {
+				found = true
+				// An otherwise default interface can gain or lose its stanza with protection.
+				continue
+			}
+		}
+		fields := strings.Fields(line)
+		if !inside || fields[0] != "protected-port" {
+			state.unowned = append(state.unowned, line)
+			continue
+		}
+		if len(fields) != 1 || state.enabled {
+			return nativeState{}, errors.New("native protected-port configuration is ambiguous")
+		}
+		state.enabled = true
+	}
+	return state, nil
+}
+
+func apply(ctx context.Context, device *fastiron.Device, name string, desired bool) (*bool, error) {
+	if err := validateInterface(name); err != nil {
+		return nil, err
+	}
+	unlock, err := device.Lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	current, err := read(ctx, device, name)
+	if errors.Is(err, fastiron.ErrNotFound) && !desired {
+		// A deleted parent has no remaining protection, but a pending save must finish.
+		return &current.enabled, device.Persist(ctx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if current.enabled == desired {
+		return &current.enabled, device.Persist(ctx)
+	}
+
+	before := current
+	leaf := path.Join("/protectedport/interfaces", "interface="+url.PathEscape(name))
+	write := func(method string) error {
+		target := leaf
+		var body any
+		if method == http.MethodPatch {
+			target = "/protectedport"
+			entry := map[string]any{"name": name, "config": map[string]any{"name": name, "protectedport": true}}
+			body = map[string]any{"protectedport": map[string]any{"interfaces": map[string]any{"interface": entry}}}
+		}
+		writeErr := device.DoREST(ctx, method, target, body, nil)
+		configuration, readErr := device.RunningConfig(ctx)
+		if readErr != nil {
+			return errors.Join(writeErr, readErr)
+		}
+		observed, readErr := parse(configuration, name)
+		if readErr != nil {
+			return errors.Join(writeErr, readErr)
+		}
+		current = observed
+		// Verify each narrow mutation before saving; never reconstruct unrelated settings.
+		if !slices.Equal(before.unowned, current.unowned) {
+			return errors.Join(writeErr, errors.New("protected-port mutation changed unrelated configuration"))
+		}
+		if method == http.MethodDelete && errors.Is(writeErr, restconf.ErrNotFound) {
+			return nil
+		}
+		return writeErr
+	}
+
+	// LAG callbacks can skip an unchanged cached value after native drift.
+	if err := write(http.MethodDelete); err != nil {
+		return &current.enabled, err
+	}
+	if desired || current.enabled {
+		// Native-only protection needs a RESTCONF entry before it can be deleted.
+		if err := write(http.MethodPatch); err != nil {
+			return &current.enabled, err
+		}
+	}
+	if !desired && current.enabled {
+		if err := write(http.MethodDelete); err != nil {
+			return &current.enabled, err
+		}
+	}
+	if current.enabled != desired {
+		return &current.enabled, errors.New("native protected-port configuration did not converge")
+	}
+	return &current.enabled, device.Persist(ctx)
+}
