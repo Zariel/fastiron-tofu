@@ -12,6 +12,7 @@ package config
   ('voice-vlan' tail) @{ kind = voiceVLAN } |
   ('jumbo' tail) @{ kind = jumboMode } |
   ('port-name' tail) @{ kind = portName } |
+  ('disable' tail) @{ kind = adminDisable } |
   (('broadcast' | 'multicast' | 'unknown-unicast') h+ 'limit' tail) @{ kind = stormLimit }
  );
 }%%

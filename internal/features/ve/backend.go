@@ -37,19 +37,27 @@ func validate(v config) error {
 }
 
 func Read(ctx context.Context, d *fastiron.Device, id int64) (config, error) {
+	native, err := read(ctx, d, id)
+	if err != nil {
+		return config{}, err
+	}
+	return config{ID: id, VLANID: id, PortName: native.PortName}, nil
+}
+
+func read(ctx context.Context, d *fastiron.Device, id int64) (nativeconfig.VE, error) {
 	_, err := readCached(ctx, d, id)
 	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
-		return config{}, err
+		return nativeconfig.VE{}, err
 	}
 
 	native, err := readNative(ctx, d, id)
 	if err != nil {
-		return config{}, err
+		return nativeconfig.VE{}, err
 	}
 	if !native.Exists {
-		return config{}, fastiron.ErrNotFound
+		return nativeconfig.VE{}, fastiron.ErrNotFound
 	}
-	return config{ID: id, VLANID: id, PortName: native.PortName}, nil
+	return native, nil
 }
 
 func readNative(ctx context.Context, d *fastiron.Device, id int64) (nativeconfig.VE, error) {

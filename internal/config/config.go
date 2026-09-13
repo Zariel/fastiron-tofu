@@ -19,6 +19,7 @@ const (
 	stormLimit
 	jumboMode
 	portName
+	adminDisable
 )
 
 // Command retains the original command text and its indentation scope. Unknown

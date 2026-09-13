@@ -101,6 +101,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return &poe.DataSource{} },
 		func() datasource.DataSource { return ethernet.NewDataSource() },
 		func() datasource.DataSource { return ethernet.NewInventoryDataSource() },
+		func() datasource.DataSource { return ve.NewDataSource() },
 		func() datasource.DataSource { return voicevlan.NewDataSource() },
 		func() datasource.DataSource { return protectedport.NewDataSource() },
 		func() datasource.DataSource { return dscptrust.NewDataSource() },

@@ -9,6 +9,7 @@ import (
 type VE struct {
 	Exists      bool
 	PortName    string
+	Enabled     bool
 	HasChildren bool
 	Remaining   []string
 }
@@ -21,7 +22,7 @@ func (d *Document) VE(id int64) (VE, error) {
 		return VE{}, err
 	}
 
-	state := VE{Exists: header >= 0}
+	state := VE{Exists: header >= 0, Enabled: true}
 	inside, named := false, false
 	for i, command := range d.Commands {
 		if command.Parent == -1 {
@@ -40,6 +41,12 @@ func (d *Document) VE(id int64) (VE, error) {
 		}
 		if inside {
 			state.HasChildren = true
+		}
+		if inside && command.Parent == header && command.kind == adminDisable {
+			if !state.Enabled || len(command.Fields) != 1 {
+				return VE{}, errors.New("native VE administrative setting is malformed or repeated")
+			}
+			state.Enabled = false
 		}
 		state.Remaining = append(state.Remaining, command.Text)
 	}
