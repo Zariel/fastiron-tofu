@@ -16,6 +16,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/poe"
 	"github.com/zariel/fastiron-tofu/internal/features/protectedport"
 	"github.com/zariel/fastiron-tofu/internal/features/route"
+	"github.com/zariel/fastiron-tofu/internal/features/stormcontrol"
 	"github.com/zariel/fastiron-tofu/internal/features/stp"
 	"github.com/zariel/fastiron-tofu/internal/features/system"
 	"github.com/zariel/fastiron-tofu/internal/features/ve"
@@ -54,6 +55,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &ethernet.Resource{} },
 		func() resource.Resource { return voicevlan.NewResource() },
 		func() resource.Resource { return protectedport.NewResource() },
+		func() resource.Resource { return stormcontrol.NewResource() },
 		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
 		func() resource.Resource { return lldp.NewGlobalResource() },
@@ -97,6 +99,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return ethernet.NewInventoryDataSource() },
 		func() datasource.DataSource { return voicevlan.NewDataSource() },
 		func() datasource.DataSource { return protectedport.NewDataSource() },
+		func() datasource.DataSource { return stormcontrol.NewDataSource() },
 		func() datasource.DataSource { return &address.DataSource{} },
 		func() datasource.DataSource { return &lag.DataSource{} },
 		func() datasource.DataSource { return &route.DataSource{} },
