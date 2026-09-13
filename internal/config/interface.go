@@ -41,7 +41,7 @@ const (
 )
 
 func (d *Document) InterfacePolicy(name string, policy Policy) (InterfacePolicy, error) {
-	header, err := d.Interface(name)
+	header, err := d.interfaceHeader(name)
 	if err != nil {
 		return InterfacePolicy{}, err
 	}

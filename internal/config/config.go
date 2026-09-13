@@ -95,9 +95,9 @@ func (d *Document) line(raw string) error {
 	return nil
 }
 
-// Interface returns the unique top-level interface header, or -1 for a default
+// interfaceHeader returns the unique top-level interface header, or -1 for a default
 // interface whose stanza is absent from the configuration.
-func (d *Document) Interface(name string) (int, error) {
+func (d *Document) interfaceHeader(name string) (int, error) {
 	found := -1
 	for i, c := range d.Commands {
 		if c.Parent != -1 || len(c.Fields) < 2 || c.Fields[0] != "interface" || strings.Join(c.Fields[1:], " ") != name {
