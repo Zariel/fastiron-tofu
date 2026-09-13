@@ -136,6 +136,9 @@ func applyPort(ctx context.Context, d *fastiron.Device, name string, enabled boo
 		if observed.Enabled != enabled {
 			return &observed, errors.Join(writeErr, errors.New("PoE configuration did not converge"))
 		}
+		if writeErr != nil {
+			return &observed, writeErr
+		}
 		current = observed
 	}
 	return &current, d.Persist(ctx)
