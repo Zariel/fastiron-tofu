@@ -97,6 +97,9 @@ func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled 
 		if observed != enabled {
 			return &observed, errors.Join(writeErr, errors.New("LLDP configuration did not converge"))
 		}
+		if writeErr != nil {
+			return &observed, writeErr
+		}
 		current = observed
 	}
 	return &current, d.Persist(ctx)
