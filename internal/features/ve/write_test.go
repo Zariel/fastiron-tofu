@@ -23,7 +23,7 @@ func TestPartialWrite(t *testing.T) {
 			running := func() string {
 				config := "ver 09.0.10kT213\nvlan 53 name TRANSIT by port\n"
 				if exists {
-					config += " router-interface ve 53\ninterface ve 53\n port-name " + name + "\n"
+					config += "interface ve 53\n port-name " + name + "\n"
 				}
 				return config + "end"
 			}

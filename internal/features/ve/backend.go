@@ -248,49 +248,48 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 	if _, err := d.Discover(ctx); err != nil {
 		return err
 	}
-	_, err = Read(ctx, d, id)
+	_, err = readCached(ctx, d, id)
 	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
 		return err
 	}
-	if err == nil {
-		// Removing a logical interface can erase addresses, protocol bindings, and
-		// other independent configuration. Verify children before deleting the parent.
-		output, err := d.RunningConfig(ctx)
-		if err != nil {
-			return err
-		}
+	before, err := readNative(ctx, d, id)
+	if err != nil {
+		return err
+	}
+	// Parent deletion must not erase independently owned administrative, address or protocol settings.
+	if before.HasChildren {
+		return errors.New("VE has child configuration; remove addresses, routing bindings, and other settings before destroying it")
+	}
+	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+	defer cancel()
+	var writeErr error
+	if before.Exists {
 		name := "ve " + strconv.FormatInt(id, 10)
-		if err := veChildren(output, id); err != nil {
-			return err
+		writeErr = d.DoREST(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
+	}
+	for {
+		current, readErr := readNative(ctx, d, id)
+		if readErr != nil {
+			return errors.Join(writeErr, readErr)
 		}
-		writeErr := d.DoREST(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
-		_, readErr := Read(ctx, d, id)
-		if !errors.Is(readErr, fastiron.ErrNotFound) {
-			return errors.Join(writeErr, readErr, errors.New("VE absence could not be verified"))
+		if !slices.Equal(before.Remaining, current.Remaining) {
+			return errors.Join(writeErr, errors.New("VE deletion changed unrelated configuration"))
 		}
 		if writeErr != nil {
 			return writeErr
 		}
+		_, cacheErr := readCached(ctx, d, id)
+		if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
+			return cacheErr
+		}
+		// Wait for both views so a dependent VLAN deletion does not encounter a stale VE binding.
+		if !current.Exists && errors.Is(cacheErr, fastiron.ErrNotFound) {
+			return d.Persist(ctx)
+		}
+		select {
+		case <-ctx.Done():
+			return errors.Join(errors.New("VE absence could not be verified"), ctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
 	}
-	return d.Persist(ctx)
-}
-
-func veChildren(config string, id int64) error {
-	document, err := nativeconfig.Parse(config)
-	if err != nil {
-		return err
-	}
-
-	state, err := document.VE(id)
-	if err != nil {
-		return err
-	}
-	if !state.Exists {
-		return errors.New("cannot confirm the VE configuration block before deletion")
-	}
-	if state.HasChildren {
-		return errors.New("VE has child configuration; remove addresses, routing bindings, and other settings before destroying it")
-	}
-
-	return nil
 }
