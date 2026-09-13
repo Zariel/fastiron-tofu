@@ -7,8 +7,9 @@ import (
 	"net/url"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
@@ -55,39 +56,15 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 }
 
 func parse(configuration, name string) (nativeState, error) {
-	configuration, err := fastiron.NormalizeConfiguration(configuration)
+	document, err := config.Parse(configuration)
 	if err != nil {
 		return nativeState{}, err
 	}
-	var state nativeState
-	inside, found := false, false
-	for _, line := range strings.Split(configuration, "\n") {
-		if line[0] != ' ' && line[0] != '\t' {
-			inside = line == "interface "+name
-			if inside && found {
-				return nativeState{}, errors.New("native configuration repeats the requested interface")
-			}
-			if inside {
-				found = true
-				// A default port may gain or lose its stanza as its sole setting changes.
-				continue
-			}
-		}
-		fields := strings.Fields(line)
-		if !inside || fields[0] != "voice-vlan" {
-			state.unowned = append(state.unowned, line)
-			continue
-		}
-		if len(fields) != 2 || state.vlanID != 0 {
-			return nativeState{}, errors.New("native interface voice VLAN is ambiguous")
-		}
-		id, err := strconv.ParseInt(fields[1], 10, 64)
-		if err != nil || id < 1 || id > 4095 || fields[1] != strconv.FormatInt(id, 10) {
-			return nativeState{}, errors.New("native interface voice VLAN is invalid")
-		}
-		state.vlanID = id
+	observed, err := document.InterfacePolicy(name, config.VoiceVLAN)
+	if err != nil {
+		return nativeState{}, err
 	}
-	return state, nil
+	return nativeState{vlanID: observed.VLAN, unowned: observed.Remaining}, nil
 }
 
 // A zero desired ID removes the local policy; it does not restore a prior value.

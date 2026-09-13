@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 	"github.com/zariel/fastiron-tofu/internal/transport/ssh"
 )
@@ -171,31 +173,11 @@ func (d *Device) save(ctx context.Context) error {
 
 // NormalizeConfiguration validates complete native output and removes display separators.
 func NormalizeConfiguration(output string) (string, error) {
-	lines := strings.Split(strings.ReplaceAll(output, "\r", ""), "\n")
-	start := -1
-	for i, line := range lines {
-		if strings.HasPrefix(line, "ver ") {
-			start = i
-			break
-		}
+	document, err := config.Parse(output)
+	if err != nil {
+		return "", err
 	}
-	if start < 0 {
-		return "", errors.New("cannot identify complete FastIron configuration")
-	}
-	var commands []string
-	for i := start; i < len(lines); i++ {
-		lines[i] = strings.TrimRight(lines[i], " \t")
-		// Running and startup displays insert different blank/comment separators.
-		// Preserve command order and indentation, which carry configuration meaning.
-		if strings.TrimSpace(lines[i]) == "" || strings.TrimSpace(lines[i]) == "!" {
-			continue
-		}
-		commands = append(commands, lines[i])
-		if lines[i] == "end" {
-			return strings.Join(commands, "\n"), nil
-		}
-	}
-	return "", errors.New("FastIron configuration output is incomplete")
+	return document.String(), nil
 }
 
 // RESTCONFEnabled reports whether RESTCONF is available under the selected transport.

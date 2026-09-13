@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -94,35 +96,15 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 }
 
 func parse(configuration, name string) (nativeState, error) {
-	configuration, err := fastiron.NormalizeConfiguration(configuration)
+	document, err := config.Parse(configuration)
 	if err != nil {
 		return nativeState{}, err
 	}
-	var state nativeState
-	inside, found := false, false
-	for _, line := range strings.Split(configuration, "\n") {
-		if line[0] != ' ' && line[0] != '\t' {
-			inside = line == "interface "+name
-			if inside && found {
-				return nativeState{}, errors.New("native configuration repeats the requested interface")
-			}
-			if inside {
-				found = true
-				// An otherwise default interface can gain or lose its stanza with protection.
-				continue
-			}
-		}
-		fields := strings.Fields(line)
-		if !inside || fields[0] != "protected-port" {
-			state.unowned = append(state.unowned, line)
-			continue
-		}
-		if len(fields) != 1 || state.enabled {
-			return nativeState{}, errors.New("native protected-port configuration is ambiguous")
-		}
-		state.enabled = true
+	observed, err := document.InterfacePolicy(name, config.Protection)
+	if err != nil {
+		return nativeState{}, err
 	}
-	return state, nil
+	return nativeState{enabled: observed.Enabled, unowned: observed.Remaining}, nil
 }
 
 func apply(ctx context.Context, device *fastiron.Device, name string, desired bool) (*bool, error) {
