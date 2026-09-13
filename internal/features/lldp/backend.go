@@ -3,9 +3,11 @@ package lldp
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/config"
@@ -104,16 +106,36 @@ func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled 
 	if name == "" {
 		return applyGlobal(ctx, d, enabled)
 	}
-	current, err := readEnabled(ctx, d, name)
+	if _, err := readRESTEnabled(ctx, d, name); err != nil {
+		return nil, err
+	}
+	before, unowned, err := readPortModes(ctx, d)
 	if err != nil {
 		return nil, err
 	}
+	mode, exists := before[name]
+	if !exists {
+		return nil, errors.New("LLDP inventory omits the requested interface")
+	}
+	current := mode.Receive || mode.Transmit
 	if current != enabled {
 		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": enabled}}}}}
 		writeErr := d.DoREST(ctx, http.MethodPatch, "/lldp/interfaces", body, nil)
-		observed, readErr := readEnabled(ctx, d, name)
+		after, remaining, readErr := readPortModes(ctx, d)
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)
+		}
+		mode, exists := after[name]
+		if !exists {
+			return nil, errors.Join(writeErr, errors.New("LLDP inventory omits the requested interface after mutation"))
+		}
+		observed := mode.Receive || mode.Transmit
+		delete(before, name)
+		delete(after, name)
+		// Native range regrouping is allowed; other ports' directional state
+		// and independently owned commands must survive before saving.
+		if !maps.Equal(before, after) || !slices.Equal(unowned, remaining) {
+			return &observed, errors.Join(writeErr, errors.New("LLDP port mutation changed unrelated configuration"))
 		}
 		if observed != enabled {
 			return &observed, errors.Join(writeErr, errors.New("LLDP configuration did not converge"))
@@ -160,24 +182,28 @@ func readRESTInterfaces(ctx context.Context, d *fastiron.Device) (map[string]boo
 	return interfaces, nil
 }
 
-func readInterfaces(ctx context.Context, device *fastiron.Device) (map[string]bool, error) {
+func readPortModes(ctx context.Context, device *fastiron.Device) (map[string]config.LLDPMode, []string, error) {
 	inventory, err := readRESTInterfaces(ctx, device)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	output, err := device.RunningConfig(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	document, err := config.Parse(output)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	names := make([]string, 0, len(inventory))
 	for name := range inventory {
 		names = append(names, name)
 	}
-	modes, _, err := document.LLDPPorts(names)
+	return document.LLDPPorts(names)
+}
+
+func readInterfaces(ctx context.Context, device *fastiron.Device) (map[string]bool, error) {
+	modes, _, err := readPortModes(ctx, device)
 	if err != nil {
 		return nil, err
 	}

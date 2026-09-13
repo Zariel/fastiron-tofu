@@ -25,7 +25,7 @@ data "fastiron_lldp_interfaces" "configured" {
 
 Import global state with `tofu import fastiron_lldp.global lldp`, or a port with `tofu import fastiron_lldp_interface.port 'lldp|ethernet 1/1/12'`.
 
-Global resource and data-source reads use SSH for native configuration because RESTCONF can retain an old value after CLI changes. Global writes synchronize a stale RESTCONF value to current native state before applying a change. Each write verifies native convergence and preservation of unowned settings before proceeding or saving.
+Global and per-port resource and data-source reads use SSH for native configuration because RESTCONF can retain old values after CLI changes. Global writes synchronize a stale RESTCONF value to current native state before applying a change. Each write verifies native convergence and preservation of unowned settings before proceeding or saving. Port writes allow native range regrouping but verify that other ports retain their individual receive and transmit settings.
 
 On tested firmware, a port reports `enabled = true` when either receive or transmit is enabled. When RESTCONF already reports `enabled = true`, writing `true` preserves a receive-only or transmit-only mode. Disabling and then re-enabling the port restores both directions; the RESTCONF boolean does not independently manage those directions.
 
