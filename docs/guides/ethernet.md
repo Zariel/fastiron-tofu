@@ -46,6 +46,8 @@ The inventory map uses canonical names such as `ethernet 1/1/12` as keys and exc
 
 Both the resource and queries read description and enable state from the native-derived RESTCONF `state` fields. On the tested firmware, the `config` fields can retain an old description after a CLI change following resource deletion. The resource detects that drift and can clear a restored description even when RESTCONF already caches the desired empty value.
 
+On `09.0.10kT213`, hardware validation covered adoption, independent field resets, CLI drift repair, import, port replacement and deletion, including cached-default recovery. A named, disabled port survived reboot with identical running and saved configuration and a no-change OpenTofu plan. Resetting both fields and deleting the resource after reboot also passed; unrelated configuration was preserved.
+
 Counters preserve the full unsigned 64-bit range as OpenTofu numbers. Counter keys retain the switch's names, including `in-octets`, `out-pkts` and `in-errors`. Counters and negotiated link observations can change between reads; those changes may update outputs but do not configure the port or become Ethernet resource attributes. Queries do not save configuration.
 
 ## Link metadata and configuration limits
