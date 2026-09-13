@@ -89,3 +89,20 @@ func TestCommandFields(t *testing.T) {
 		}
 	}
 }
+
+func TestBannerForms(t *testing.T) {
+	for _, banner := range []string{
+		"banner cHello  \nend\nc",
+		"banner exec $Hello  \ninterface lag 11\n$",
+		"banner motd #one line#",
+	} {
+		input := "ver 09.0.10k\n" + banner + "\nend"
+		document, err := Parse(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if document.String() != input || len(document.Commands) != 3 {
+			t.Fatalf("banner not preserved: %q", document.String())
+		}
+	}
+}

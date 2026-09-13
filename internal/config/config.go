@@ -72,13 +72,26 @@ func (d *Document) line(raw string) error {
 	if indent == 0 && line == "end" {
 		d.complete = true
 	}
-	if indent == 0 && len(fields) >= 3 && fields[0] == "banner" && (fields[1] == "motd" || fields[1] == "exec" || fields[1] == "incoming") && fields[2] != "require-enter-key" {
-		text := strings.TrimLeft(strings.TrimPrefix(strings.TrimLeft(strings.TrimPrefix(line, "banner"), " \t"), fields[1]), " \t")
-		d.banner = text[0]
-		if strings.ContainsRune(text[1:], rune(d.banner)) {
-			d.banner = 0
-		}
+	if indent != 0 || fields[0] != "banner" {
+		return nil
 	}
+	text := strings.TrimLeft(strings.TrimPrefix(raw, "banner"), " \t")
+	if len(fields) > 1 && (fields[1] == "motd" || fields[1] == "exec" || fields[1] == "incoming") {
+		text = strings.TrimLeft(strings.TrimPrefix(text, fields[1]), " \t")
+	}
+	if text == "require-enter-key" {
+		return nil
+	}
+	if text == "" || text[0] == '"' {
+		return errors.New("native banner has no valid delimiter")
+	}
+	// Banner whitespace is payload, including trailing spaces on its first line.
+	d.Commands[len(d.Commands)-1].Text = raw
+	d.banner = text[0]
+	if strings.ContainsRune(text[1:], rune(d.banner)) {
+		d.banner = 0
+	}
+
 	return nil
 }
 
