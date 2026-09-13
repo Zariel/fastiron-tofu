@@ -49,4 +49,6 @@ Each policy contains `interface`, `application`, `traffic`, `vlan_id`, `priority
 
 The MED query was verified through OpenTofu on `09.0.10kT213` with grouped policies, a per-port tagging change, CLI removal, and stable plans. Queries left running and saved configuration unchanged. These are configured policies, not evidence of endpoint advertisement or negotiation.
 
+On this tested firmware, configuring a tagged or priority-tagged MED policy with priority `0` through CLI or RESTCONF produces native untagged configuration. The query reports that observed untagged mode, with null VLAN and priority, while retaining DSCP. Nonzero tagging priorities were preserved in the captures.
+
 LLDP-MED policy resources and neighbor discovery are not yet implemented.

@@ -1,0 +1,40 @@
+{
+  "icx-openconfig-lldp-aug:med": {
+    "network-policy": [
+      {
+        "application": "voice",
+        "traffic": "tagged",
+        "tagged": [
+          {
+            "vlan": 3053,
+            "priority": 0,
+            "dscp": 46,
+            "ports": [
+              "ethernet 1/1/11"
+            ]
+          },
+          {
+            "vlan": 3053,
+            "priority": 0,
+            "dscp": 0,
+            "ports": [
+              "ethernet 1/1/11"
+            ]
+          }
+        ]
+      },
+      {
+        "application": "voice",
+        "traffic": "untagged",
+        "untagged": [
+          {
+            "dscp": 46,
+            "ports": [
+              "ethernet 1/1/11"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
