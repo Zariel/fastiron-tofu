@@ -94,11 +94,11 @@ func TestPartialWrite(t *testing.T) {
 }
 
 func TestGlobalVerification(t *testing.T) {
-	for _, failure := range []string{"", "echo only", "unowned change", "stale cache"} {
+	for _, failure := range []string{"", "echo only", "unowned change", "stale cache", "synchronization failure"} {
 		t.Run(failure, func(t *testing.T) {
 			var mu sync.Mutex
 			enabled, cached, saved := true, true, true
-			if failure == "stale cache" {
+			if failure == "stale cache" || failure == "synchronization failure" {
 				cached = false
 			}
 			port := "no lldp enable transmit ports ethe 1/1/12"
@@ -163,6 +163,10 @@ func TestGlobalVerification(t *testing.T) {
 				if failure != "echo only" {
 					enabled = cached
 				}
+				if failure == "synchronization failure" {
+					http.Error(w, "injected synchronization failure", http.StatusInternalServerError)
+					return
+				}
 				if failure == "unowned change" {
 					port = "no lldp enable ports ethe 1/1/12"
 				}
@@ -180,7 +184,7 @@ func TestGlobalVerification(t *testing.T) {
 			observed, err := applyEnabled(context.Background(), device, "", false)
 			mu.Lock()
 			defer mu.Unlock()
-			if (err != nil) != (failure == "echo only" || failure == "unowned change") || observed == nil || *observed != enabled {
+			if (err != nil) != (failure == "echo only" || failure == "unowned change" || failure == "synchronization failure") || observed == nil || *observed != enabled {
 				t.Fatalf("observed=%v native=%t error=%v", observed, enabled, err)
 			}
 			if failure == "" || failure == "stale cache" {
@@ -188,6 +192,9 @@ func TestGlobalVerification(t *testing.T) {
 					t.Fatal("global mutation failed to persist or preserve port mode")
 				}
 				return
+			}
+			if failure == "synchronization failure" && (!enabled || writes != 1) {
+				t.Fatal("continued to the desired write after failed synchronization")
 			}
 			if saves != 0 || !saved || savedPort != "no lldp enable transmit ports ethe 1/1/12" {
 				t.Fatal("unverified configuration was saved")
