@@ -8,6 +8,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/address"
 	"github.com/zariel/fastiron-tofu/internal/features/authentication"
 	"github.com/zariel/fastiron-tofu/internal/features/dns"
+	"github.com/zariel/fastiron-tofu/internal/features/dscptrust"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/features/igmp"
 	"github.com/zariel/fastiron-tofu/internal/features/lag"
@@ -55,6 +56,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &ethernet.Resource{} },
 		func() resource.Resource { return voicevlan.NewResource() },
 		func() resource.Resource { return protectedport.NewResource() },
+		func() resource.Resource { return dscptrust.NewResource() },
 		func() resource.Resource { return stormcontrol.NewResource() },
 		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
@@ -99,6 +101,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return ethernet.NewInventoryDataSource() },
 		func() datasource.DataSource { return voicevlan.NewDataSource() },
 		func() datasource.DataSource { return protectedport.NewDataSource() },
+		func() datasource.DataSource { return dscptrust.NewDataSource() },
 		func() datasource.DataSource { return stormcontrol.NewDataSource() },
 		func() datasource.DataSource { return &address.DataSource{} },
 		func() datasource.DataSource { return &lag.DataSource{} },
