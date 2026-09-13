@@ -18,7 +18,7 @@ func TestNativeUser(t *testing.T) {
 		{"username reader privilege 5 password $6$opaque", account{Username: "reader", Privilege: 5}},
 		{"username reader password $6$opaque", account{Username: "reader", Privilege: 0}},
 	} {
-		got, neighbors, err := userConfiguration("username operator password $6$other\n"+tc.line, "reader")
+		got, neighbors, err := userConfiguration(nativeFixture("username operator password $6$other\n"+tc.line), "reader")
 		if err != nil || got == nil || got.user != tc.want || !got.hasPassword {
 			t.Fatalf("native metadata error=%v", err)
 		}
@@ -32,7 +32,7 @@ func TestUserOwnership(t *testing.T) {
 	for _, line := range []string{
 		"username reader expires 30", "username reader access-time 09:00 to 17:00", "no username reader enable", "username reader privilege 5 password opaque\nusername reader expires 30", "username reader privilege 1 password opaque",
 	} {
-		if _, _, err := userConfiguration(line, "reader"); err == nil {
+		if _, _, err := userConfiguration(nativeFixture(line), "reader"); err == nil {
 			t.Fatal("accepted native user options outside ownership")
 		}
 	}
@@ -49,5 +49,13 @@ func TestUserTransportAccount(t *testing.T) {
 				t.Fatal("transport account mutation was not rejected before device access")
 			}
 		}
+	}
+}
+
+func TestBannerUser(t *testing.T) {
+	input := "ver 09.0.10k\nbanner motd $\nusername reader privilege 5 password opaque\n$\nend"
+	user, _, err := userConfiguration(input, "reader")
+	if err != nil || user != nil {
+		t.Fatalf("banner interpreted as an account: %v, %v", user, err)
 	}
 }

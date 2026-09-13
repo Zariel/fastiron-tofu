@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
@@ -35,11 +37,19 @@ type nativeUser struct {
 }
 
 func userConfiguration(output, name string) (*nativeUser, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
 	var current *nativeUser
 	var neighbors []string
-	for _, line := range strings.Split(output, "\n") {
+	for _, command := range document.Commands {
+		line := command.Text
+		if command.Parent != -1 {
+			continue
+		}
 		line = strings.TrimSpace(line)
-		f := strings.Fields(line)
+		f := command.Fields
 		if len(f) == 0 {
 			continue
 		}
@@ -128,8 +138,14 @@ func applyUser(ctx context.Context, d *fastiron.Device, u account, password stri
 		return current, errors.New("native and RESTCONF user configuration disagree; retry after synchronization")
 	}
 	if present || current != nil {
-		if slices.Contains(strings.Split(strings.ReplaceAll(output, "\r", ""), "\n"), "service local-user-protection") {
-			return current, errors.New("local-user protection requires an authenticated user-update operation not currently supported")
+		document, err := nativeconfig.Parse(output)
+		if err != nil {
+			return current, err
+		}
+		for _, command := range document.Commands {
+			if command.Parent == -1 && command.Text == "service local-user-protection" {
+				return current, errors.New("local-user protection requires an authenticated user-update operation not currently supported")
+			}
 		}
 		endpoint := "/system/aaa/authentication/users"
 		method := http.MethodDelete

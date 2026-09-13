@@ -12,6 +12,8 @@ import (
 	"strings"
 	"unicode"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
@@ -56,11 +58,19 @@ type nativeAAAServer struct {
 // nativeAAA rejects settings the RESTCONF server payload cannot preserve. Secret
 // values stay local; errors never include the source configuration line.
 func nativeAAA(output string, desired server) (*nativeAAAServer, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
 	var current *nativeAAAServer
 	var neighbors []string
-	for _, line := range strings.Split(output, "\n") {
+	for _, command := range document.Commands {
+		line := command.Text
+		if command.Parent != -1 {
+			continue
+		}
 		line = strings.TrimSpace(line)
-		fields := strings.Fields(line)
+		fields := command.Fields
 		if len(fields) > 0 && fields[0] == "no" {
 			fields = fields[1:]
 			if len(fields) > 0 && (fields[0] == "radius-server" || fields[0] == "tacacs-server" || fields[0] == "aaa") {

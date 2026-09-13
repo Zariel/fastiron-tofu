@@ -15,11 +15,11 @@ func TestNativeAAAPolicy(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := "aaa authentication web-server default local\n" + tc.input + "username operator password opaque"
-			got, neighbors, err := nativeAAAPolicy(input)
+			got, neighbors, err := nativeAAAPolicy(nativeFixture(input))
 			if err != nil || got == nil || !reflect.DeepEqual(*got, tc.want) {
 				t.Fatalf("policy=%v error=%v", got, err)
 			}
-			if !reflect.DeepEqual(neighbors, []string{"aaa authentication web-server default local", "username operator password opaque"}) {
+			if !reflect.DeepEqual(neighbors, []string{"ver 09.0.10k", "aaa authentication web-server default local", "username operator password opaque", "end"}) {
 				t.Fatalf("unowned configuration=%v", neighbors)
 			}
 		})
@@ -35,7 +35,7 @@ func TestNativeAAAPolicyOwnership(t *testing.T) {
 		"duplicate login":  "aaa authentication login default radius",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := nativeAAAPolicy("aaa authentication login default local\n" + extra); err == nil {
+			if _, _, err := nativeAAAPolicy(nativeFixture("aaa authentication login default local\n" + extra)); err == nil {
 				t.Fatal("accepted unsupported native ownership")
 			}
 		})

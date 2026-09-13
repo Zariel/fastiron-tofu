@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -37,12 +39,20 @@ func validatePolicy(p policy) error {
 }
 
 func nativeAAAPolicy(output string) (*policy, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
 	p := &policy{}
 	var neighbors []string
 	seen := map[string]bool{}
-	for _, line := range strings.Split(output, "\n") {
-		f := strings.Fields(line)
-		line = strings.Join(f, " ")
+	for _, command := range document.Commands {
+		line := command.Text
+		if command.Parent != -1 {
+			neighbors = append(neighbors, line)
+			continue
+		}
+		f := command.Fields
 		key := ""
 		switch {
 		case strings.HasPrefix(line, "aaa authentication login "):
