@@ -29,6 +29,7 @@ const (
 	symmetricFlowControl
 	lldpRun
 	lldpPorts
+	lldpMED
 )
 
 type portRange struct{ first, last [3]uint64 }
@@ -43,6 +44,7 @@ type parsedCommand struct {
 	direction          string
 	portRanges         []portRange
 	allPorts           bool
+	med                medPolicy
 }
 
 // Command retains the original command text and its indentation scope. Unknown

@@ -1,0 +1,20 @@
+{
+  "icx-openconfig-lldp-aug:med": {
+    "network-policy": [
+      {
+        "application": "voice",
+        "traffic": "untagged",
+        "untagged": [
+          {
+            "dscp": 24,
+            "ports": [
+              "ethernet 1/1/10",
+              "ethernet 1/1/11",
+              "ethernet 1/1/12"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

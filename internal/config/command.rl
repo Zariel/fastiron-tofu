@@ -16,6 +16,7 @@ import (
   ('protected-port' tail) @{ kind = protectedPort } |
   ('voice-vlan' tail) @{ kind = voiceVLAN } |
   (('no' h+)? 'lldp' h+ 'run' tail) @{ kind = lldpRun } |
+  (('no' h+)? 'lldp' h+ 'med' h+ 'network-policy' tail) @{ kind = lldpMED } |
   (('no' h+)? 'lldp' h+ 'enable' h+ (('receive' | 'transmit') h+)? 'ports' tail) @{ kind = lldpPorts } |
   ('jumbo' tail) @{ kind = jumboMode } |
   ('port-name' tail) @{ kind = portName } |
@@ -70,7 +71,7 @@ func commandFields(data string) (fields []string) {
  action value {
   var err error
   parsed.number, err = strconv.ParseInt(data[start:p], 10, 64)
-  numberValid = err == nil
+  numberValid = numberValid && err == nil
  }
  action name { parsed.name = data[start:p] }
  action unit { parsed.unit = data[start:p] }
@@ -109,11 +110,21 @@ func commandFields(data string) (fields []string) {
  }
  port_range = ('ethe' | 'ethernet') h+ port_id >mark %firstPort
               (h+ 'to' h+ port_id >mark %lastPort)?;
+ port_list = 'all' %{ parsed.allPorts = true } | port_range (h+ port_range)*;
+ application = 'voice' | 'voice-signaling' | 'guest-voice' | 'guest-voice-signaling' |
+               'softphone-voice' | 'streaming-video' | 'video-conferencing' | 'video-signaling';
+ med = 'lldp' h+ 'med' h+ 'network-policy' h+ 'application' h+ application >mark %name h+ (
+       'untagged' %{ parsed.med.Traffic = "untagged" } |
+       ('priority-tagged' %{ parsed.med.Traffic = "priority-tagged" } |
+        'tagged' %{ parsed.med.Traffic = "tagged" } h+ 'vlan' h+ digit+ >mark %value %{ parsed.med.VLAN = parsed.number })
+       h+ 'priority' h+ digit+ >mark %value %{ parsed.med.Priority = parsed.number }
+       ) h+ 'dscp' h+ digit+ >mark %value %{ parsed.med.DSCP = parsed.number }
+       h+ 'ports' h+ port_list;
  lldp = ('no' h+ %{ parsed.negated = true })? 'lldp' h+ (
   'run' | 'enable' h+ (('receive' | 'transmit') >mark %{ parsed.direction = data[start:p] } h+)?
-  'ports' h+ ('all' %{ parsed.allPorts = true } | port_range (h+ port_range)*)
+  'ports' h+ port_list
  );
- main := (lldp | flag | voice | storm | vlan | interface | acl | multicast |
+ main := (med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%
