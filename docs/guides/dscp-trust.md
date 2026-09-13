@@ -39,4 +39,4 @@ The command reference also marks 802.1p priority override as incompatible. Ordin
 
 The tested RESTCONF DELETE operation returned HTTP 501. Removal therefore writes `enabled = false`. Writes align the current native value before applying the desired value, verify native convergence and preserve unrelated configuration before saving. Failed operations retain observed state and `persistence_pending` for a later apply or destroy to retry.
 
-Direct hardware probes verified enable/disable, CLI drift, current-value alignment and priority preservation, with original configuration restored. Full OpenTofu lifecycle and reboot validation are in progress.
+Hardware validation covered enable/disable, CLI drift repair, native-only removal, import, interface replacement and deletion through OpenTofu. Running and saved configuration survived reboot unchanged, followed by a no-change plan, update and deletion. Independent serial checks verified the results and exact restoration of the original configuration. Direct probes also covered current-value alignment and preservation of ordinary port priority.

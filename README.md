@@ -23,7 +23,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Ethernet interfaces | Partial | Port name and administrative enable state; [single and inventory queries](docs/guides/ethernet.md) with status, link reports and precise counters. Speed, duplex, clock, jumbo-frame writes remain. |
 | Protected ports | Implemented | [Ethernet and LAG isolation configuration](docs/guides/protected-ports.md) and native query, with lifecycle and reboot validation. Separate ownership from interface settings and LAG membership. |
 | Storm control | Implemented | [Ethernet and LAG rate policies](docs/guides/storm-control.md) with a shared unit, per-class limits and native query. Logging, threshold and shutdown options are not managed. |
-| DSCP trust | Implemented; validation in progress | [Native trust configuration and query](docs/guides/dscp-trust.md), with ownership separate from QoS mappings and flow control. Tested RESTCONF support is Ethernet-only. |
+| DSCP trust | Implemented | [Native trust configuration and query](docs/guides/dscp-trust.md), with ownership separate from QoS mappings and flow control. Ethernet lifecycle and reboot persistence verified; the tested LAG RESTCONF path is unavailable. |
 | Routed VLAN interfaces (VE) | Partial | Existence, VLAN binding and port name. Administrative enable state remains. |
 | Other interface configuration | Not yet | Dedicated management/LAG interface resources, loopbacks, group-VE and tunnels remain. |
 | Interface IP addresses | Implemented | Individual IPv4/IPv6 addresses on VE and management interfaces. |
@@ -65,7 +65,7 @@ Hardware testing has used FastIron `09.0.10kT213` on an ICX 7150. ICX 7250 testi
 
 ## Development
 
-Enter the pinned tool environment with `nix develop`. It includes Go, gofumpt, gopls, OpenTofu, Make, Jujutsu, Git, curl, jq, Python, Poppler PDF utilities, OpenSSH, picocom, socat, and nixfmt.
+Enter the pinned tool environment with `nix develop`. It includes Go, gofumpt, gopls, Ragel, OpenTofu, Make, Jujutsu, Git, curl, jq, Python, Poppler PDF utilities, OpenSSH, picocom, socat, and nixfmt.
 
 ```sh
 nix develop
