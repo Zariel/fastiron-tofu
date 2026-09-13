@@ -16,6 +16,7 @@ func TestOpenTofuStormControlPersistence(t *testing.T) {
 	var running, startup int64
 	var cached bool
 	falseSave := false
+	rejectCreate := true
 	native := func(rate int64) string {
 		if rate == 0 {
 			return "ver 09.0.10k\nend"
@@ -67,6 +68,11 @@ func TestOpenTofuStormControlPersistence(t *testing.T) {
 			running, cached = 0, false
 			w.WriteHeader(204)
 		case http.MethodPatch:
+			if rejectCreate {
+				rejectCreate = false
+				w.WriteHeader(500)
+				return
+			}
 			var body struct {
 				Policy struct {
 					Broadcast struct {
@@ -91,7 +97,6 @@ func TestOpenTofuStormControlPersistence(t *testing.T) {
 	}
 	choose(111)
 	run(0, "init", "-no-color")
-	run(0, "apply", "-auto-approve", "-no-color")
 
 	assertState := func(rate *int64, pending bool) {
 		t.Helper()
@@ -131,6 +136,15 @@ func TestOpenTofuStormControlPersistence(t *testing.T) {
 			t.Fatalf("running=%v startup=%v", running, startup)
 		}
 	}
+
+	if output := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(output, "Cannot apply interface storm control") {
+		t.Fatalf("missing rejected-create diagnostic: %s", output)
+	}
+	assertNative(0, 0)
+	assertState(nil, true)
+	run(0, "apply", "-auto-approve", "-no-color")
+	assertNative(111, 111)
+	assertState(new(int64(111)), false)
 
 	choose(222)
 	mu.Lock()
