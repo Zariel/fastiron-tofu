@@ -11,6 +11,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/dscptrust"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/features/igmp"
+	"github.com/zariel/fastiron-tofu/internal/features/jumbo"
 	"github.com/zariel/fastiron-tofu/internal/features/lag"
 	"github.com/zariel/fastiron-tofu/internal/features/lldp"
 	"github.com/zariel/fastiron-tofu/internal/features/ospf"
@@ -102,6 +103,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return voicevlan.NewDataSource() },
 		func() datasource.DataSource { return protectedport.NewDataSource() },
 		func() datasource.DataSource { return dscptrust.NewDataSource() },
+		func() datasource.DataSource { return jumbo.NewDataSource() },
 		func() datasource.DataSource { return stormcontrol.NewDataSource() },
 		func() datasource.DataSource { return &address.DataSource{} },
 		func() datasource.DataSource { return &lag.DataSource{} },

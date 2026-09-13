@@ -23,6 +23,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Ethernet interfaces | Partial | Port name and administrative enable state; [single and inventory queries](docs/guides/ethernet.md) with status, link reports and precise counters. Speed, duplex, clock, jumbo-frame writes remain. |
 | Protected ports | Implemented | [Ethernet and LAG isolation configuration](docs/guides/protected-ports.md) and native query, with lifecycle and reboot validation. Separate ownership from interface settings and LAG membership. |
 | Storm control | Implemented | [Ethernet and LAG rate policies](docs/guides/storm-control.md) with a shared unit, per-class limits and native query. Logging, threshold and shutdown options are not managed. |
+| Jumbo frames | Partial | [Global configured-mode query](docs/guides/jumbo.md). Configuration resource and hardware lifecycle validation remain. |
 | DSCP trust | Implemented | [Native trust configuration and query](docs/guides/dscp-trust.md), with ownership separate from QoS mappings and flow control. Ethernet lifecycle and reboot persistence verified; the tested LAG RESTCONF path is unavailable. |
 | Routed VLAN interfaces (VE) | Partial | Existence, VLAN binding and port name. Administrative enable state remains. |
 | Other interface configuration | Not yet | Dedicated management/LAG interface resources, loopbacks, group-VE and tunnels remain. |
