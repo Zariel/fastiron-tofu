@@ -16,6 +16,8 @@ type (
 	jumboResource struct{ device *fastiron.Device }
 	jumboModel    struct {
 		ID      types.String `tfsdk:"id"`
+		Active  types.Bool   `tfsdk:"active_enabled"`
+		Reload  types.Bool   `tfsdk:"reload_required"`
 		Enabled types.Bool   `tfsdk:"enabled"`
 		Pending types.Bool   `tfsdk:"persistence_pending"`
 	}
@@ -34,9 +36,11 @@ func (r *jumboResource) Metadata(_ context.Context, req resource.MetadataRequest
 }
 
 func (r *jumboResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Owns configured global jumbo-frame support. Declare one per switch. Deletion disables jumbo mode without restoring a prior value or changing per-interface MTU configuration. Import with global.", Attributes: map[string]schema.Attribute{
+	resp.Schema = schema.Schema{Description: "Owns configured global jumbo-frame support. Declare one per switch. Deletion configures jumbo mode off; save and reload to activate the change. Reloads are initiated separately. Per-interface MTUs remain independently owned. Import with global.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, Description: "Singleton identity: global.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"enabled":             schema.BoolAttribute{Required: true, Description: "Whether global jumbo-frame support is configured."},
+		"active_enabled":      schema.BoolAttribute{Computed: true, Description: "Switch-reported active jumbo mode. Saved configuration takes effect after a separately initiated reload."},
+		"reload_required":     schema.BoolAttribute{Computed: true, Description: "Configured and active jumbo modes differ. Save configuration before reloading the switch."},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
 }
@@ -110,7 +114,7 @@ func (r *jumboResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		resp.Diagnostics.AddError("Cannot read jumbo configuration", err.Error())
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, jumboState(observed.enabled, state.Pending.ValueBool()))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, jumboState(observed, state.Pending.ValueBool()))...)
 }
 
 func (r *jumboResource) Delete(ctx context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -133,6 +137,6 @@ func (r *jumboResource) ImportState(ctx context.Context, req resource.ImportStat
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), "global")...)
 }
 
-func jumboState(enabled, pending bool) jumboModel {
-	return jumboModel{ID: types.StringValue("global"), Enabled: types.BoolValue(enabled), Pending: types.BoolValue(pending)}
+func jumboState(observed observation, pending bool) jumboModel {
+	return jumboModel{ID: types.StringValue("global"), Enabled: types.BoolValue(observed.enabled), Active: types.BoolValue(observed.active), Reload: types.BoolValue(observed.enabled != observed.active), Pending: types.BoolValue(pending)}
 }

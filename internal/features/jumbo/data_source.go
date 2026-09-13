@@ -21,7 +21,9 @@ func (d *dataSource) Metadata(_ context.Context, req datasource.MetadataRequest,
 
 func (d *dataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured global jumbo-frame support without taking ownership or saving configuration.", Attributes: map[string]schema.Attribute{
-		"enabled": schema.BoolAttribute{Computed: true, Description: "Whether the native global jumbo command is configured. This does not measure forwarded frame sizes or report a per-interface MTU."},
+		"active_enabled":  schema.BoolAttribute{Computed: true, Description: "Switch-reported active jumbo mode, set when saved configuration is loaded during a reload."},
+		"reload_required": schema.BoolAttribute{Computed: true, Description: "Configured and active jumbo modes differ. Save configuration before reloading the switch."},
+		"enabled":         schema.BoolAttribute{Computed: true, Description: "Whether the native global jumbo command is configured. This does not measure forwarded frame sizes or report a per-interface MTU."},
 	}}
 }
 
@@ -45,6 +47,8 @@ func (d *dataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *d
 	}
 	state := struct {
 		Enabled types.Bool `tfsdk:"enabled"`
-	}{Enabled: types.BoolValue(observed.enabled)}
+		Active  types.Bool `tfsdk:"active_enabled"`
+		Reload  types.Bool `tfsdk:"reload_required"`
+	}{Enabled: types.BoolValue(observed.enabled), Active: types.BoolValue(observed.active), Reload: types.BoolValue(observed.enabled != observed.active)}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }

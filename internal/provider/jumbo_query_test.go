@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestOpenTofuJumboQuery(t *testing.T) {
-	var enabled, missing atomic.Bool
+	var enabled, active, missing atomic.Bool
 	server := testswitch.New(t, func(command string) string {
 		switch command {
 		case "skip-page-display":
@@ -39,21 +40,37 @@ func TestOpenTofuJumboQuery(t *testing.T) {
 			fmt.Fprint(w, `{}`)
 			return
 		}
-		fmt.Fprintf(w, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":%t},"operation-state":{"enabled":%t}}}`, !enabled.Load(), !enabled.Load())
+		fmt.Fprintf(w, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":%t},"operation-state":{"enabled":%t}}}`, !enabled.Load(), active.Load())
 	})
 	write, run, base := tofuFixture(t, &testSwitch{server: server.REST, sshAddress: server.SSHAddress, knownHosts: server.KnownHosts})
 	write("main.tf", base+`data "fastiron_jumbo" "test" {}
-output "jumbo" { value = data.fastiron_jumbo.test.enabled }
+output "jumbo" { value = data.fastiron_jumbo.test }
 `)
 	run(0, "init", "-no-color")
-	for _, desired := range []bool{false, true, false} {
-		enabled.Store(desired)
+	for _, expected := range []struct{ enabled, active, reload bool }{
+		{false, false, false},
+		{true, false, true},
+		{true, true, false},
+		{false, true, true},
+		{false, false, false},
+	} {
+		enabled.Store(expected.enabled)
+		active.Store(expected.active)
 		run(0, "apply", "-auto-approve", "-no-color")
-		if got := strings.TrimSpace(run(0, "output", "-json", "jumbo")); got != fmt.Sprint(desired) {
-			t.Fatalf("jumbo=%s, want %t", got, desired)
+		var got struct {
+			Enabled bool `json:"enabled"`
+			Active  bool `json:"active_enabled"`
+			Reload  bool `json:"reload_required"`
+		}
+		if err := json.Unmarshal([]byte(run(0, "output", "-json", "jumbo")), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.Enabled != expected.enabled || got.Active != expected.active || got.Reload != expected.reload {
+			t.Fatalf("jumbo=%+v expected=%+v", got, expected)
 		}
 		run(0, "plan", "-detailed-exitcode", "-no-color")
 	}
+
 	missing.Store(true)
 	if output := run(1, "plan", "-no-color"); !strings.Contains(output, "Cannot read jumbo configuration") {
 		t.Fatalf("missing diagnostic: %s", output)

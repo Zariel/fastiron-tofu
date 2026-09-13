@@ -8,7 +8,9 @@ resource "fastiron_jumbo" "switch" {
 }
 ```
 
-Deleting the resource disables jumbo mode. It does not restore a previous value or manage per-interface MTU configuration. Import existing configuration with `tofu import fastiron_jumbo.switch global`.
+Jumbo mode changes require saving the configuration and reloading the switch to take effect. Reloads are initiated separately from provider operations. `active_enabled` reports the switch’s active mode; `reload_required` is true when running configuration differs from that mode. Save before reloading, especially when using manual persistence.
+
+Deleting the resource configures jumbo mode off; the active mode remains until the saved configuration is loaded by a reload. Use the data source to inspect activation status after deletion. Per-interface MTUs remain independently owned. Import existing configuration with `tofu import fastiron_jumbo.switch global`.
 
 The data source reads the configured mode without taking ownership:
 
@@ -20,7 +22,7 @@ output "jumbo_enabled" {
 }
 ```
 
-This query requires an available RESTCONF jumbo endpoint and SSH access to native configuration. It does not change or save configuration. Both RESTCONF flags can remain stale after CLI changes, so the reported value comes from the native global `jumbo` command.
+This query requires an available RESTCONF jumbo endpoint and SSH access to native configuration. It does not change or save configuration. The RESTCONF configured flag can lag behind CLI changes, so `enabled` comes from the native global `jumbo` command. `active_enabled` comes from the operational flag and changes when saved configuration is loaded during a reload. The query also returns `reload_required`; it does not verify whether running configuration has been saved.
 
 Jumbo mode is global, not an interface setting. The query reports configured support; it does not measure forwarding, set per-interface MTUs, or establish a supported maximum frame size. FastIron excludes the out-of-band management port and switch-access protocols from jumbo mode.
 
@@ -28,4 +30,4 @@ The tested firmware rejected RESTCONF DELETE with HTTP 501, so removal writes `e
 
 Failed operations retain observed state and `persistence_pending` so a later apply or destroy can retry reconciliation or saving. Setting the already configured native value avoids an unnecessary RESTCONF write.
 
-Direct hardware probes covered repeated transitions and CLI drift repair in both directions, restoring the original configuration. Public OpenTofu lifecycle and reboot validation are in progress. The query reports configured support, not measured packet forwarding.
+Direct hardware probes covered repeated transitions and CLI drift repair in both directions, restoring the original configuration. The public OpenTofu lifecycle verified defaults, drift repair, native-only removal, import, replacement, configured-state persistence across reboot, and post-reboot updates and deletion. Validation of the new activation-status fields is in progress. The query reports configured support, not measured packet forwarding.

@@ -18,13 +18,15 @@ func TestRead(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		enabled  bool
+		active   bool
 		response string
 		wantErr  bool
 	}{
-		{"native enable", true, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":false},"operation-state":{"enabled":false}}}`, false},
-		{"native disable", false, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":true},"operation-state":{"enabled":true}}}`, false},
-		{"missing value", false, `{"icx-openconfig-jumbo:jumbo":{"config":{}}}`, true},
-		{"missing container", false, `{}`, true},
+		{"native enable", true, false, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":false},"operation-state":{"enabled":false}}}`, false},
+		{"native disable", false, true, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":true},"operation-state":{"enabled":true}}}`, false},
+		{"missing value", false, false, `{"icx-openconfig-jumbo:jumbo":{"config":{}}}`, true},
+		{"missing container", false, false, `{}`, true},
+		{"missing active value", false, false, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":false}}}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := testswitch.New(t, func(command string) string {
@@ -71,6 +73,9 @@ func TestRead(t *testing.T) {
 				t.Fatalf("enabled=%v, want %v", observed.enabled, tc.enabled)
 			}
 			want := "ver 09.0.10kT213\ninterface ethernet 1/1/12\n port-name EDGE\nend"
+			if observed.active != tc.active {
+				t.Fatalf("active=%v, want %v", observed.active, tc.active)
+			}
 			if strings.Join(observed.unowned, "\n") != want {
 				t.Fatal("unowned configuration changed")
 			}

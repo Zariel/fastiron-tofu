@@ -11,49 +11,57 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type nativeState struct {
+type observation struct {
+	active  bool
 	enabled bool
 	cached  bool
 	unowned []string
 }
 
-func read(ctx context.Context, device *fastiron.Device) (nativeState, error) {
+func read(ctx context.Context, device *fastiron.Device) (observation, error) {
 	if _, err := device.Discover(ctx); err != nil {
-		return nativeState{}, err
+		return observation{}, err
 	}
 	var response struct {
 		Jumbo *struct {
 			Config *struct {
 				Enabled *bool `json:"enabled"`
 			} `json:"config"`
+			Active *struct {
+				Enabled *bool `json:"enabled"`
+			} `json:"operation-state"`
 		} `json:"icx-openconfig-jumbo:jumbo"`
 	}
 	if err := device.DoREST(ctx, http.MethodGet, "/jumbo", nil, &response); err != nil {
-		return nativeState{}, err
+		return observation{}, err
 	}
 	if response.Jumbo == nil || response.Jumbo.Config == nil || response.Jumbo.Config.Enabled == nil {
-		return nativeState{}, errors.New("RESTCONF jumbo response omitted its configured value")
+		return observation{}, errors.New("RESTCONF jumbo response omitted its configured value")
+	}
+	if response.Jumbo.Active == nil || response.Jumbo.Active.Enabled == nil {
+		return observation{}, errors.New("RESTCONF jumbo response omitted its active value")
 	}
 	observed, err := readNative(ctx, device)
 	observed.cached = *response.Jumbo.Config.Enabled
+	observed.active = *response.Jumbo.Active.Enabled
 	return observed, err
 }
 
-func readNative(ctx context.Context, device *fastiron.Device) (nativeState, error) {
-	// Both RESTCONF flags can remain stale after native CLI configuration changes.
+func readNative(ctx context.Context, device *fastiron.Device) (observation, error) {
+	// The configured RESTCONF flag can remain stale after native CLI changes.
 	output, err := device.RunningConfig(ctx)
 	if err != nil {
-		return nativeState{}, err
+		return observation{}, err
 	}
 	document, err := config.Parse(output)
 	if err != nil {
-		return nativeState{}, err
+		return observation{}, err
 	}
 	enabled, unowned, err := document.Jumbo()
-	return nativeState{enabled: enabled, unowned: unowned}, err
+	return observation{enabled: enabled, unowned: unowned}, err
 }
 
-func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*bool, error) {
+func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*observation, error) {
 	unlock, err := device.Lock(ctx)
 	if err != nil {
 		return nil, err
@@ -64,7 +72,7 @@ func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*bool, e
 		return nil, err
 	}
 	if current.enabled == enabled {
-		return &current.enabled, device.Persist(ctx)
+		return &current, device.Persist(ctx)
 	}
 
 	before := current
@@ -75,20 +83,20 @@ func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*bool, e
 	for current.cached != current.enabled && current.enabled != enabled {
 		select {
 		case <-ctx.Done():
-			return &current.enabled, errors.Join(errors.New("RESTCONF jumbo configuration did not synchronize with native state"), ctx.Err())
+			return &current, errors.Join(errors.New("RESTCONF jumbo configuration did not synchronize with native state"), ctx.Err())
 		case <-time.After(250 * time.Millisecond):
 		}
 		next, err := read(ctx, device)
 		if err != nil {
-			return &current.enabled, err
+			return &current, err
 		}
 		current = next
 		if !slices.Equal(before.unowned, current.unowned) {
-			return &current.enabled, errors.New("unrelated configuration changed while waiting for jumbo synchronization")
+			return &current, errors.New("unrelated configuration changed while waiting for jumbo synchronization")
 		}
 	}
 	if current.enabled == enabled {
-		return &current.enabled, device.Persist(ctx)
+		return &current, device.Persist(ctx)
 	}
 
 	body := map[string]any{"icx-openconfig-jumbo:jumbo": map[string]any{"config": map[string]bool{"enabled": enabled}}}
@@ -96,22 +104,24 @@ func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*bool, e
 	for {
 		next, readErr := readNative(ctx, device)
 		if readErr != nil {
-			return &current.enabled, errors.Join(writeErr, readErr)
+			return &current, errors.Join(writeErr, readErr)
 		}
+		// Active mode changes on reload, not through this configuration write.
+		next.active = current.active
 		current = next
 		// Verify native effects and every unowned command before permitting a save.
 		if !slices.Equal(before.unowned, current.unowned) {
-			return &current.enabled, errors.Join(writeErr, errors.New("jumbo mutation changed unrelated configuration"))
+			return &current, errors.Join(writeErr, errors.New("jumbo mutation changed unrelated configuration"))
 		}
 		if writeErr != nil {
-			return &current.enabled, writeErr
+			return &current, writeErr
 		}
 		if current.enabled == enabled {
-			return &current.enabled, device.Persist(ctx)
+			return &current, device.Persist(ctx)
 		}
 		select {
 		case <-ctx.Done():
-			return &current.enabled, errors.Join(errors.New("native jumbo configuration did not converge"), ctx.Err())
+			return &current, errors.Join(errors.New("native jumbo configuration did not converge"), ctx.Err())
 		case <-time.After(250 * time.Millisecond):
 		}
 	}

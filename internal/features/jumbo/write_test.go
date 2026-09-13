@@ -79,7 +79,7 @@ func TestApply(t *testing.T) {
 					if reads >= 3 && !tc.stall {
 						cached = native
 					}
-					fmt.Fprintf(w, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":%t}}}`, cached)
+					fmt.Fprintf(w, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":%t},"operation-state":{"enabled":false}}}`, cached)
 					return
 				}
 				if r.Method != http.MethodPut {
@@ -144,18 +144,18 @@ func TestApply(t *testing.T) {
 				if saves != 0 || tc.stall && writes != 0 {
 					t.Fatalf("unsafe persistence or mutation: writes=%d saves=%d", writes, saves)
 				}
-				if observed == nil || *observed != native {
+				if observed == nil || observed.enabled != native {
 					t.Fatal("lost observed state on failure")
 				}
 				return
 			}
 			if tc.failWrite || tc.failSave {
-				if err == nil || observed == nil || *observed != tc.desired {
+				if err == nil || observed == nil || observed.enabled != tc.desired {
 					t.Fatalf("lost partial state: %v %v", observed, err)
 				}
 				observed, err = apply(context.Background(), device, tc.desired)
 			}
-			if err != nil || observed == nil || *observed != tc.desired {
+			if err != nil || observed == nil || observed.enabled != tc.desired {
 				t.Fatalf("observed=%v error=%v", observed, err)
 			}
 			mu.Lock()

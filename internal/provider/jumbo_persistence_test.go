@@ -13,7 +13,7 @@ import (
 
 func TestOpenTofuJumboPersistence(t *testing.T) {
 	var mu sync.Mutex
-	var running, startup bool
+	var running, startup, active bool
 	mutations := 0
 	falseSave := false
 	native := func(enabled bool) string {
@@ -55,7 +55,7 @@ func TestOpenTofuJumboPersistence(t *testing.T) {
 				w.WriteHeader(404)
 				return
 			}
-			fmt.Fprintf(w, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":%t}}}`, running)
+			fmt.Fprintf(w, `{"icx-openconfig-jumbo:jumbo":{"config":{"enabled":%t},"operation-state":{"enabled":%t}}}`, running, active)
 
 		case http.MethodPut:
 			mutations++
@@ -91,7 +91,7 @@ func TestOpenTofuJumboPersistence(t *testing.T) {
 	run(0, "init", "-no-color")
 	run(0, "apply", "-auto-approve", "-no-color")
 
-	assertState := func(enabled, pending bool) {
+	assertState := func(enabled, pending, wantActive, reload bool) {
 		t.Helper()
 		var state struct {
 			Values struct {
@@ -101,6 +101,8 @@ func TestOpenTofuJumboPersistence(t *testing.T) {
 						Values  struct {
 							Enabled bool `json:"enabled"`
 							Pending bool `json:"persistence_pending"`
+							Active  bool `json:"active_enabled"`
+							Reload  bool `json:"reload_required"`
 						} `json:"values"`
 					} `json:"resources"`
 				} `json:"root_module"`
@@ -114,7 +116,7 @@ func TestOpenTofuJumboPersistence(t *testing.T) {
 				continue
 			}
 			values := resource.Values
-			if values.Pending != pending || values.Enabled != enabled {
+			if values.Pending != pending || values.Enabled != enabled || values.Active != wantActive || values.Reload != reload {
 				t.Fatalf("unexpected jumbo state: %+v", values)
 			}
 			return
@@ -139,14 +141,14 @@ func TestOpenTofuJumboPersistence(t *testing.T) {
 		t.Fatalf("missing save verification error: %s", output)
 	}
 	assertNative(true, false)
-	assertState(true, true)
+	assertState(true, true, false, true)
 
 	mu.Lock()
 	falseSave = false
 	mu.Unlock()
 	run(0, "apply", "-auto-approve", "-no-color")
 	assertNative(true, true)
-	assertState(true, false)
+	assertState(true, false, false, true)
 	run(0, "plan", "-detailed-exitcode", "-no-color")
 
 	mu.Lock()
@@ -157,7 +159,7 @@ func TestOpenTofuJumboPersistence(t *testing.T) {
 		t.Fatalf("unexpected import error: %s", output)
 	}
 	run(0, "import", "-no-color", "fastiron_jumbo.test", "global")
-	assertState(true, false)
+	assertState(true, false, false, true)
 	mu.Lock()
 	if mutations != beforeImport {
 		t.Error("import changed switch configuration")
@@ -168,13 +170,26 @@ func TestOpenTofuJumboPersistence(t *testing.T) {
 	assertNative(true, true)
 	run(0, "apply", "-auto-approve", "-no-color", "-replace=fastiron_jumbo.test")
 	assertNative(true, true)
+	// An external reload activates the saved configuration without a provider write.
+	mu.Lock()
+	active = startup
+	beforeReloadRefresh := mutations
+	mu.Unlock()
+	run(0, "apply", "-refresh-only", "-auto-approve", "-no-color")
+	assertState(true, false, true, false)
+	mu.Lock()
+	if mutations != beforeReloadRefresh {
+		t.Error("refresh changed switch configuration")
+	}
+	mu.Unlock()
+	run(0, "plan", "-detailed-exitcode", "-no-color")
 
 	mu.Lock()
 	falseSave = true
 	mu.Unlock()
 	run(1, "destroy", "-auto-approve", "-no-color")
 	assertNative(false, true)
-	assertState(false, true)
+	assertState(false, true, true, true)
 
 	mu.Lock()
 	falseSave = false
