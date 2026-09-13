@@ -42,4 +42,4 @@ The query returns null for disabled classes and a null `unit` when the policy is
 
 Reads use native configuration through SSH because RESTCONF metadata can retain old rates or omit CLI-created policies. Writes use RESTCONF and verify native results and unrelated configuration before saving. A failed operation retains observed state and `persistence_pending` so a later apply or destroy can retry reconciliation or persistence.
 
-Direct hardware probes covered Ethernet and LAG updates, class deletion, unit changes and stale metadata repair. Full OpenTofu lifecycle and reboot validation for this feature are still in progress.
+Direct hardware probes covered Ethernet and LAG updates, class deletion, unit changes and stale metadata repair. The Ethernet OpenTofu lifecycle passed creation, CLI rate drift repair, class removal, unit change, import, interface replacement and deletion, with native and saved configuration checks and exact baseline restoration. LAG lifecycle and reboot validation are still in progress.

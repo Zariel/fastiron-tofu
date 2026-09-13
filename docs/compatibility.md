@@ -16,7 +16,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | LAG | Existence, name, dynamic/static mode, and Ethernet membership |
 | Ethernet | [Port name and administrative enable state](guides/ethernet.md), with drift recovery, import, replacement, deletion and reboot persistence verified |
 | Protected ports | [Protected-port configuration and native query](guides/protected-ports.md) on Ethernet and populated LAG interfaces, with lifecycle and reboot persistence verified |
-| Storm control | [Broadcast, multicast and unknown-unicast rate policies](guides/storm-control.md) on Ethernet and populated LAG interfaces; public lifecycle and reboot validation in progress |
+| Storm control | [Broadcast, multicast and unknown-unicast rate policies](guides/storm-control.md) on Ethernet and populated LAG interfaces; Ethernet lifecycle verified; LAG lifecycle and reboot validation in progress |
 | Interface voice VLAN | [Local Ethernet IP voice VLAN policy](guides/voice-vlan.md), with native discovery, drift reconciliation, import, replacement and saved deletion |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
