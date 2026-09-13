@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"strconv"
-	"strings"
 )
 
 type VE struct {
@@ -32,10 +31,10 @@ func (d *Document) VE(id int64) (VE, error) {
 			continue
 		}
 		if inside && command.Parent == header && command.kind == portName {
-			if named || len(command.Fields) < 2 {
+			if named || !command.valid {
 				return VE{}, errors.New("native VE port name is missing or repeated")
 			}
-			state.PortName = strings.TrimLeft(strings.TrimPrefix(strings.TrimLeft(command.Text, " \t"), "port-name"), " \t")
+			state.PortName = command.name
 			named = true
 			continue
 		}
@@ -43,7 +42,7 @@ func (d *Document) VE(id int64) (VE, error) {
 			state.HasChildren = true
 		}
 		if inside && command.Parent == header && command.kind == adminDisable {
-			if !state.Enabled || len(command.Fields) != 1 {
+			if !state.Enabled || !command.valid {
 				return VE{}, errors.New("native VE administrative setting is malformed or repeated")
 			}
 			state.Enabled = false

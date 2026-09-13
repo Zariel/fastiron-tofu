@@ -11,7 +11,7 @@ func (d *Document) Jumbo() (bool, []string, error) {
 			remaining = append(remaining, command.Text)
 			continue
 		}
-		if enabled || len(command.Fields) != 1 {
+		if enabled || !command.valid {
 			return false, nil, errors.New("native jumbo configuration is malformed or repeated")
 		}
 		enabled = true

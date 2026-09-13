@@ -7,7 +7,8 @@ import (
 )
 
 //go:generate ragel -Z -o parser.go config.rl
-//go:generate gofumpt -w parser.go
+//go:generate ragel -Z -o command_parser.go command.rl
+//go:generate gofumpt -w parser.go command_parser.go
 
 type kind uint8
 
@@ -20,7 +21,21 @@ const (
 	jumboMode
 	portName
 	adminDisable
+	defaultVLAN
+	vlanHeader
+	interfaceStanza
+	aclHeader
+	multicastConfig
+	symmetricFlowControl
 )
+
+type parsedCommand struct {
+	kind               kind
+	valid              bool
+	name, unit, family string
+	number             int64
+	options, global    bool
+}
 
 // Command retains the original command text and its indentation scope. Unknown
 // commands remain opaque, so feature ownership never discards unrelated settings.
@@ -29,7 +44,7 @@ type Command struct {
 	Fields []string
 	Parent int
 	indent int
-	kind   kind
+	parsedCommand
 }
 
 type Document struct {
@@ -80,7 +95,7 @@ func (d *Document) line(raw string) error {
 	if indent > 0 && parent == -1 {
 		return errors.New("native configuration has an orphaned command")
 	}
-	d.Commands = append(d.Commands, Command{Text: line, Fields: fields, Parent: parent, indent: indent, kind: commandKind(strings.TrimSpace(line))})
+	d.Commands = append(d.Commands, Command{Text: line, Fields: fields, Parent: parent, indent: indent, parsedCommand: parseCommand(strings.TrimSpace(line))})
 	d.stack = append(d.stack, len(d.Commands)-1)
 	if indent == 0 && line == "end" {
 		d.complete = true
@@ -113,7 +128,7 @@ func (d *Document) line(raw string) error {
 func (d *Document) interfaceHeader(name string) (int, error) {
 	found := -1
 	for i, c := range d.Commands {
-		if c.Parent != -1 || len(c.Fields) < 2 || c.Fields[0] != "interface" || strings.Join(c.Fields[1:], " ") != name {
+		if c.Parent != -1 || c.kind != interfaceStanza || !c.valid || c.name != name {
 			continue
 		}
 		if found != -1 {
