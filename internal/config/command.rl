@@ -15,6 +15,7 @@ import (
   ('trust' h+ 'dscp' tail) @{ kind = trustDSCP } |
   ('protected-port' tail) @{ kind = protectedPort } |
   ('voice-vlan' tail) @{ kind = voiceVLAN } |
+  (('no' h+)? 'lldp' h+ 'run' tail) @{ kind = lldpRun } |
   ('jumbo' tail) @{ kind = jumboMode } |
   ('port-name' tail) @{ kind = portName } |
   ('disable' tail) @{ kind = adminDisable } |
@@ -94,7 +95,8 @@ func commandFields(data string) (fields []string) {
        'version' %{ parsed.name = "version" } h+ number >mark %value |
        (token - ('active' | 'passive' | 'disable-igmp-snoop' | 'version')) (h+ token)*
        )) - ('multicast' h+ 'limit' (h (any - '\n')*)?);
- main := (flag | voice | storm | vlan | interface | acl | multicast |
+ lldp = ('no' h+ %{ parsed.negated = true })? 'lldp' h+ 'run';
+ main := (lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%

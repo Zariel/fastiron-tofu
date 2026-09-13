@@ -27,6 +27,7 @@ const (
 	aclHeader
 	multicastConfig
 	symmetricFlowControl
+	lldpRun
 )
 
 type parsedCommand struct {
@@ -35,6 +36,7 @@ type parsedCommand struct {
 	name, unit, family string
 	number             int64
 	options, global    bool
+	negated            bool
 }
 
 // Command retains the original command text and its indentation scope. Unknown
