@@ -20,10 +20,10 @@ Plugin binary: `terraform-provider-fastiron`.
 | Interface voice VLAN | Implemented | [Local Ethernet policy and native query](docs/guides/voice-vlan.md), with lifecycle and reboot validation. FlexAuth voice actions and LLDP-MED remain separate. |
 | Management VLAN selection | Not yet | Unavailable through the tested router image's documented RESTCONF paths; see [compatibility limits](docs/compatibility.md). |
 | LAGs | Implemented | Static/dynamic mode, name, members and discovery. Detached ports follow native behavior and become disabled. |
-| Ethernet interfaces | Partial | Port name and administrative enable state; [single and inventory queries](docs/guides/ethernet.md) with status, link reports and precise counters. Speed, duplex, clock, jumbo-frame writes remain. |
+| Ethernet interfaces | Partial | Port name and administrative enable state; [single and inventory queries](docs/guides/ethernet.md) with status, link reports and precise counters. Speed, duplex and clock writes remain; jumbo mode is global. |
 | Protected ports | Implemented | [Ethernet and LAG isolation configuration](docs/guides/protected-ports.md) and native query, with lifecycle and reboot validation. Separate ownership from interface settings and LAG membership. |
 | Storm control | Implemented | [Ethernet and LAG rate policies](docs/guides/storm-control.md) with a shared unit, per-class limits and native query. Logging, threshold and shutdown options are not managed. |
-| Jumbo frames | Partial | [Global configured-mode query](docs/guides/jumbo.md). Configuration resource and hardware lifecycle validation remain. |
+| Jumbo frames | Implemented; validation in progress | [Global configuration and native query](docs/guides/jumbo.md). Deletion disables jumbo mode; per-interface MTUs remain separate. |
 | DSCP trust | Implemented | [Native trust configuration and query](docs/guides/dscp-trust.md), with ownership separate from QoS mappings and flow control. Ethernet lifecycle and reboot persistence verified; the tested LAG RESTCONF path is unavailable. |
 | Routed VLAN interfaces (VE) | Partial | Existence, VLAN binding and port name. Administrative enable state remains. |
 | Other interface configuration | Not yet | Dedicated management/LAG interface resources, loopbacks, group-VE and tunnels remain. |

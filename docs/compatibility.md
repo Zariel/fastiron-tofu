@@ -17,6 +17,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Ethernet | [Port name and administrative enable state](guides/ethernet.md), with drift recovery, import, replacement, deletion and reboot persistence verified |
 | Protected ports | [Protected-port configuration and native query](guides/protected-ports.md) on Ethernet and populated LAG interfaces, with lifecycle and reboot persistence verified |
 | Storm control | [Broadcast, multicast and unknown-unicast rate policies](guides/storm-control.md) on Ethernet and populated LAG interfaces; Ethernet and LAG lifecycles and reboot persistence verified |
+| Jumbo frames | [Global configured mode and native query](guides/jumbo.md); direct transitions and CLI drift repair verified, public lifecycle and reboot validation in progress |
 | DSCP trust | [Interface trust configuration and native query](guides/dscp-trust.md); Ethernet lifecycle, CLI drift repair, import, replacement, deletion and reboot persistence verified |
 | Interface voice VLAN | [Local Ethernet IP voice VLAN policy](guides/voice-vlan.md), with native discovery, drift reconciliation, import, replacement and saved deletion |
 | Routed VLAN interface | VE existence, VLAN binding, and port name |
