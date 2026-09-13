@@ -221,6 +221,16 @@ func apply(ctx context.Context, device *fastiron.Device, name string, desired po
 	}
 	changed := map[string]limit{}
 	for class, rate := range desired.limits {
+		if _, exists := current.policy.limits[class]; !exists {
+			// A CLI removal can leave cached rates that suppress recreation callbacks.
+			expected := current.policy
+			if err := write(http.MethodDelete, path.Join(target, class), nil); err != nil {
+				return &current.policy, err
+			}
+			if !current.policy.equal(expected) {
+				return &current.policy, errors.New("storm cache invalidation changed native policy")
+			}
+		}
 		if current.policy.unit != desired.unit || current.policy.limits[class] != rate {
 			changed[class] = limit{Rate: rate, KBPS: desired.unit == "kbps"}
 		}

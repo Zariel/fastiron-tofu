@@ -26,6 +26,7 @@ func TestApply(t *testing.T) {
 		{name: "reject logging adoption", initial: map[string]limit{"broadcast": {111, true}}, desired: map[string]limit{"broadcast": {111, true}}, options: true},
 		{name: "create", desired: map[string]limit{"broadcast": {111, false}, "multicast": {222, false}}},
 		{name: "stale cache", initial: map[string]limit{"broadcast": {999, false}}, cached: map[string]limit{"broadcast": {444, false}}, desired: map[string]limit{"broadcast": {444, false}}},
+		{name: "recreate removed policy", cached: map[string]limit{"broadcast": {111, true}}, desired: map[string]limit{"broadcast": {111, true}}},
 		{name: "native-only deletion", initial: map[string]limit{"broadcast": {111, true}}},
 		{name: "remove class", initial: map[string]limit{"broadcast": {111, true}, "multicast": {222, true}}, desired: map[string]limit{"multicast": {222, true}}},
 		{name: "change unit", initial: map[string]limit{"broadcast": {111, true}, "multicast": {222, true}}, desired: map[string]limit{"broadcast": {333, false}, "multicast": {444, false}}},
