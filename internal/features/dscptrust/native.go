@@ -50,7 +50,7 @@ func parse(configuration, name string) (nativeState, error) {
 
 func (s nativeState) validate(enabled bool) error {
 	if enabled && s.symmetricFlowControl {
-		return errors.New("DSCP trust is incompatible with global symmetrical flow control; disable that configuration separately before enabling DSCP trust")
+		return errors.New("DSCP trust is incompatible with global symmetrical flow control; disable that configuration separately before reconciling DSCP trust")
 	}
 	return nil
 }
