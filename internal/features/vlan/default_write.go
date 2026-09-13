@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -33,28 +35,29 @@ func readDefault(ctx context.Context, device *fastiron.Device) (defaultState, er
 }
 
 func nativeDefault(configuration string) (defaultState, error) {
-	configuration, err := fastiron.NormalizeConfiguration(configuration)
+	document, err := config.Parse(configuration)
 	if err != nil {
 		return defaultState{}, err
 	}
-	id, err := defaultID(configuration)
+	id, err := document.DefaultVLAN()
 	if err != nil {
 		return defaultState{}, err
 	}
 	state := defaultState{id: id, vlans: map[int64]bool{}}
 	active := false
 	routed := false
-	for _, line := range strings.Split(configuration, "\n") {
-		if line[0] != ' ' && line[0] != '\t' {
+	for _, command := range document.Commands {
+		line := command.Text
+		if command.Parent == -1 {
 			active = false
 			routed = false
 		}
-		if strings.HasPrefix(line, "default-vlan-id ") {
+		if command.Parent == -1 && strings.HasPrefix(line, "default-vlan-id ") {
 			continue
 		}
 		// The native default VLAN move also renumbers its associated VE.
 		// Preserve that interface's configuration independently of its position.
-		if line == "interface ve "+strconv.FormatInt(id, 10) {
+		if command.Parent == -1 && line == "interface ve "+strconv.FormatInt(id, 10) {
 			routed = true
 			state.routed = append(state.routed, "interface ve")
 			continue
@@ -63,8 +66,8 @@ func nativeDefault(configuration string) (defaultState, error) {
 			state.routed = append(state.routed, line)
 			continue
 		}
-		if strings.HasPrefix(line, "vlan ") {
-			fields := strings.Fields(line)
+		if command.Parent == -1 && strings.HasPrefix(line, "vlan ") {
+			fields := command.Fields
 			vlanID, err := strconv.ParseInt(fields[1], 10, 64)
 			if err != nil || vlanID < 1 || vlanID > 4095 || state.vlans[vlanID] {
 				return defaultState{}, errors.New("invalid or duplicate native VLAN identity")
