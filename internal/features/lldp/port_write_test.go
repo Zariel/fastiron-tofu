@@ -228,6 +228,16 @@ func TestPortSynchronization(t *testing.T) {
 			if failure == "synchronization" && (writes != 1 || observed == nil || !*observed) {
 				t.Fatalf("continued after synchronization failure: writes=%d observed=%v", writes, observed)
 			}
+
+			mu.Unlock()
+			observed, err = applyEnabled(context.Background(), device, "ethernet 1/1/11", false)
+			mu.Lock()
+			if err != nil || observed == nil || *observed || saves != 1 || saved != "ver 09.0.10kT213\nno lldp enable ports ethe 1/1/11\nend" {
+				t.Fatalf("retry: observed=%v error=%v saves=%d", observed, err, saves)
+			}
+			if writes != 2 {
+				t.Fatalf("retry repeated a completed mutation: writes=%d", writes)
+			}
 		})
 	}
 }
