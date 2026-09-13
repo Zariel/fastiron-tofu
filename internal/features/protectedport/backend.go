@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"path"
@@ -18,6 +19,18 @@ import (
 type nativeState struct {
 	enabled bool
 	unowned []string
+}
+
+type interfaceEntry struct {
+	Name   string `json:"name"`
+	Config *struct {
+		Name string `json:"name"`
+	} `json:"config"`
+	Ethernet *struct {
+		Config *struct {
+			Aggregate string `json:"openconfig-if-aggregate:aggregate-id"`
+		} `json:"config"`
+	} `json:"openconfig-if-ethernet:ethernet"`
 }
 
 func validateInterface(name string) error {
@@ -37,12 +50,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	// Protection defaults are meaningful only after confirming the parent exists.
 	var interfaces struct {
 		Collection *struct {
-			Entries []struct {
-				Name   string `json:"name"`
-				Config *struct {
-					Name string `json:"name"`
-				} `json:"config"`
-			} `json:"interface"`
+			Entries []interfaceEntry `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
 	if err := device.DoREST(ctx, http.MethodGet, "/interfaces", nil, &interfaces); err != nil {
@@ -58,6 +66,9 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 		}
 		if found || entry.Config == nil || entry.Config.Name != name {
 			return nativeState{}, errors.New("RESTCONF protected-port parent identity is inconsistent")
+		}
+		if entry.Ethernet != nil && entry.Ethernet.Config != nil && entry.Ethernet.Config.Aggregate != "" {
+			return nativeState{}, fmt.Errorf("%s is a LAG member; manage or query protected-port configuration on %s", name, entry.Ethernet.Config.Aggregate)
 		}
 		found = true
 	}

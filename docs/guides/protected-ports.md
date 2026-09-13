@@ -9,9 +9,9 @@ resource "fastiron_interface_protected_port" "guest" {
 }
 ```
 
-Protected interfaces cannot communicate with other protected interfaces at the system level. Setting `enabled = false` or deleting the resource disables protection. The resource does not own the interface, its administrative enable state, VLAN membership or LAG membership, and it does not restore prior settings. Changing `interface` replaces the resource and disables protection on the old interface.
+FastIron isolates traffic between protected interfaces at the system level, with an exception for CPU-bound or CPU-originated traffic. Setting `enabled = false` or deleting the resource disables protection. The resource does not own the interface, its administrative enable state, VLAN membership or LAG membership, and it does not restore prior settings. Changing `interface` replaces the resource and disables protection on the old interface.
 
-Use the canonical LAG name to protect an aggregate. The LAG must already have members and expose an interface; an empty LAG has no configurable interface on the tested firmware. Manage the aggregate's protection through its LAG interface rather than separate member-port resources.
+Use the canonical LAG name to protect an aggregate. The LAG must already have members and expose an interface; an empty LAG has no configurable interface on the tested firmware. FastIron assigns interface-level configuration to the aggregate, so the provider rejects protected-port resources and queries targeting individual LAG members. Use the LAG interface instead.
 
 ```hcl
 resource "fastiron_interface_protected_port" "aggregate" {

@@ -32,7 +32,7 @@ func TestOpenTofuProtectedPortQueries(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/restconf/data/interfaces":
-			fmt.Fprint(w, `{"openconfig-interfaces:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12"}},{"name":"lag 11","config":{"name":"lag 11"}}]}}`)
+			fmt.Fprint(w, `{"openconfig-interfaces:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12"}},{"name":"lag 11","config":{"name":"lag 11"}},{"name":"ethernet 1/1/10","config":{"name":"ethernet 1/1/10"},"openconfig-if-ethernet:ethernet":{"config":{"openconfig-if-aggregate:aggregate-id":"lag 11"}}}]}}`)
 		case "/restconf/data/protectedport":
 			// Cached physical-port protection is stale; native-only LAG protection is omitted.
 			fmt.Fprint(w, `{"icx-openconfig-pp:protectedport":{"interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","protectedport":true}}]}}}`)
@@ -61,10 +61,18 @@ output "protection" { value = { for name, port in data.fastiron_interface_protec
 	}
 	run(0, "plan", "-detailed-exitcode", "-no-color")
 
-	for _, name := range []string{"ethernet 1/1/99", "lag 99", "ve 1", "ethernet 01/1/12"} {
+	for _, name := range []string{"ethernet 1/1/10", "ethernet 1/1/99", "lag 99", "ve 1", "ethernet 01/1/12"} {
 		write("main.tf", base+fmt.Sprintf("data \"fastiron_interface_protected_port\" \"test\" { interface = %q }\n", name))
 		if output := run(1, "plan", "-no-color"); !strings.Contains(output, "Cannot read interface protected port") {
 			t.Fatalf("missing read diagnostic for %s: %s", name, output)
 		}
+	}
+
+	write("main.tf", base+`resource "fastiron_interface_protected_port" "member" {
+ interface = "ethernet 1/1/10"
+ enabled = true
+}`)
+	if output := run(1, "plan", "-no-color"); !strings.Contains(output, "on lag 11") {
+		t.Fatalf("missing aggregate ownership diagnostic: %s", output)
 	}
 }
