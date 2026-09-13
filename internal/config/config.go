@@ -28,7 +28,10 @@ const (
 	multicastConfig
 	symmetricFlowControl
 	lldpRun
+	lldpPorts
 )
+
+type portRange struct{ first, last [3]uint64 }
 
 type parsedCommand struct {
 	kind               kind
@@ -37,6 +40,9 @@ type parsedCommand struct {
 	number             int64
 	options, global    bool
 	negated            bool
+	direction          string
+	portRanges         []portRange
+	allPorts           bool
 }
 
 // Command retains the original command text and its indentation scope. Unknown

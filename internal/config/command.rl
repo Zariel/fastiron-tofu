@@ -16,6 +16,7 @@ import (
   ('protected-port' tail) @{ kind = protectedPort } |
   ('voice-vlan' tail) @{ kind = voiceVLAN } |
   (('no' h+)? 'lldp' h+ 'run' tail) @{ kind = lldpRun } |
+  (('no' h+)? 'lldp' h+ 'enable' h+ (('receive' | 'transmit') h+)? 'ports' tail) @{ kind = lldpPorts } |
   ('jumbo' tail) @{ kind = jumboMode } |
   ('port-name' tail) @{ kind = portName } |
   ('disable' tail) @{ kind = adminDisable } |
@@ -95,7 +96,23 @@ func commandFields(data string) (fields []string) {
        'version' %{ parsed.name = "version" } h+ number >mark %value |
        (token - ('active' | 'passive' | 'disable-igmp-snoop' | 'version')) (h+ token)*
        )) - ('multicast' h+ 'limit' (h (any - '\n')*)?);
- lldp = ('no' h+ %{ parsed.negated = true })? 'lldp' h+ 'run';
+ port_id = [1-9] digit* '/' [1-9] digit* '/' [1-9] digit*;
+ action firstPort {
+  id, valid := parseEthernetPort(data[start:p])
+  numberValid = numberValid && valid
+  parsed.portRanges = append(parsed.portRanges, portRange{first:id, last:id})
+ }
+ action lastPort {
+  id, valid := parseEthernetPort(data[start:p])
+  numberValid = numberValid && valid
+  parsed.portRanges[len(parsed.portRanges)-1].last = id
+ }
+ port_range = ('ethe' | 'ethernet') h+ port_id >mark %firstPort
+              (h+ 'to' h+ port_id >mark %lastPort)?;
+ lldp = ('no' h+ %{ parsed.negated = true })? 'lldp' h+ (
+  'run' | 'enable' h+ (('receive' | 'transmit') >mark %{ parsed.direction = data[start:p] } h+)?
+  'ports' h+ ('all' %{ parsed.allPorts = true } | port_range (h+ port_range)*)
+ );
  main := (lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
@@ -113,4 +130,29 @@ func parseCommand(data string) (parsed parsedCommand) {
  %% write exec;
  parsed.valid = cs >= syntax_first_final && numberValid
  return parsed
+}
+
+%%{
+ machine ethernet_port;
+ alphtype byte;
+ action mark { start = p }
+ action component {
+  var err error
+  id[index], err = strconv.ParseUint(data[start:p], 10, 64)
+  valid = valid && err == nil
+  index++
+ }
+ component = ([1-9] digit*) >mark %component;
+ main := component '/' component '/' component '\n';
+}%%
+%% write data;
+
+func parseEthernetPort(data string) (id [3]uint64, valid bool) {
+ data += "\n"
+ p, pe := 0, len(data)
+ cs, start, index := 0, 0, 0
+ valid = true
+ %% write init;
+ %% write exec;
+ return id, valid && cs >= ethernet_port_first_final
 }
