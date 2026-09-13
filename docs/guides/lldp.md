@@ -68,6 +68,8 @@ Tagged policies require `vlan_id` and `priority`. Priority-tagged policies requi
 
 Updates remove cached references for the owned application and port before applying the new policy, temporarily leaving that policy absent. Every write verifies native state and preservation of other policies before continuing or saving. Deletion removes the policy without restoring a prior value. Failed operations retain `persistence_pending = true` through refresh so a retry can reconcile and save, including when native deletion has already completed.
 
-The resource reports nonconvergence if firmware changes the requested tagging mode, including the priority-zero behavior described above; it does not silently substitute untagged configuration. Automated OpenTofu tests cover import, replacement, omission, partial deletion, and failed-save recovery. Full hardware resource lifecycle validation is in progress; backend mutation and read-only query checks have passed on the tested firmware.
+The resource reports nonconvergence if firmware changes the requested tagging mode, including the priority-zero behavior described above; it does not silently substitute untagged configuration. Automated OpenTofu tests cover import, replacement, omission, partial deletion, and failed-save recovery.
+
+The MED resource lifecycle was verified through OpenTofu on `09.0.10kT213`: default untagged policy, tagged and priority-tagged updates, CLI drift repair, import without configuration changes, replacement, DSCP omission, deletion, and persistence across reboot. Running and saved configuration matched exactly across reload, with a stable plan afterward. The workflow preserved a neighboring port's policy and another application's policy on the managed port, then restored the exact original running and saved baseline.
 
 Neighbor discovery is not yet implemented.

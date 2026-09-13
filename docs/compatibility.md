@@ -31,7 +31,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Interface authentication | Dot1x/MAC enablement and port-control on one Ethernet interface; global initialization is separate |
 | AAA policy | Ordered login methods, default dot1x authentication, CoA enable and ignored actions |
 | AAA servers | Individual RADIUS/TACACS server addresses, protocol ports, purposes and shared keys |
-| LLDP | [Global and Ethernet enable state with native queries](guides/lldp.md), with CLI drift repair, import, replacement, omission, deletion and reboot persistence verified; native MED policy queries also verified |
+| LLDP | [Global and Ethernet enable state, MED policies, and native queries](guides/lldp.md), with CLI drift repair, import, replacement, omission, deletion and reboot persistence verified |
 | PoE | Ethernet administrative enable state |
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
 | Extended IPv4 ACLs | Named or numbered ACLs with ordered prefixes, protocols, TCP/UDP ports and DSCP/priority markings |
