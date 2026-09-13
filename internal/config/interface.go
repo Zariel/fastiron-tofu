@@ -9,16 +9,6 @@ import (
 //go:generate ragel -Z -o command_parser.go command.rl
 //go:generate gofumpt -w command_parser.go
 
-type kind uint8
-
-const (
-	unknown kind = iota
-	trustDSCP
-	protectedPort
-	voiceVLAN
-	stormLimit
-)
-
 // InterfacePolicy is the native policy selected by one resource's ownership.
 // Remaining preserves every other command, including policies on other ports.
 type InterfacePolicy struct {

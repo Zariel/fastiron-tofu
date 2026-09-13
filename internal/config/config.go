@@ -9,6 +9,17 @@ import (
 //go:generate ragel -Z -o parser.go config.rl
 //go:generate gofumpt -w parser.go
 
+type kind uint8
+
+const (
+	unknown kind = iota
+	trustDSCP
+	protectedPort
+	voiceVLAN
+	stormLimit
+	jumboMode
+)
+
 // Command retains the original command text and its indentation scope. Unknown
 // commands remain opaque, so feature ownership never discards unrelated settings.
 type Command struct {

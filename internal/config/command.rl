@@ -10,6 +10,7 @@ package config
   ('trust' h+ 'dscp' tail) @{ kind = trustDSCP } |
   ('protected-port' tail) @{ kind = protectedPort } |
   ('voice-vlan' tail) @{ kind = voiceVLAN } |
+  ('jumbo' tail) @{ kind = jumboMode } |
   (('broadcast' | 'multicast' | 'unknown-unicast') h+ 'limit' tail) @{ kind = stormLimit }
  );
 }%%
