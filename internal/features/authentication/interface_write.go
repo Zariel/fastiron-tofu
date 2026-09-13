@@ -39,7 +39,7 @@ func readInterface(ctx context.Context, d *fastiron.Device, name string) (interf
 		return defaults, err
 	}
 	// Native omission denotes defaults only for an existing Ethernet interface.
-	if _, err := ethernet.Read(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
+	if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 		return defaults, err
 	}
 	interfaces, err := readInterfaces(ctx, d)
@@ -64,7 +64,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := ethernet.Read(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
+	if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 		return nil, err
 	}
 

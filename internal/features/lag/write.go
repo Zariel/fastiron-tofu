@@ -133,7 +133,7 @@ func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error
 		if current != nil && slices.Contains(current.Members, name) {
 			continue
 		}
-		if _, err := ethernet.Read(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
+		if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 			return nil, err
 		}
 		port, err := vlan.ReadSwitchport(ctx, d, name)

@@ -120,7 +120,7 @@ func (r *Resource) Read(ctx context.Context, req resource.ReadRequest, resp *res
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := Read(ctx, r.device, state.Port.ValueString())
+	observed, err := read(ctx, r.device, state.Port.ValueString())
 	if errors.Is(err, fastiron.ErrNotFound) {
 		resp.State.RemoveResource(ctx)
 		return

@@ -44,7 +44,7 @@ output "interfaces" {
 
 The inventory map uses canonical names such as `ethernet 1/1/12` as keys and excludes logical interfaces. Each observation contains the port identity, description, enable state, interface index, administrative and operational status, counters and link metadata. Missing operational fields are `null`, not fabricated zero or false values. A single-port query fails if the port is absent.
 
-Description and enable state come from the native-derived RESTCONF `state` fields. On the tested firmware, the `config` fields can retain an old description after a CLI change following resource deletion.
+Both the resource and queries read description and enable state from the native-derived RESTCONF `state` fields. On the tested firmware, the `config` fields can retain an old description after a CLI change following resource deletion. The resource detects that drift and can clear a restored description even when RESTCONF already caches the desired empty value.
 
 Counters preserve the full unsigned 64-bit range as OpenTofu numbers. Counter keys retain the switch's names, including `in-octets`, `out-pkts` and `in-errors`. Counters and negotiated link observations can change between reads; those changes may update outputs but do not configure the port or become Ethernet resource attributes. Queries do not save configuration.
 

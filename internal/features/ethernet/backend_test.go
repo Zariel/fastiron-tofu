@@ -29,7 +29,7 @@ func TestEmptyInterfaceDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := Read(context.Background(), device, "1/1/7"); err == nil || errors.Is(err, fastiron.ErrNotFound) {
+		if err := CheckPort(context.Background(), device, "1/1/7"); err == nil || errors.Is(err, fastiron.ErrNotFound) {
 			t.Fatalf("incomplete database reported as confirmed state: %v", err)
 		}
 	}

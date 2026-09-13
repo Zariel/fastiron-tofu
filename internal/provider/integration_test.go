@@ -345,7 +345,7 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/restconf/data/interfaces" {
 		if r.Method == "GET" {
-			entries := []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet, "openconfig-if-ethernet:ethernet": map[string]any{"icx-openconfig-if-poe-aug:poe": map[string]any{"config": map[string]any{"enabled": s.poe}, "state": map[string]any{"power-used": "7000.0", "power-class": 4}}}}}
+			entries := []any{map[string]any{"name": "ethernet 1/1/2", "config": s.ethernet, "state": s.ethernet, "openconfig-if-ethernet:ethernet": map[string]any{"icx-openconfig-if-poe-aug:poe": map[string]any{"config": map[string]any{"enabled": s.poe}, "state": map[string]any{"power-used": "7000.0", "power-class": 4}}}}}
 			if s.ve != nil {
 				entries = append(entries, map[string]any{"name": "ve 53", "config": s.ve, "openconfig-vlan:routed-vlan": map[string]any{"config": map[string]any{"vlan": 53}}})
 			}
