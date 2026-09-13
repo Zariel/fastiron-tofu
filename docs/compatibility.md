@@ -31,7 +31,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Interface authentication | Dot1x/MAC enablement and port-control on one Ethernet interface; global initialization is separate |
 | AAA policy | Ordered login methods, default dot1x authentication, CoA enable and ignored actions |
 | AAA servers | Individual RADIUS/TACACS server addresses, protocol ports, purposes and shared keys |
-| LLDP | Global and Ethernet enable state |
+| LLDP | [Global enable state and native query](guides/lldp.md), with CLI drift repair, import, replacement, deletion and reboot persistence verified; Ethernet enable state is also implemented |
 | PoE | Ethernet administrative enable state |
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
 | Extended IPv4 ACLs | Named or numbered ACLs with ordered prefixes, protocols, TCP/UDP ports and DSCP/priority markings |
@@ -41,7 +41,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | ACL bindings | IPv4/IPv6 ingress and egress, and MAC ingress on Ethernet, LAG or whole VLANs |
 | Persistence | Automatic saves or explicit configuration-save resource |
 
-Data sources report active firmware, DNS servers, LLDP interface settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md). [IGMP queries](guides/igmp-snooping.md) report native global settings and individual or all-VLAN overrides, including CLI-only overrides omitted by RESTCONF.
+Data sources report active firmware, DNS servers, global and interface LLDP settings, PoE interface configuration and measurements, interface IP addresses, LAG configuration with Ethernet membership, IPv4 static routes, OSPF areas with interface bindings, VLAN/interface spanning-tree settings, [AAA policy, local-user privileges and RADIUS/TACACS server metadata](guides/aaa.md), and [global and per-port FlexAuth configuration](guides/authentication.md). [IGMP queries](guides/igmp-snooping.md) report native global settings and individual or all-VLAN overrides, including CLI-only overrides omitted by RESTCONF.
 
 The [interface voice VLAN query](guides/voice-vlan.md) reports the configured local policy, including native-only settings; an absent policy returns null.
 
