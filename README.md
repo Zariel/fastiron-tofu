@@ -74,6 +74,8 @@ make check
 make build
 ```
 
+The native configuration parser is generated from [`config.rl`](internal/config/config.rl) (document framing) and [`command.rl`](internal/config/command.rl) (command grammar and argument capture). After editing a grammar, run `make generate` inside `nix develop` and commit the regenerated Go files. This invokes the `go:generate` directives in [`config.go`](internal/config/config.go). Go extractors apply semantic checks, defaults, and resource ownership to the parsed commands.
+
 Use `gofumpt -w .` for Go and `nix fmt` for the flake. Run repeatable console command batches with `python3 tools/serial_console.py --device /dev/ttyUSB0 'show version'`. The script handles login, privilege elevation, prompt framing, timeouts, and redaction. Credentials come from the same `FASTIRON_*` environment variables as the provider. Serial device permissions are managed by the host operating system.
 
 See [local installation and testing](docs/guides/development.md) and the [basic example](examples/basic/main.tf).
