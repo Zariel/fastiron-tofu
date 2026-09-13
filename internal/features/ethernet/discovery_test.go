@@ -22,11 +22,11 @@ func TestDiscovery(t *testing.T) {
 	})
 	body := `{"openconfig-interfaces:interfaces":{"interface":[
 {"name":"ve 53","config":{"name":"ve 53"}},
-{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"PHONE","enabled":false},
- "state":{"name":"ethernet 1/1/12","ifindex":12,"admin-status":"DOWN","oper-status":"DOWN","counters":{"in-octets":"18446744073709551615","out-octets":"9007199254740993","in-errors":0}},
+{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"STALE","enabled":true},
+ "state":{"description":"PHONE","enabled":false,"name":"ethernet 1/1/12","ifindex":12,"admin-status":"DOWN","oper-status":"DOWN","counters":{"in-octets":"18446744073709551615","out-octets":"9007199254740993","in-errors":0}},
  "openconfig-if-ethernet:ethernet":{"config":{"auto-negotiate":false,"duplex-mode":"FULL","port-speed":"openconfig-if-ethernet:SPEED_100MB","icx-openconfig-if-ethernet-aug:ethernet-clock":"none"},
  "state":{"auto-negotiate":true,"duplex-mode":"HALF","negotiated-duplex-mode":"FULL","negotiated-port-speed":"openconfig-if-ethernet:SPEED_UNKNOWN","icx-openconfig-if-ethernet-aug:negotiated-clock":"none"}}},
-{"name":"ethernet 2/1/1","config":{"name":"ethernet 2/1/1","description":"","enabled":true}}
+{"name":"ethernet 2/1/1","config":{"name":"ethernet 2/1/1","description":"","enabled":true},"state":{"description":"","enabled":true}}
 ]}}`
 	server.HandleFunc("/interfaces", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -87,10 +87,10 @@ func TestDiscovery(t *testing.T) {
 		{"mismatched configuration", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/13","description":"","enabled":true}}]`},
 		{"missing enabled", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":""}}]`},
 		{"duplicate identity", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true}},{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true}}]`},
-		{"negative counter", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"counters":{"in-octets":"-1"}}}]`},
-		{"overflow counter", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"counters":{"in-octets":"18446744073709551616"}}}]`},
-		{"fractional counter", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"counters":{"in-octets":"1.5"}}}]`},
-		{"mismatched operational identity", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"name":"ethernet 1/1/13"}}]`},
+		{"negative counter", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"description":"","enabled":true,"counters":{"in-octets":"-1"}}}]`},
+		{"overflow counter", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"description":"","enabled":true,"counters":{"in-octets":"18446744073709551616"}}}]`},
+		{"fractional counter", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"description":"","enabled":true,"counters":{"in-octets":"1.5"}}}]`},
+		{"mismatched operational identity", `[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","description":"","enabled":true},"state":{"description":"PHONE","enabled":false,"name":"ethernet 1/1/13"}}]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mu.Lock()

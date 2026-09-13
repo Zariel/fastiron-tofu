@@ -20,7 +20,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Interface voice VLAN | Implemented | [Local Ethernet policy and native query](docs/guides/voice-vlan.md), with lifecycle and reboot validation. FlexAuth voice actions and LLDP-MED remain separate. |
 | Management VLAN selection | Not yet | Unavailable through the tested router image's documented RESTCONF paths; see [compatibility limits](docs/compatibility.md). |
 | LAGs | Implemented | Static/dynamic mode, name, members and discovery. Detached ports follow native behavior and become disabled. |
-| Ethernet interfaces | Partial | Port name and administrative enable state. Speed, duplex, clock, storm control, protected ports, jumbo frames and DSCP trust remain. |
+| Ethernet interfaces | Partial | Port name and administrative enable state; [single and inventory queries](docs/guides/ethernet.md) with status, link reports and precise counters. Speed, duplex, clock, storm control, protected ports, jumbo frames and DSCP trust writes remain. |
 | Routed VLAN interfaces (VE) | Partial | Existence, VLAN binding and port name. Administrative enable state remains. |
 | Other interface configuration | Not yet | Dedicated management/LAG interface resources, loopbacks, group-VE and tunnels remain. |
 | Interface IP addresses | Implemented | Individual IPv4/IPv6 addresses on VE and management interfaces. |

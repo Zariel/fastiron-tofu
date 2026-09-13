@@ -41,6 +41,8 @@ Data sources report active firmware, DNS servers, LLDP interface settings, PoE i
 
 The [interface voice VLAN query](guides/voice-vlan.md) reports the configured local policy, including native-only settings; an absent policy returns null.
 
+[Ethernet queries](guides/ethernet.md) report individual or all physical ports, native-derived descriptions and enable state, operational status, link metadata and unsigned 64-bit counters. Inventory and selected counters were checked against serial displays. RESTCONF link configuration metadata can remain stale after unsuccessful speed resets; it does not prove native automatic speed.
+
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, native configuration verification, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
 ## Limits

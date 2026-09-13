@@ -38,6 +38,8 @@ type interfaceEntry struct {
 	} `json:"config"`
 	State *struct {
 		Name        string                 `json:"name"`
+		Description *string                `json:"description"`
+		Enabled     *bool                  `json:"enabled"`
 		IfIndex     *uint32                `json:"ifindex"`
 		AdminStatus *string                `json:"admin-status"`
 		OperStatus  *string                `json:"oper-status"`
@@ -86,22 +88,26 @@ func readObservations(ctx context.Context, device *fastiron.Device) ([]observati
 		if entry.Config == nil || entry.Config.Name != entry.Name || entry.Config.Description == nil || entry.Config.Enabled == nil {
 			return nil, errors.New("RESTCONF Ethernet inventory omitted configured identity, description or enable state")
 		}
-		observed := observation{config: config{Port: port, PortName: *entry.Config.Description, Enabled: *entry.Config.Enabled}}
-		if state := entry.State; state != nil {
-			if state.Name != "" && state.Name != entry.Name {
-				return nil, errors.New("RESTCONF Ethernet operational identity disagrees with configuration")
+		// The config projection can retain a deleted description after a CLI restore.
+		// The state projection reports the native administrative configuration.
+		if entry.State == nil || entry.State.Description == nil || entry.State.Enabled == nil {
+			return nil, errors.New("RESTCONF Ethernet inventory omitted native description or enable state")
+		}
+		observed := observation{config: config{Port: port, PortName: *entry.State.Description, Enabled: *entry.State.Enabled}}
+		state := entry.State
+		if state.Name != "" && state.Name != entry.Name {
+			return nil, errors.New("RESTCONF Ethernet operational identity disagrees with configuration")
+		}
+		observed.IfIndex, observed.AdminStatus, observed.OperStatus = state.IfIndex, state.AdminStatus, state.OperStatus
+		if state.Counters != nil {
+			observed.Counters = make(map[string]uint64, len(state.Counters))
+		}
+		for name, raw := range state.Counters {
+			value, err := strconv.ParseUint(raw.String(), 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("RESTCONF Ethernet counter %q is not an unsigned 64-bit integer", name)
 			}
-			observed.IfIndex, observed.AdminStatus, observed.OperStatus = state.IfIndex, state.AdminStatus, state.OperStatus
-			if state.Counters != nil {
-				observed.Counters = make(map[string]uint64, len(state.Counters))
-			}
-			for name, raw := range state.Counters {
-				value, err := strconv.ParseUint(raw.String(), 10, 64)
-				if err != nil {
-					return nil, fmt.Errorf("RESTCONF Ethernet counter %q is not an unsigned 64-bit integer", name)
-				}
-				observed.Counters[name] = value
-			}
+			observed.Counters[name] = value
 		}
 		if ethernet := entry.Ethernet; ethernet != nil {
 			observed.Link = &linkState{}
