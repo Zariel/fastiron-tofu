@@ -8,8 +8,9 @@ import (
 	"path"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
+
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	vlanfeature "github.com/zariel/fastiron-tofu/internal/features/vlan"
@@ -153,16 +154,20 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error)
 }
 
 func nativeSTPVLAN(config string, id int64) (*vlan, error) {
+	document, err := nativeconfig.Parse(config)
+	if err != nil {
+		return nil, err
+	}
 	inside := false
 	var current *vlan
 
-	for _, line := range strings.Split(config, "\n") {
-		fields := strings.Fields(line)
-		if !strings.HasPrefix(line, " ") && len(fields) > 1 && fields[0] == "vlan" {
+	for _, command := range document.Commands {
+		fields := command.Fields
+		if command.Parent == -1 && len(fields) > 1 && fields[0] == "vlan" {
 			inside = fields[1] == strconv.FormatInt(id, 10)
 			continue
 		}
-		if line != "" && line != "!" && !strings.HasPrefix(line, " ") {
+		if command.Parent == -1 {
 			inside = false
 		}
 		if !inside || len(fields) == 0 || fields[0] != "spanning-tree" {

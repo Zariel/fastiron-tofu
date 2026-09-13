@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -227,8 +229,16 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 }
 
 func routeOptions(config string, v route) error {
+	document, parseErr := nativeconfig.Parse(config)
+	if parseErr != nil {
+		return parseErr
+	}
 	expected := fmt.Sprintf("ip route %s %s", v.Prefix, v.NextHop)
-	for _, line := range strings.Split(config, "\n") {
+	for _, command := range document.Commands {
+		line := command.Text
+		if command.Parent != -1 {
+			continue
+		}
 		line = strings.TrimSpace(line)
 		if line == expected || line == fmt.Sprintf("%s distance %d", expected, v.Distance) {
 			return nil

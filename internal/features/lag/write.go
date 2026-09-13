@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/features/vlan"
@@ -269,12 +271,14 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 }
 
 func lagChildren(config string, lag config) error {
-	if _, err := fastiron.NormalizeConfiguration(config); err != nil {
-		return err
+	document, parseErr := nativeconfig.Parse(config)
+	if parseErr != nil {
+		return parseErr
 	}
 
 	inside, virtual, found := false, false, false
-	for _, line := range strings.Split(config, "\n") {
+	for _, command := range document.Commands {
+		line := command.Text
 		line = strings.TrimRight(line, " \r\t")
 		if strings.HasPrefix(line, "lag ") && strings.HasSuffix(line, " id "+strconv.FormatInt(lag.ID, 10)) {
 			inside, virtual, found = true, false, true
@@ -291,7 +295,7 @@ func lagChildren(config string, lag config) error {
 		if trimmed == "" || trimmed == "!" {
 			continue
 		}
-		if !strings.HasPrefix(line, " ") {
+		if command.Parent == -1 {
 			inside = false
 			continue
 		}

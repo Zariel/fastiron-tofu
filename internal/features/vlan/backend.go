@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -187,6 +189,10 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 }
 
 func vlanChildren(config string, id int64) error {
+	document, parseErr := nativeconfig.Parse(config)
+	if parseErr != nil {
+		return parseErr
+	}
 	defaultVLAN, err := defaultID(config)
 	if err != nil {
 		return errors.New("cannot verify VLAN children in running configuration")
@@ -195,13 +201,14 @@ func vlanChildren(config string, id int64) error {
 		return errors.New("the default VLAN is not managed by fastiron_vlan")
 	}
 	inside := false
-	for _, line := range strings.Split(config, "\n") {
+	for _, command := range document.Commands {
+		line := command.Text
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "interface ve "+strconv.FormatInt(id, 10) {
 			return errors.New("VLAN has a routed VE interface; remove it before destroying the VLAN")
 		}
 		if strings.HasPrefix(line, "vlan ") {
-			fields := strings.Fields(line)
+			fields := command.Fields
 			inside = len(fields) > 1 && fields[1] == strconv.FormatInt(id, 10)
 			continue
 		}
@@ -209,7 +216,7 @@ func vlanChildren(config string, id int64) error {
 			if trimmed == "" || trimmed == "!" {
 				continue
 			}
-			if !strings.HasPrefix(line, " ") {
+			if command.Parent == -1 {
 				inside = false
 				continue
 			}

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/vlan"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
@@ -176,12 +178,14 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 }
 
 func veChildren(config, name string) error {
-	if _, err := fastiron.NormalizeConfiguration(config); err != nil {
-		return err
+	document, parseErr := nativeconfig.Parse(config)
+	if parseErr != nil {
+		return parseErr
 	}
 	inside := false
 	found := false
-	for _, line := range strings.Split(config, "\n") {
+	for _, command := range document.Commands {
+		line := command.Text
 		if line == "interface "+name {
 			inside = true
 			found = true
@@ -194,7 +198,7 @@ func veChildren(config, name string) error {
 		if trimmed == "" || trimmed == "!" {
 			continue
 		}
-		if !strings.HasPrefix(line, " ") {
+		if command.Parent == -1 {
 			break
 		}
 		if strings.HasPrefix(trimmed, "port-name ") {

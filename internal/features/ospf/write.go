@@ -8,7 +8,8 @@ import (
 	"net/url"
 	"path"
 	"slices"
-	"strings"
+
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
@@ -90,9 +91,14 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 }
 
 func ospfAreaChildren(config, id string) error {
+	document, parseErr := nativeconfig.Parse(config)
+	if parseErr != nil {
+		return parseErr
+	}
 	inside, found := false, false
-	for _, line := range strings.Split(config, "\n") {
-		fields := strings.Fields(line)
+	for _, command := range document.Commands {
+		line := command.Text
+		fields := command.Fields
 		if len(fields) == 4 && fields[0] == "ip" && fields[1] == "ospf" && fields[2] == "area" {
 			bound, err := normalizeAreaID(fields[3])
 			if err != nil || bound == id {
@@ -103,7 +109,7 @@ func ospfAreaChildren(config, id string) error {
 			inside = true
 			continue
 		}
-		if line != "" && line != "!" && !strings.HasPrefix(line, " ") {
+		if command.Parent == -1 {
 			inside = false
 		}
 		if !inside {
@@ -212,19 +218,24 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 }
 
 func ospfInterfaceOptions(config, id, name string) error {
+	document, parseErr := nativeconfig.Parse(config)
+	if parseErr != nil {
+		return parseErr
+	}
 	inside, found := false, false
-	for _, line := range strings.Split(config, "\n") {
+	for _, command := range document.Commands {
+		line := command.Text
 		if line == "interface "+name {
 			inside = true
 			continue
 		}
-		if line != "" && line != "!" && !strings.HasPrefix(line, " ") {
+		if command.Parent == -1 {
 			inside = false
 		}
 		if !inside {
 			continue
 		}
-		fields := strings.Fields(line)
+		fields := command.Fields
 		if len(fields) < 2 || fields[0] != "ip" || fields[1] != "ospf" {
 			continue
 		}
