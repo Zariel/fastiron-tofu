@@ -146,6 +146,9 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 		if observed != v {
 			return &observed, errors.Join(writeErr, errors.New("VE configuration did not converge"))
 		}
+		if writeErr != nil {
+			return &observed, writeErr
+		}
 		current = observed
 	}
 	return &current, d.Persist(ctx)
@@ -182,6 +185,9 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 		_, readErr := Read(ctx, d, id)
 		if !errors.Is(readErr, fastiron.ErrNotFound) {
 			return errors.Join(writeErr, readErr, errors.New("VE absence could not be verified"))
+		}
+		if writeErr != nil {
+			return writeErr
 		}
 	}
 	return d.Persist(ctx)
