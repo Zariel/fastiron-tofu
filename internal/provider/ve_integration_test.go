@@ -6,6 +6,29 @@ import (
 )
 
 func (s *testSwitch) veREST(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/restconf/data/openconfig-interfaces:interfaces/interface/ve 53/config/description" {
+		if s.ve == nil {
+			w.WriteHeader(404)
+			return
+		}
+		if r.Method == "DELETE" {
+			s.ve["description"] = ""
+			s.writes++
+			w.WriteHeader(204)
+			return
+		}
+		var body struct {
+			Description *string `json:"openconfig-interfaces:description"`
+		}
+		if r.Method != "PUT" || json.NewDecoder(r.Body).Decode(&body) != nil || body.Description == nil {
+			w.WriteHeader(400)
+			return
+		}
+		s.ve["description"] = *body.Description
+		s.writes++
+		w.WriteHeader(204)
+		return
+	}
 	if r.Method == "DELETE" && r.URL.EscapedPath() == "/restconf/data/interfaces/interface=ve%2053" {
 		s.ve = nil
 		s.veChild = false

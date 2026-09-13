@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
+	"time"
 
 	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 
@@ -147,38 +149,91 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 	if _, err := vlan.Read(ctx, d, v.VLANID); err != nil {
 		return nil, fmt.Errorf("VE requires an existing VLAN: %w", err)
 	}
-	current, err := Read(ctx, d, v.ID)
-	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
+	cached, cacheErr := readCached(ctx, d, v.ID)
+	if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
+		return nil, cacheErr
+	}
+	before, err := readNative(ctx, d, v.ID)
+	if err != nil {
 		return nil, err
 	}
-	absent := errors.Is(err, fastiron.ErrNotFound)
-	if !absent && current.VLANID != v.VLANID {
-		return &current, errors.New("existing VE belongs to a different VLAN")
+	current := before
+	observed := func() *config {
+		if !current.Exists {
+			return nil
+		}
+		return &config{ID: v.ID, VLANID: v.ID, PortName: current.PortName}
 	}
-	if absent || current != v {
-		name := "ve " + strconv.FormatInt(v.ID, 10)
-		entry := map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:l3ipvlan", "description": v.PortName}}
-		method := http.MethodPatch
-		body := map[string]any{"interfaces": map[string]any{"interface": []any{entry}}}
-		if absent {
-			method = http.MethodPost
-			entry["openconfig-vlan:routed-vlan"] = map[string]any{"config": map[string]any{"vlan": v.VLANID}}
-			body = map[string]any{"interface": []any{entry}}
+	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+	defer cancel()
+
+	for {
+		if current.Exists && current.PortName == v.PortName {
+			return observed(), d.Persist(ctx)
 		}
-		writeErr := d.DoREST(ctx, method, "/interfaces", body, nil)
-		observed, readErr := Read(ctx, d, v.ID)
+		// Scalar DELETE removes native-only names even when the cached name is empty.
+		if current.Exists && v.PortName == "" {
+			break
+		}
+		cacheAbsent := errors.Is(cacheErr, fastiron.ErrNotFound)
+		if (!current.Exists && cacheAbsent) || (current.Exists && !cacheAbsent && cached.PortName == current.PortName) {
+			break
+		}
+		// PUT can acknowledge an unchanged cached value without invoking native configuration.
+		select {
+		case <-ctx.Done():
+			return observed(), errors.Join(errors.New("VE configuration cache did not synchronize"), ctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
+		cached, cacheErr = readCached(ctx, d, v.ID)
+		if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
+			return observed(), cacheErr
+		}
+		next, err := readNative(ctx, d, v.ID)
+		if err != nil {
+			return observed(), err
+		}
+		current = next
+		if !slices.Equal(before.Remaining, current.Remaining) {
+			return observed(), errors.New("unrelated configuration changed while waiting for VE synchronization")
+		}
+	}
+
+	name := "ve " + strconv.FormatInt(v.ID, 10)
+	target := path.Join("/openconfig-interfaces:interfaces/interface", url.PathEscape(name), "config/description")
+	method := http.MethodPut
+	var body any = map[string]string{"openconfig-interfaces:description": v.PortName}
+	if v.PortName == "" {
+		method, body = http.MethodDelete, nil
+	}
+	if !current.Exists {
+		method, target = http.MethodPost, "/interfaces"
+		entry := map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:l3ipvlan", "description": v.PortName}, "openconfig-vlan:routed-vlan": map[string]any{"config": map[string]any{"vlan": v.VLANID}}}
+		body = map[string]any{"interface": []any{entry}}
+	}
+	writeErr := d.DoREST(ctx, method, target, body, nil)
+	for {
+		next, readErr := readNative(ctx, d, v.ID)
 		if readErr != nil {
-			return nil, errors.Join(writeErr, readErr)
+			return observed(), errors.Join(writeErr, readErr)
 		}
-		if observed != v {
-			return &observed, errors.Join(writeErr, errors.New("VE configuration did not converge"))
+		current = next
+		// Preserve all unowned native commands before allowing any save, including after partial failure.
+		if !slices.Equal(before.Remaining, current.Remaining) {
+			return observed(), errors.Join(writeErr, errors.New("VE mutation changed unrelated configuration"))
 		}
 		if writeErr != nil {
-			return &observed, writeErr
+			return observed(), writeErr
 		}
-		current = observed
+		if current.Exists && current.PortName == v.PortName {
+			return observed(), d.Persist(ctx)
+		}
+		select {
+		case <-ctx.Done():
+			return observed(), errors.Join(errors.New("native VE configuration did not converge"), ctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
 	}
-	return &current, d.Persist(ctx)
 }
 
 func remove(ctx context.Context, d *fastiron.Device, id int64) error {

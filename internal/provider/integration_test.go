@@ -244,8 +244,8 @@ func (s *testSwitch) configuration(vlans map[int]string, ethernet map[string]any
 		if name, _ := s.ve["description"].(string); name != "" {
 			text += " port-name " + name + "\n"
 		}
-		for ip, bits := range s.addresses {
-			text += fmt.Sprintf(" ip address %s/%d\n", ip, bits)
+		for _, ip := range slices.Sorted(maps.Keys(s.addresses)) {
+			text += fmt.Sprintf(" ip address %s/%d\n", ip, s.addresses[ip])
 		}
 		if s.veChild {
 			text += " ip address 192.0.2.1 255.255.255.0\n"
@@ -311,7 +311,7 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 		s.addressREST(w, r)
 		return
 	}
-	if (r.Method == "POST" && r.URL.Path == "/restconf/data/interfaces") || r.URL.EscapedPath() == "/restconf/data/interfaces/interface=ve%2053" {
+	if (r.Method == "POST" && r.URL.Path == "/restconf/data/interfaces") || r.URL.EscapedPath() == "/restconf/data/interfaces/interface=ve%2053" || r.URL.Path == "/restconf/data/openconfig-interfaces:interfaces/interface/ve 53/config/description" {
 		s.veREST(w, r)
 		return
 	}
@@ -944,6 +944,8 @@ data "fastiron_interface_addresses" "test" {
 output "addresses" { value = data.fastiron_interface_addresses.test.addresses }
 `, cidr))
 	}
+	write("addresses.tf", veConfig)
+	run(0, "apply", "-auto-approve", "-no-color")
 	s.mu.Lock()
 	s.addresses["198.51.100.1"] = 30
 	s.mu.Unlock()
