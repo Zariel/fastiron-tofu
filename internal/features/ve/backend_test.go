@@ -34,3 +34,32 @@ func TestEmptyInterfaceDatabase(t *testing.T) {
 		}
 	}
 }
+
+func TestReadIdentity(t *testing.T) {
+	for _, id := range []int64{1, 4095, 0, 4096} {
+		t.Run(fmt.Sprint(id), func(t *testing.T) {
+			valid := id == 1 || id == 4095
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !valid {
+					t.Error("invalid VE identity reached the switch")
+				}
+				fmt.Fprintf(w, `{"openconfig-interfaces:interfaces":{"interface":[{"name":"ve %d","config":{"name":"ve %d","type":"iana-if-type:l3ipvlan","description":"EDGE"},"openconfig-vlan:routed-vlan":{"config":{"vlan":%d}}}]}}`, id, id, id)
+			}))
+			t.Cleanup(server.Close)
+			device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			observed, err := Read(context.Background(), device, id)
+			if !valid {
+				if err == nil {
+					t.Fatal("accepted invalid VE identity")
+				}
+				return
+			}
+			if err != nil || observed.ID != id || observed.VLANID != id || observed.PortName != "EDGE" {
+				t.Fatalf("VE=%+v error=%v", observed, err)
+			}
+		})
+	}
+}

@@ -23,8 +23,8 @@ type config struct {
 }
 
 func validate(v config) error {
-	if err := vlan.Validate(vlan.Config{ID: v.ID}); err != nil {
-		return err
+	if v.ID < 1 || v.ID > 4095 {
+		return errors.New("ve_id must be between 1 and 4095")
 	}
 	if v.ID != v.VLANID {
 		return errors.New("ve_id and vlan_id must match the FastIron routed VLAN identity")
