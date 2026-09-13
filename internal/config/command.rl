@@ -23,3 +23,21 @@ func commandKind(data string) (kind kind) {
  if cs < command_first_final { return unknown }
  return kind
 }
+
+%%{
+ machine words;
+ alphtype byte;
+ action mark { start = p }
+ action word { fields = append(fields, data[start:p]) }
+ main := space* ((any - space)+ >mark %word space+)*;
+}%%
+%% write data;
+
+func commandFields(data string) (fields []string) {
+ data += " "
+ p, pe := 0, len(data)
+ cs, start := 0, 0
+ %% write init;
+ %% write exec;
+ return fields
+}

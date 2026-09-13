@@ -16,6 +16,7 @@ type Command struct {
 	Fields []string
 	Parent int
 	indent int
+	kind   kind
 }
 
 type Document struct {
@@ -51,7 +52,7 @@ func (d *Document) line(raw string) error {
 		}
 		d.started = true
 	}
-	fields := strings.Fields(line)
+	fields := commandFields(line)
 	if len(fields) == 0 || strings.TrimSpace(line) == "!" {
 		return nil
 	}
@@ -66,7 +67,7 @@ func (d *Document) line(raw string) error {
 	if indent > 0 && parent == -1 {
 		return errors.New("native configuration has an orphaned command")
 	}
-	d.Commands = append(d.Commands, Command{Text: line, Fields: fields, Parent: parent, indent: indent})
+	d.Commands = append(d.Commands, Command{Text: line, Fields: fields, Parent: parent, indent: indent, kind: commandKind(strings.TrimSpace(line))})
 	d.stack = append(d.stack, len(d.Commands)-1)
 	if indent == 0 && line == "end" {
 		d.complete = true

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 )
 
 //go:generate ragel -Z -o command_parser.go command.rl
@@ -56,7 +55,7 @@ func (d *Document) InterfacePolicy(name string, policy Policy) (InterfacePolicy,
 		if i == header {
 			continue
 		}
-		if header < 0 || c.Parent != header || commandKind(strings.TrimSpace(c.Text)) != wanted[policy] {
+		if header < 0 || c.Parent != header || c.kind != wanted[policy] {
 			state.Remaining = append(state.Remaining, c.Text)
 			continue
 		}

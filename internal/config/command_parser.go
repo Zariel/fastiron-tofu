@@ -257,3 +257,160 @@ func commandKind(data string) (kind kind) {
 	}
 	return kind
 }
+
+//line command.rl:33
+
+//line command_parser.go:250
+var _words_actions []byte = []byte{
+	0, 1, 0, 1, 1,
+}
+
+var _words_key_offsets []byte = []byte{
+	0, 3,
+}
+
+var _words_trans_keys []byte = []byte{
+	32, 9, 13, 32, 9, 13,
+}
+
+var _words_single_lengths []byte = []byte{
+	1, 1,
+}
+
+var _words_range_lengths []byte = []byte{
+	1, 1,
+}
+
+var _words_index_offsets []byte = []byte{
+	0, 3,
+}
+
+var _words_trans_targs []byte = []byte{
+	1, 1, 0, 1, 1, 0,
+}
+
+var _words_trans_actions []byte = []byte{
+	3, 3, 0, 0, 0, 1,
+}
+
+const (
+	words_start       int = 1
+	words_first_final int = 1
+	words_error       int = -1
+)
+
+const words_en_main int = 1
+
+//line command.rl:35
+
+func commandFields(data string) (fields []string) {
+	data += " "
+	p, pe := 0, len(data)
+	cs, start := 0, 0
+
+//line command_parser.go:295
+	{
+		cs = words_start
+	}
+
+//line command.rl:41
+
+//line command_parser.go:300
+	{
+		var _klen int
+		var _trans int
+		var _acts int
+		var _nacts uint
+		var _keys int
+		if p == pe {
+			goto _test_eof
+		}
+	_resume:
+		_keys = int(_words_key_offsets[cs])
+		_trans = int(_words_index_offsets[cs])
+
+		_klen = int(_words_single_lengths[cs])
+		if _klen > 0 {
+			_lower := int(_keys)
+			var _mid int
+			_upper := int(_keys + _klen - 1)
+			for {
+				if _upper < _lower {
+					break
+				}
+
+				_mid = _lower + ((_upper - _lower) >> 1)
+				switch {
+				case data[p] < _words_trans_keys[_mid]:
+					_upper = _mid - 1
+				case data[p] > _words_trans_keys[_mid]:
+					_lower = _mid + 1
+				default:
+					_trans += int(_mid - int(_keys))
+					goto _match
+				}
+			}
+			_keys += _klen
+			_trans += _klen
+		}
+
+		_klen = int(_words_range_lengths[cs])
+		if _klen > 0 {
+			_lower := int(_keys)
+			var _mid int
+			_upper := int(_keys + (_klen << 1) - 2)
+			for {
+				if _upper < _lower {
+					break
+				}
+
+				_mid = _lower + (((_upper - _lower) >> 1) & ^1)
+				switch {
+				case data[p] < _words_trans_keys[_mid]:
+					_upper = _mid - 2
+				case data[p] > _words_trans_keys[_mid+1]:
+					_lower = _mid + 2
+				default:
+					_trans += int((_mid - int(_keys)) >> 1)
+					goto _match
+				}
+			}
+			_trans += _klen
+		}
+
+	_match:
+		cs = int(_words_trans_targs[_trans])
+
+		if _words_trans_actions[_trans] == 0 {
+			goto _again
+		}
+
+		_acts = int(_words_trans_actions[_trans])
+		_nacts = uint(_words_actions[_acts])
+		_acts++
+		for ; _nacts > 0; _nacts-- {
+			_acts++
+			switch _words_actions[_acts-1] {
+			case 0:
+//line command.rl:30
+				start = p
+			case 1:
+//line command.rl:31
+				fields = append(fields, data[start:p])
+//line command_parser.go:381
+			}
+		}
+
+	_again:
+		p++
+		if p != pe {
+			goto _resume
+		}
+	_test_eof:
+		{
+		}
+	}
+
+//line command.rl:42
+	return fields
+}

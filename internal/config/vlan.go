@@ -17,7 +17,7 @@ func (d *Document) DefaultVLAN() (int64, error) {
 		if !strings.HasPrefix(line, "default-vlan-id") {
 			continue
 		}
-		fields := strings.Fields(line)
+		fields := command.Fields
 		if found || len(fields) != 2 || fields[0] != "default-vlan-id" {
 			return 0, errors.New("invalid or duplicate native default VLAN setting")
 		}

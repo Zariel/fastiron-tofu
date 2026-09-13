@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -73,5 +74,18 @@ func TestPolicyScope(t *testing.T) {
 	storm, err := doc.InterfacePolicy("ethernet 1/1/12", StormControl)
 	if err != nil || storm.Unit != "kbps" || storm.Limits["broadcast"] != 200 {
 		t.Fatalf("storm: %+v, %v", storm, err)
+	}
+}
+
+func TestCommandFields(t *testing.T) {
+	document, err := Parse("ver 09.0.10k\ninterface\tethernet 1/1/12\n\tport-name café uplink\nend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{{"ver", "09.0.10k"}, {"interface", "ethernet", "1/1/12"}, {"port-name", "café", "uplink"}, {"end"}}
+	for i, fields := range want {
+		if !slices.Equal(document.Commands[i].Fields, fields) {
+			t.Fatalf("command %d: fields = %q, want %q", i, document.Commands[i].Fields, fields)
+		}
 	}
 }
