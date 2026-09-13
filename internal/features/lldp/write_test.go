@@ -2,6 +2,7 @@ package lldp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -93,11 +94,11 @@ func TestPartialWrite(t *testing.T) {
 }
 
 func TestGlobalVerification(t *testing.T) {
-	for _, failure := range []string{"", "echo only", "unowned change", "initial disagreement"} {
+	for _, failure := range []string{"", "echo only", "unowned change", "stale cache"} {
 		t.Run(failure, func(t *testing.T) {
 			var mu sync.Mutex
 			enabled, cached, saved := true, true, true
-			if failure == "initial disagreement" {
+			if failure == "stale cache" {
 				cached = false
 			}
 			port := "no lldp enable transmit ports ethe 1/1/12"
@@ -143,10 +144,24 @@ func TestGlobalVerification(t *testing.T) {
 					w.WriteHeader(405)
 					return
 				}
+				var body struct {
+					Config struct {
+						Enabled bool `json:"enabled"`
+					} `json:"config"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+					w.WriteHeader(400)
+					return
+				}
 				writes++
-				cached = false
+				if body.Config.Enabled == cached {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				cached = body.Config.Enabled
 				if failure != "echo only" {
-					enabled = false
+					enabled = cached
 				}
 				if failure == "unowned change" {
 					port = "no lldp enable ports ethe 1/1/12"
@@ -165,20 +180,17 @@ func TestGlobalVerification(t *testing.T) {
 			observed, err := applyEnabled(context.Background(), device, "", false)
 			mu.Lock()
 			defer mu.Unlock()
-			if (err != nil) != (failure != "") || observed == nil || *observed != enabled {
+			if (err != nil) != (failure == "echo only" || failure == "unowned change") || observed == nil || *observed != enabled {
 				t.Fatalf("observed=%v native=%t error=%v", observed, enabled, err)
 			}
-			if failure == "" {
-				if saved || enabled || saves != 1 || writes != 1 || port != "no lldp enable transmit ports ethe 1/1/12" {
+			if failure == "" || failure == "stale cache" {
+				if saved || enabled || saves != 1 || writes < 1 || port != "no lldp enable transmit ports ethe 1/1/12" {
 					t.Fatal("global mutation failed to persist or preserve port mode")
 				}
 				return
 			}
 			if saves != 0 || !saved || savedPort != "no lldp enable transmit ports ethe 1/1/12" {
 				t.Fatal("unverified configuration was saved")
-			}
-			if failure == "initial disagreement" && writes != 0 {
-				t.Fatal("mutated configuration despite inconsistent observations")
 			}
 		})
 	}

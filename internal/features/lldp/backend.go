@@ -24,8 +24,8 @@ type lldpConfig struct {
 	Enabled *bool  `json:"enabled"`
 }
 
-// readEnabled reads the global setting when name is empty, otherwise the named interface.
-func readEnabled(ctx context.Context, d *fastiron.Device, name string) (bool, error) {
+// readRESTEnabled reads the global setting when name is empty, otherwise the named interface.
+func readRESTEnabled(ctx context.Context, d *fastiron.Device, name string) (bool, error) {
 	if name != "" {
 		if err := validateInterface(name); err != nil {
 			return false, err
@@ -67,6 +67,17 @@ func readEnabled(ctx context.Context, d *fastiron.Device, name string) (bool, er
 	// OpenConfig defaults this leaf to true. FastIron omits it after a global
 	// leaf deletion; an absent container still means an unsupported response.
 	return config.Enabled == nil || *config.Enabled, nil
+}
+
+// Global RESTCONF configuration can remain stale after a CLI change. Validate
+// its capability container, then use native configuration for configured truth.
+func readEnabled(ctx context.Context, device *fastiron.Device, name string) (bool, error) {
+	cached, err := readRESTEnabled(ctx, device, name)
+	if err != nil || name != "" {
+		return cached, err
+	}
+	observed, err := readGlobalNative(ctx, device)
+	return observed.enabled, err
 }
 
 func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled bool) (*bool, error) {

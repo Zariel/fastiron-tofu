@@ -33,7 +33,7 @@ func TestLLDPDefaults(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			enabled, err := readEnabled(context.Background(), device, tc.iface)
+			enabled, err := readRESTEnabled(context.Background(), device, tc.iface)
 			if (err != nil) != tc.failure || enabled != tc.enabled {
 				t.Fatalf("enabled=%v error=%v", enabled, err)
 			}

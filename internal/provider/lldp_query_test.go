@@ -12,11 +12,19 @@ import (
 
 func TestOpenTofuLLDPQuery(t *testing.T) {
 	var mu sync.Mutex
+	enabled := true
 	body := `{"openconfig-lldp:config":{}}`
 	server := testswitch.New(t, func(command string) string {
+		mu.Lock()
+		defer mu.Unlock()
 		switch command {
 		case "skip-page-display":
 			return ""
+		case "show running-config":
+			if enabled {
+				return "ver 09.0.10kT213\nend"
+			}
+			return "ver 09.0.10kT213\nno lldp run\nend"
 		case "show version":
 			return "SW: Version 09.0.10kT213"
 		default:
@@ -50,11 +58,12 @@ func TestOpenTofuLLDPQuery(t *testing.T) {
 	run(0, "init", "-no-color")
 	for _, tt := range []struct{ body, want string }{
 		{`{"openconfig-lldp:config":{}}`, "true"},
-		{`{"openconfig-lldp:config":{"enabled":false}}`, "false"},
-		{`{"openconfig-lldp:config":{"enabled":true}}`, "true"},
+		{`{"openconfig-lldp:config":{"enabled":true}}`, "false"},
+		{`{"openconfig-lldp:config":{"enabled":false}}`, "true"},
 	} {
 		mu.Lock()
 		body = tt.body
+		enabled = tt.want == "true"
 		mu.Unlock()
 		run(0, "apply", "-auto-approve", "-no-color")
 		if got := strings.TrimSpace(run(0, "output", "-json", "lldp")); got != tt.want {
