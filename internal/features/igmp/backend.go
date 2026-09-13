@@ -7,7 +7,8 @@ import (
 	"path"
 	"slices"
 	"strconv"
-	"strings"
+
+	"github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -88,39 +89,23 @@ func read(ctx context.Context, device *fastiron.Device, id int64) (nativeState, 
 }
 
 func parse(configuration string, id int64) (nativeState, error) {
-	configuration, err := fastiron.NormalizeConfiguration(configuration)
+	document, err := config.Parse(configuration)
 	if err != nil {
 		return nativeState{}, err
 	}
-	var state nativeState
-	inside, found := false, false
-	for _, line := range strings.Split(configuration, "\n") {
-		if line[0] != ' ' && line[0] != '\t' {
-			inside = false
-			fields := strings.Fields(line)
-			if len(fields) > 1 && fields[0] == "vlan" && fields[1] == strconv.FormatInt(id, 10) {
-				if found {
-					return nativeState{}, errors.New("native configuration repeats the requested VLAN")
-				}
-				inside, found = true, true
-			}
-		}
-		if !inside {
-			state.unowned = append(state.unowned, line)
-			continue
-		}
-		owned, err := parseOverride(line, &state.settings)
-		if err != nil {
-			return nativeState{}, err
-		}
-		if !owned {
-			state.unowned = append(state.unowned, line)
-		}
+	vlans, err := document.VLANs()
+	if err != nil {
+		return nativeState{}, err
 	}
+	scope, found := vlans[id]
 	if !found {
 		return nativeState{}, fastiron.ErrNotFound
 	}
-	return state, nil
+	observed, err := document.IGMP(scope)
+	if err != nil {
+		return nativeState{}, err
+	}
+	return nativeState{settings: settings{Mode: observed.Mode, Version: observed.Version}, unowned: observed.Remaining}, nil
 }
 
 func apply(ctx context.Context, device *fastiron.Device, id int64, desired settings, present bool) (*settings, error) {
