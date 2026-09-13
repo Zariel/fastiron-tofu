@@ -33,4 +33,6 @@ Port writes also synchronize a stale RESTCONF value before applying a change. Wh
 
 Global enable configuration was verified through OpenTofu on FastIron `09.0.10kT213`: defaults, updates, CLI drift repair, import without configuration changes, replacement, omission, deletion, and persistence across reboot. The checks preserved an independently configured receive-only port mode and unrelated running and saved configuration. Automated recovery tests cover unsuccessful saves and partial failures during RESTCONF synchronization and mutation.
 
-Per-port validation remains in progress. LLDP-MED network policies and neighbor discovery are not yet implemented.
+Ethernet enable configuration was also verified through OpenTofu on `09.0.10kT213`: defaults, disable, receive-only CLI drift repair, import without configuration changes, replacement, omission, deletion, and persistence across reboot. Native running and saved configuration matched exactly across reload, with a stable plan afterward. The workflow preserved another port's receive-only mode and unrelated configuration, then restored the original running and saved baseline. Automated tests cover native range regrouping, collateral direction changes, stale-cache synchronization, partial failures, and retries without repeating completed mutations.
+
+LLDP-MED network policies and neighbor discovery are not yet implemented.

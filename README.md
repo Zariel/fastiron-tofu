@@ -32,7 +32,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | OSPF | Partial | Default-VRF areas and interface bindings. Additional routing options remain. |
 | Spanning tree | Partial | Per-VLAN STP/RSTP mode and priority; Ethernet admin-edge, BPDU guard and root guard. Global STP and MST remain. |
 | DNS servers | Partial | IPv4 servers and discovery. The tested firmware rejected IPv6 DNS addresses. |
-| LLDP | Partial | [Global enable state and native query](docs/guides/lldp.md), with lifecycle and reboot validation. Ethernet enable state and interface discovery are implemented; per-port validation and LLDP-MED remain. |
+| LLDP | Partial | [Global and Ethernet enable state with native queries](docs/guides/lldp.md), including lifecycle and reboot validation. LLDP-MED and neighbor discovery remain. |
 | PoE | Partial | Ethernet enable state and reported measurements. Broader controls and validation under load remain. |
 | Local users | Implemented | Usernames, privileges and passwords; privilege discovery. External password changes cannot currently be detected. |
 | RADIUS/TACACS servers | Partial | Addresses, protocol ports, purposes and shared keys. Keyless TACACS, additional options and remote secret drift detection remain. |
