@@ -1,39 +1,85 @@
 package config
 
 import (
+	"encoding/json"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 )
 
-func TestLLDPPorts(t *testing.T) {
-	names := []string{"ethernet 1/1/10", "ethernet 1/1/11", "ethernet 1/1/12", "ethernet 1/2/1"}
-	for _, tt := range []struct {
-		name, commands string
-		want           map[string]LLDPMode
-	}{
-		{"defaults", "", map[string]LLDPMode{"ethernet 1/1/10": {true, true}, "ethernet 1/1/11": {true, true}, "ethernet 1/1/12": {true, true}, "ethernet 1/2/1": {true, true}}},
-		{"range", "no lldp enable ports ethe 1/1/10 to 1/1/12\n", map[string]LLDPMode{"ethernet 1/1/10": {false, false}, "ethernet 1/1/11": {false, false}, "ethernet 1/1/12": {false, false}, "ethernet 1/2/1": {true, true}}},
-		{"split", "no lldp enable ports ethe 1/1/10 ethe 1/1/12\n", map[string]LLDPMode{"ethernet 1/1/10": {false, false}, "ethernet 1/1/11": {true, true}, "ethernet 1/1/12": {false, false}, "ethernet 1/2/1": {true, true}}},
-		{"mixed", "no lldp enable ports ethe 1/1/12\nno lldp enable transmit ports ethe 1/1/10 to 1/1/11\nno lldp enable receive ports ethernet 1/2/1\n", map[string]LLDPMode{"ethernet 1/1/10": {true, false}, "ethernet 1/1/11": {true, false}, "ethernet 1/1/12": {false, false}, "ethernet 1/2/1": {false, true}}},
-		{"all", "no lldp enable transmit ports all\n", map[string]LLDPMode{"ethernet 1/1/10": {true, false}, "ethernet 1/1/11": {true, false}, "ethernet 1/1/12": {true, false}, "ethernet 1/2/1": {true, false}}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			unowned := "ver 09.0.10k\nno lldp run\nlldp transmit-interval 60\nbanner motd $\nno lldp enable ports all\n$\ninterface ethernet 1/1/10\n no lldp enable ports all\nend"
-			input := strings.Replace(unowned, "\ninterface", "\n"+tt.commands+"interface", 1)
-			document, err := Parse(input)
+func TestLLDPCaptures(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("testdata", "lldp", "*.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no captured configurations")
+	}
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			data, err := os.ReadFile(strings.TrimSuffix(file, ".conf") + ".json")
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, remaining, err := document.LLDPPorts(names)
-			if err != nil || !maps.Equal(got, tt.want) {
-				t.Fatalf("modes=%+v error=%v", got, err)
+			var expected struct {
+				Inventory []string
+				Global    *bool
+				Ports     map[string]LLDPMode
 			}
-			if strings.Join(remaining, "\n") != unowned {
-				t.Fatal("unowned configuration changed")
+			if err := json.Unmarshal(data, &expected); err != nil {
+				t.Fatal(err)
+			}
+			if len(expected.Inventory) == 0 || len(expected.Ports) == 0 || expected.Global == nil {
+				t.Fatal("fixture is missing its expected results or inventory")
+			}
+			input, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			document, err := Parse(string(input))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			modes, _, err := document.LLDPPorts(expected.Inventory)
+			if err != nil || !maps.Equal(modes, expected.Ports) {
+				t.Fatalf("modes=%+v error=%v; want %+v", modes, err, expected.Ports)
+			}
+			global, _, err := document.LLDP()
+			if err != nil || global != *expected.Global {
+				t.Fatalf("global=%t error=%v; want %t", global, err, *expected.Global)
 			}
 		})
+	}
+}
+
+func TestLLDPPortScope(t *testing.T) {
+	input := "ver 09.0.10k\nno lldp run\nlldp transmit-interval 60\nbanner motd $\nno lldp enable ports all\n$\ninterface ethernet 1/1/10\n no lldp enable ports all\nend"
+	document, err := Parse(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modes, remaining, err := document.LLDPPorts([]string{"ethernet 1/1/10"})
+	if err != nil || modes["ethernet 1/1/10"] != (LLDPMode{true, true}) {
+		t.Fatalf("unowned command adopted: %+v, %v", modes, err)
+	}
+	if strings.Join(remaining, "\n") != input {
+		t.Fatal("unowned configuration changed")
+	}
+}
+
+func TestLLDPAllPorts(t *testing.T) {
+	document, err := Parse("ver 09.0.10k\nno lldp enable transmit ports all\nend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]LLDPMode{"ethernet 1/1/1": {true, false}, "ethernet 2/3/4": {true, false}}
+	modes, _, err := document.LLDPPorts(slices.Sorted(maps.Keys(want)))
+	if err != nil || !maps.Equal(modes, want) {
+		t.Fatalf("all ports=%+v error=%v", modes, err)
 	}
 }
 

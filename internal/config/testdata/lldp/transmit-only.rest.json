@@ -1,0 +1,11 @@
+{
+  "openconfig-lldp:interface": [
+    {
+      "name": "ethernet 1/1/12",
+      "config": {
+        "name": "ethernet 1/1/12",
+        "enabled": true
+      }
+    }
+  ]
+}

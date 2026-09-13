@@ -27,3 +27,11 @@ Provide the example's host, trusted CA, known_hosts contents, and disconnected t
 The provider currently requires SSH even for RESTCONF-backed resources to identify active firmware and verify configuration persistence. Firmware is reported as evidence, not checked against an expected version or allowlist. Omitted VLAN/port names plan a reset, and omitted Ethernet `enabled` plans `true`. Review imports with matching HCL before applying.
 
 See [supported features and tested compatibility](../compatibility.md).
+
+## Test configuration parsing offline
+
+Run `go test -race ./internal/config` inside the development shell. The LLDP tests automatically discover captured configurations in `internal/config/testdata/lldp`: each `.conf` file has a matching `.json` file containing the port inventory and expected global, receive, and transmit settings. Expected settings come from the capture scenario, independently of the parser. Adding a pair adds a test case without changing Go code.
+
+The corpus contains sanitized full configurations captured on FastIron 09.0.10kT213, covering defaults, disabled ports, receive-only and transmit-only modes, ranges, multiple slots, and range regrouping. Credentials are removed and management addresses are anonymized while command structure is preserved. Companion `.rest.json` files, where available, preserve RESTCONF configuration responses, including cached flags that disagree with native configuration; the parser tests do not use those responses as their oracle.
+
+For additional syntax coverage, capture a planned batch of configurations and expected results on a throwaway switch, then iterate against the saved files offline. Remove credentials and identifying addresses before committing captures. Keep malformed-input and ownership tests alongside the corpus to cover cases a switch would not emit.
