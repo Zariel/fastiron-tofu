@@ -106,7 +106,8 @@ func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled 
 	if name == "" {
 		return applyGlobal(ctx, d, enabled)
 	}
-	if _, err := readRESTEnabled(ctx, d, name); err != nil {
+	cached, err := readRESTEnabled(ctx, d, name)
+	if err != nil {
 		return nil, err
 	}
 	before, unowned, err := readPortModes(ctx, d)
@@ -118,8 +119,19 @@ func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled 
 		return nil, errors.New("LLDP inventory omits the requested interface")
 	}
 	current := mode.Receive || mode.Transmit
-	if current != enabled {
-		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": enabled}}}}}
+	if current == enabled {
+		return &current, d.Persist(ctx)
+	}
+	targets := []bool{enabled}
+	if cached != current {
+		// FastIron skips a native update when the requested value is cached.
+		// Priming true enables both directions on the owned port, even when
+		// only one direction was enabled; verify it before the desired write.
+		targets = []bool{current, enabled}
+	}
+	delete(before, name)
+	for _, target := range targets {
+		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": target}}}}}
 		writeErr := d.DoREST(ctx, http.MethodPatch, "/lldp/interfaces", body, nil)
 		after, remaining, readErr := readPortModes(ctx, d)
 		if readErr != nil {
@@ -130,20 +142,26 @@ func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled 
 			return nil, errors.Join(writeErr, errors.New("LLDP inventory omits the requested interface after mutation"))
 		}
 		observed := mode.Receive || mode.Transmit
-		delete(before, name)
 		delete(after, name)
 		// Native range regrouping is allowed; other ports' directional state
 		// and independently owned commands must survive before saving.
 		if !maps.Equal(before, after) || !slices.Equal(unowned, remaining) {
 			return &observed, errors.Join(writeErr, errors.New("LLDP port mutation changed unrelated configuration"))
 		}
-		if observed != enabled {
+		if observed != target {
 			return &observed, errors.Join(writeErr, errors.New("LLDP configuration did not converge"))
 		}
 		if writeErr != nil {
 			return &observed, writeErr
 		}
 		current = observed
+		cached, err = readRESTEnabled(ctx, d, name)
+		if err != nil {
+			return &current, err
+		}
+		if cached != current {
+			return &current, errors.New("RESTCONF LLDP port configuration did not converge")
+		}
 	}
 	return &current, d.Persist(ctx)
 }
