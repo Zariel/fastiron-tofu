@@ -199,6 +199,9 @@ class Console:
         raise ConsoleError("switch did not become ready before the deadline")
 
     def command(self, command):
+        # FastIron retains the input line after help; a later batch line can execute it.
+        if "?" in command:
+            raise ConsoleError("interactive help is not supported by command batches")
         self.send(command)
         prompt, output = self.read(self.timeout)
         if prompt in ("login", "password"):

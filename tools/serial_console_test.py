@@ -9,6 +9,15 @@ from serial_console import Console, ConsoleError, redact
 
 
 class ConsoleTest(unittest.TestCase):
+    def test_interactive_help(self):
+        master, slave = pty.openpty()
+        self.addCleanup(os.close, master)
+        self.addCleanup(os.close, slave)
+        with Console(os.ttyname(slave), 9600, 1, 0.1) as console:
+            with self.assertRaisesRegex(ConsoleError, "interactive help"):
+                console.command("priority 7 ?")
+            self.assertFalse(select.select([master], [], [], 0)[0])
+
     def test_session(self):
         master, slave = pty.openpty()
         self.addCleanup(os.close, master)
