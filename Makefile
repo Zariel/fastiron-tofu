@@ -1,4 +1,4 @@
-.PHONY: build test test-console vet check fmt
+.PHONY: build test test-console vet check fmt generate
 
 build:
 	go build -o bin/terraform-provider-fastiron ./cmd/terraform-provider-fastiron
@@ -16,3 +16,6 @@ fmt:
 	gofumpt -w .
 
 check: test test-console vet
+
+generate:
+	go generate ./internal/config

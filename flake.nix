@@ -25,6 +25,7 @@
               go_1_26
               gopls
               gofumpt
+              ragel
               gnumake
               opentofu
               git
