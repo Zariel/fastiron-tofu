@@ -63,3 +63,28 @@ func TestReadIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestAmbiguousIdentity(t *testing.T) {
+	const entry = `{"name":"ve 53","config":{"name":"ve 53","type":"iana-if-type:l3ipvlan"},"openconfig-vlan:routed-vlan":{"config":{"vlan":53}}}`
+	for name, entries := range map[string]string{
+		"duplicate":      entry + "," + entry,
+		"different VLAN": `{"name":"ve 53","config":{"name":"ve 53","type":"iana-if-type:l3ipvlan"},"openconfig-vlan:routed-vlan":{"config":{"vlan":54}}}`,
+		"missing VLAN":   `{"name":"ve 53","config":{"name":"ve 53","type":"iana-if-type:l3ipvlan"},"openconfig-vlan:routed-vlan":{"config":{}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, `{"openconfig-interfaces:interfaces":{"interface":[%s]}}`, entries)
+			}))
+			t.Cleanup(server.Close)
+			device, err := fastiron.New(fastiron.Config{Host: server.URL, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.URL, InsecureSkipVerify: true, Timeout: time.Second}})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = Read(context.Background(), device, 53)
+			if err == nil || errors.Is(err, fastiron.ErrNotFound) {
+				t.Fatalf("ambiguous VE identity reported as confirmed state: %v", err)
+			}
+		})
+	}
+}

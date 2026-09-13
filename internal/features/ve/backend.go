@@ -69,6 +69,7 @@ func Read(ctx context.Context, d *fastiron.Device, id int64) (config, error) {
 		return config{}, errors.New("RESTCONF interface collection is empty; cannot confirm VE state")
 	}
 	name := "ve " + strconv.FormatInt(id, 10)
+	var observed *config
 	for _, entry := range response.Interfaces.Interface {
 		if entry.Name != name {
 			continue
@@ -76,9 +77,18 @@ func Read(ctx context.Context, d *fastiron.Device, id int64) (config, error) {
 		if entry.Config == nil || entry.Config.Name != name || entry.Config.Type != "iana-if-type:l3ipvlan" || entry.Routed == nil || entry.Routed.Config == nil {
 			return config{}, errors.New("RESTCONF VE response is missing its identity or VLAN binding")
 		}
-		return config{ID: id, VLANID: entry.Routed.Config.VLAN, PortName: entry.Config.Description}, nil
+		if observed != nil {
+			return config{}, errors.New("RESTCONF interface collection repeats the requested VE")
+		}
+		if entry.Routed.Config.VLAN != id {
+			return config{}, errors.New("RESTCONF VE VLAN binding does not match its identity")
+		}
+		observed = &config{ID: id, VLANID: entry.Routed.Config.VLAN, PortName: entry.Config.Description}
 	}
-	return config{}, fastiron.ErrNotFound
+	if observed == nil {
+		return config{}, fastiron.ErrNotFound
+	}
+	return *observed, nil
 }
 
 func check(ctx context.Context, d *fastiron.Device, v config) error {
