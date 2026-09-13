@@ -20,7 +20,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Jumbo frames | [Global configured mode and native query](guides/jumbo.md); configured lifecycle and reboot persistence verified; activation requires a saved configuration and reload; pending activation and cancellation verified through OpenTofu |
 | DSCP trust | [Interface trust configuration and native query](guides/dscp-trust.md); Ethernet lifecycle, CLI drift repair, import, replacement, deletion and reboot persistence verified |
 | Interface voice VLAN | [Local Ethernet IP voice VLAN policy](guides/voice-vlan.md), with native discovery, drift reconciliation, import, replacement and saved deletion |
-| Routed VLAN interface | VE existence, VLAN binding, and port name |
+| Routed VLAN interface | [VE existence, VLAN binding, port name and native configuration query](guides/ve.md); lifecycle, child guards and reboot persistence verified |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
 | Spanning tree | Per-VLAN STP/RSTP mode and bridge priority; Ethernet admin-edge, BPDU guard and root guard |
 | OSPF | Default-VRF area existence and interface bindings |

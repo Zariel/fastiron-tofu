@@ -39,3 +39,7 @@ Destroy checks native configuration and refuses to remove a VE with addresses, p
 Failed operations retain observed resource state and `persistence_pending` so a later apply or destroy can retry reconciliation or saving. Refresh does not clear pending persistence, including when a failed deletion removed the running VE but did not save its removal.
 
 VE administrative enable state is not currently supported by this resource. On tested FastIron `09.0.10kT213`, RESTCONF PUT and PATCH acknowledged and echoed `enabled` changes without changing native administrative configuration. Native `disable` remains an independently owned child and blocks resource deletion until removed.
+
+Hardware validation on FastIron `09.0.10kT213` covered defaults, name changes and omission, CLI drift repair, native-only name removal, recreation after CLI deletion, import, forced replacement, child preservation and guarded deletion. Running and saved configuration matched exactly across reboot, followed by a no-change plan. Post-reboot updates and VE deletion preserved the parent VLAN. The data source verified default and CLI-configured name/administrative values, rejected a missing VE, and left running and saved configuration unchanged. Both workflows restored their exact original configuration.
+
+Automated OpenTofu tests also cover acknowledged saves that fail to persist creation, updates or deletion, retention of pending state through refresh, and successful retries.
