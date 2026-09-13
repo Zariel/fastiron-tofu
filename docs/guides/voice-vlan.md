@@ -39,4 +39,6 @@ With `persistence_mode = "after_each_write"`, mutations save configuration and v
 
 This resource does not enable FlexAuth or configure its global voice VLAN and action variants. It also does not configure LLDP-MED network policies.
 
+Hardware validation on FastIron `09.0.10kT213` covered creation, updates, native drift, interface replacement, IDs 1 and 4095, native-only import and deletion, and saved-state verification. A configured policy survived reboot with unchanged running and startup configuration and a no-change OpenTofu plan. Updating and deleting the policy after reboot also passed, preserving unrelated configuration.
+
 See the [complete example](../../examples/voice-vlan/main.tf) for provider configuration and a separately managed VLAN. Configure VLAN membership according to the phone and network requirements.

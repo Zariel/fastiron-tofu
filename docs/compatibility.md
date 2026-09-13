@@ -60,6 +60,7 @@ Configuration resources currently use RESTCONF. SSH is also required for firmwar
 - VE administrative enable state is not currently managed.
 - DNS IPv4 succeeded on the tested build; its endpoint rejected IPv6 DNS addresses.
 - PoE tests used a disconnected port. Reported power measurements under load have not been validated.
+- Interface voice VLAN validation covered reboot persistence, a no-change plan after reload, and post-reboot update and deletion with unrelated configuration preserved. Phone connectivity and LLDP-MED negotiation were not tested.
 - Reboot persistence was verified for populated and empty standard IPv4, extended IPv4, IPv6 and MAC ACLs, and IPv4 VLAN, IPv6 Ethernet and MAC Ethernet/LAG bindings, including unchanged native configuration and a no-change OpenTofu plan after reload. MAC checks also covered post-reboot updates and bound name replacement. This does not constitute exhaustive reboot validation of every resource.
 
 Each resource owns only its documented settings. VLAN and VE deletion reject remaining child configuration. Avoid declaring the same remote object in multiple resources or states. Provider operations are serialized per hostname within one provider process; separate states, processes, DNS aliases, and external configuration changes require operator coordination.
