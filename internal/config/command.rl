@@ -11,6 +11,7 @@ package config
   ('protected-port' tail) @{ kind = protectedPort } |
   ('voice-vlan' tail) @{ kind = voiceVLAN } |
   ('jumbo' tail) @{ kind = jumboMode } |
+  ('port-name' tail) @{ kind = portName } |
   (('broadcast' | 'multicast' | 'unknown-unicast') h+ 'limit' tail) @{ kind = stormLimit }
  );
 }%%

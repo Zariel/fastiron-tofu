@@ -18,6 +18,7 @@ const (
 	voiceVLAN
 	stormLimit
 	jumboMode
+	portName
 )
 
 // Command retains the original command text and its indentation scope. Unknown

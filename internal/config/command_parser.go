@@ -3,25 +3,26 @@
 //line command.rl:1
 package config
 
-//line command.rl:16
+//line command.rl:17
 
 //line command_parser.go:8
 var _command_actions []byte = []byte{
 	0, 1, 0, 1, 1, 1, 2, 1, 3,
-	1, 4,
+	1, 4, 1, 5,
 }
 
 var _command_key_offsets []byte = []byte{
 	0, 0, 7, 8, 9, 10, 11, 12,
 	13, 14, 15, 17, 20, 21, 22, 23,
 	24, 25, 26, 27, 28, 29, 30, 31,
-	32, 33, 34, 35, 36, 37, 38, 39,
-	40, 41, 42, 43, 44, 45, 46, 47,
-	48, 49, 51, 54, 55, 56, 57, 58,
-	59, 60, 61, 62, 63, 64, 65, 66,
-	67, 68, 69, 70, 71, 72, 73, 74,
-	75, 77, 78, 80, 81, 83, 84, 86,
-	87, 89,
+	32, 34, 35, 36, 37, 38, 39, 40,
+	41, 42, 43, 44, 45, 46, 47, 48,
+	49, 50, 51, 52, 53, 54, 55, 56,
+	57, 59, 62, 63, 64, 65, 66, 67,
+	68, 69, 70, 71, 72, 73, 74, 75,
+	76, 77, 78, 79, 80, 81, 82, 83,
+	85, 86, 88, 89, 91, 92, 94, 95,
+	97, 98, 100,
 }
 
 var _command_trans_keys []byte = []byte{
@@ -29,27 +30,29 @@ var _command_trans_keys []byte = []byte{
 	111, 97, 100, 99, 97, 115, 116, 9,
 	32, 9, 32, 108, 105, 109, 105, 116,
 	117, 109, 98, 111, 117, 108, 116, 105,
-	114, 111, 116, 101, 99, 116, 101, 100,
+	111, 114, 114, 116, 45, 110, 97, 109,
+	101, 111, 116, 101, 99, 116, 101, 100,
 	45, 112, 111, 114, 116, 114, 117, 115,
 	116, 9, 32, 9, 32, 100, 115, 99,
 	112, 110, 107, 110, 111, 119, 110, 45,
 	117, 110, 111, 105, 99, 101, 45, 118,
 	108, 97, 110, 9, 32, 10, 9, 32,
 	10, 9, 32, 10, 9, 32, 10, 9,
-	32, 10,
+	32, 10, 9, 32, 10,
 }
 
 var _command_single_lengths []byte = []byte{
 	0, 7, 1, 1, 1, 1, 1, 1,
 	1, 1, 2, 3, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1,
+	2, 1, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1,
-	1, 2, 3, 1, 1, 1, 1, 1,
+	2, 3, 1, 1, 1, 1, 1, 1,
 	1, 1, 1, 1, 1, 1, 1, 1,
-	1, 1, 1, 1, 1, 1, 1, 1,
-	2, 1, 2, 1, 2, 1, 2, 1,
-	2, 1,
+	1, 1, 1, 1, 1, 1, 1, 2,
+	1, 2, 1, 2, 1, 2, 1, 2,
+	1, 2, 1,
 }
 
 var _command_range_lengths []byte = []byte{
@@ -62,20 +65,22 @@ var _command_range_lengths []byte = []byte{
 	0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0,
 }
 
-var _command_index_offsets []byte = []byte{
+var _command_index_offsets []int16 = []int16{
 	0, 0, 8, 10, 12, 14, 16, 18,
 	20, 22, 24, 27, 31, 33, 35, 37,
 	39, 41, 43, 45, 47, 49, 51, 53,
-	55, 57, 59, 61, 63, 65, 67, 69,
-	71, 73, 75, 77, 79, 81, 83, 85,
-	87, 89, 92, 96, 98, 100, 102, 104,
-	106, 108, 110, 112, 114, 116, 118, 120,
-	122, 124, 126, 128, 130, 132, 134, 136,
-	138, 141, 143, 146, 148, 151, 153, 156,
-	158, 161,
+	55, 58, 60, 62, 64, 66, 68, 70,
+	72, 74, 76, 78, 80, 82, 84, 86,
+	88, 90, 92, 94, 96, 98, 100, 102,
+	104, 107, 111, 113, 115, 117, 119, 121,
+	123, 125, 127, 129, 131, 133, 135, 137,
+	139, 141, 143, 145, 147, 149, 151, 153,
+	156, 158, 161, 163, 166, 168, 171, 173,
+	176, 178, 181,
 }
 
 var _command_indicies []byte = []byte{
@@ -86,70 +91,74 @@ var _command_indicies []byte = []byte{
 	1, 19, 1, 20, 1, 21, 1, 22,
 	1, 23, 1, 24, 1, 25, 1, 26,
 	1, 27, 1, 28, 1, 11, 1, 29,
-	1, 30, 1, 31, 1, 32, 1, 33,
-	1, 34, 1, 35, 1, 36, 1, 37,
-	1, 38, 1, 39, 1, 40, 1, 41,
-	1, 42, 1, 43, 1, 44, 1, 45,
-	1, 46, 46, 1, 46, 46, 47, 1,
-	48, 1, 49, 1, 50, 1, 51, 1,
-	52, 1, 53, 1, 54, 1, 55, 1,
-	56, 1, 57, 1, 58, 1, 28, 1,
-	59, 1, 60, 1, 61, 1, 62, 1,
-	63, 1, 64, 1, 65, 1, 66, 1,
-	67, 1, 68, 68, 1, 1, 68, 69,
-	69, 1, 1, 69, 70, 70, 1, 1,
-	70, 71, 71, 1, 1, 71, 72, 72,
-	1, 1, 72,
+	30, 1, 31, 1, 32, 1, 33, 1,
+	34, 1, 35, 1, 36, 1, 37, 1,
+	38, 1, 39, 1, 40, 1, 41, 1,
+	42, 1, 43, 1, 44, 1, 45, 1,
+	46, 1, 47, 1, 48, 1, 49, 1,
+	50, 1, 51, 1, 52, 1, 53, 1,
+	54, 54, 1, 54, 54, 55, 1, 56,
+	1, 57, 1, 58, 1, 59, 1, 60,
+	1, 61, 1, 62, 1, 63, 1, 64,
+	1, 65, 1, 66, 1, 28, 1, 67,
+	1, 68, 1, 69, 1, 70, 1, 71,
+	1, 72, 1, 73, 1, 74, 1, 75,
+	1, 76, 76, 1, 1, 76, 77, 77,
+	1, 1, 77, 78, 78, 1, 1, 78,
+	79, 79, 1, 1, 79, 80, 80, 1,
+	1, 80, 81, 81, 1, 1, 81,
 }
 
 var _command_trans_targs []byte = []byte{
-	2, 0, 16, 20, 24, 37, 46, 55,
+	2, 0, 16, 20, 24, 44, 53, 62,
 	3, 4, 5, 6, 7, 8, 9, 10,
-	11, 12, 13, 14, 15, 64, 17, 18,
-	19, 66, 21, 22, 23, 25, 26, 27,
-	28, 29, 30, 31, 32, 33, 34, 35,
-	36, 68, 38, 39, 40, 41, 42, 43,
-	44, 45, 70, 47, 48, 49, 50, 51,
-	52, 53, 54, 56, 57, 58, 59, 60,
-	61, 62, 63, 72, 65, 67, 69, 71,
-	73,
+	11, 12, 13, 14, 15, 71, 17, 18,
+	19, 73, 21, 22, 23, 25, 32, 26,
+	27, 28, 29, 30, 31, 75, 33, 34,
+	35, 36, 37, 38, 39, 40, 41, 42,
+	43, 77, 45, 46, 47, 48, 49, 50,
+	51, 52, 79, 54, 55, 56, 57, 58,
+	59, 60, 61, 63, 64, 65, 66, 67,
+	68, 69, 70, 81, 72, 74, 76, 78,
+	80, 82,
 }
 
 var _command_trans_actions []byte = []byte{
 	0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 0, 0, 9, 0, 0,
+	0, 0, 0, 0, 0, 11, 0, 0,
 	0, 7, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 9, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0,
 	0, 3, 0, 0, 0, 0, 0, 0,
 	0, 0, 1, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0, 0, 5, 9, 7, 3, 1,
-	5,
+	0, 0, 0, 5, 11, 7, 9, 3,
+	1, 5,
 }
 
 const (
 	command_start       int = 1
-	command_first_final int = 64
+	command_first_final int = 71
 	command_error       int = 0
 )
 
 const command_en_main int = 1
 
-//line command.rl:18
+//line command.rl:19
 
 func commandKind(data string) (kind kind) {
 	p, pe := 0, len(data)
 	cs := 0
 
-//line command_parser.go:142
+//line command_parser.go:151
 	{
 		cs = command_start
 	}
 
-//line command.rl:23
+//line command.rl:24
 
-//line command_parser.go:147
+//line command_parser.go:156
 	{
 		var _klen int
 		var _trans int
@@ -243,8 +252,11 @@ func commandKind(data string) (kind kind) {
 				kind = jumboMode
 			case 4:
 //line command.rl:14
+				kind = portName
+			case 5:
+//line command.rl:15
 				kind = stormLimit
-//line command_parser.go:241
+//line command_parser.go:253
 			}
 		}
 
@@ -264,16 +276,16 @@ func commandKind(data string) (kind kind) {
 		}
 	}
 
-//line command.rl:24
+//line command.rl:25
 	if cs < command_first_final {
 		return unknown
 	}
 	return kind
 }
 
-//line command.rl:34
+//line command.rl:35
 
-//line command_parser.go:263
+//line command_parser.go:275
 var _words_actions []byte = []byte{
 	0, 1, 0, 1, 1,
 }
@@ -314,21 +326,21 @@ const (
 
 const words_en_main int = 1
 
-//line command.rl:36
+//line command.rl:37
 
 func commandFields(data string) (fields []string) {
 	data += " "
 	p, pe := 0, len(data)
 	cs, start := 0, 0
 
-//line command_parser.go:308
+//line command_parser.go:320
 	{
 		cs = words_start
 	}
 
-//line command.rl:42
+//line command.rl:43
 
-//line command_parser.go:313
+//line command_parser.go:325
 	{
 		var _klen int
 		var _trans int
@@ -405,12 +417,12 @@ func commandFields(data string) (fields []string) {
 			_acts++
 			switch _words_actions[_acts-1] {
 			case 0:
-//line command.rl:31
+//line command.rl:32
 				start = p
 			case 1:
-//line command.rl:32
+//line command.rl:33
 				fields = append(fields, data[start:p])
-//line command_parser.go:394
+//line command_parser.go:406
 			}
 		}
 
@@ -424,6 +436,6 @@ func commandFields(data string) (fields []string) {
 		}
 	}
 
-//line command.rl:43
+//line command.rl:44
 	return fields
 }

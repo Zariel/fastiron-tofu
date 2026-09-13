@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"path"
 	"strconv"
-	"strings"
 
 	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 
@@ -178,7 +177,7 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 			return err
 		}
 		name := "ve " + strconv.FormatInt(id, 10)
-		if err := veChildren(output, name); err != nil {
+		if err := veChildren(output, id); err != nil {
 			return err
 		}
 		writeErr := d.DoREST(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
@@ -193,37 +192,22 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 	return d.Persist(ctx)
 }
 
-func veChildren(config, name string) error {
-	document, parseErr := nativeconfig.Parse(config)
-	if parseErr != nil {
-		return parseErr
+func veChildren(config string, id int64) error {
+	document, err := nativeconfig.Parse(config)
+	if err != nil {
+		return err
 	}
-	inside := false
-	found := false
-	for _, command := range document.Commands {
-		line := command.Text
-		if line == "interface "+name {
-			inside = true
-			found = true
-			continue
-		}
-		if !inside {
-			continue
-		}
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || trimmed == "!" {
-			continue
-		}
-		if command.Parent == -1 {
-			break
-		}
-		if strings.HasPrefix(trimmed, "port-name ") {
-			continue
-		}
-		return errors.New("VE has child configuration; remove addresses, routing bindings, and other settings before destroying it")
+
+	state, err := document.VE(id)
+	if err != nil {
+		return err
 	}
-	if !found {
+	if !state.Exists {
 		return errors.New("cannot confirm the VE configuration block before deletion")
 	}
+	if state.HasChildren {
+		return errors.New("VE has child configuration; remove addresses, routing bindings, and other settings before destroying it")
+	}
+
 	return nil
 }
