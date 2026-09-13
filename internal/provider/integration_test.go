@@ -63,6 +63,7 @@ type testSwitch struct {
 	server                          *httptest.Server
 	sshAddress, knownHosts          string
 	dns                             map[string]bool
+	startupLLDP, startupLLDPPort    bool
 	lldp, lldpPort                  bool
 	poe                             bool
 }
@@ -74,6 +75,7 @@ func newSwitch(t *testing.T) *testSwitch {
 	s.dns = map[string]bool{}
 	s.addresses = map[string]int{}
 	s.lldp, s.lldpPort = true, true
+	s.startupLLDP, s.startupLLDPPort = true, true
 	s.poe = true
 	transport := testswitch.New(t, s.command)
 	transport.HandleFunc("/", s.restconf)
@@ -82,9 +84,17 @@ func newSwitch(t *testing.T) *testSwitch {
 	return s
 }
 
-func (s *testSwitch) command(command string) string {
+func (s *testSwitch) command(command string) (output string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer func() {
+		if command == "show running-config" {
+			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.lldp, s.lldpPort) + "end"
+		}
+		if command == "show configuration" {
+			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.startupLLDP, s.startupLLDPPort) + "end"
+		}
+	}()
 	switch command {
 	case "show version":
 		return "UNIT 1: compiled on Sep 10 2026 labeled as SPR09010k\nSW: Version 09.0.10kT213\nHW: ICX7150-C12P"
@@ -107,7 +117,7 @@ func (s *testSwitch) command(command string) string {
 		if s.aaa != nil {
 			s.aaa.startup = maps.Clone(s.aaa.running)
 		}
-		unchanged := policyUnchanged && usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
+		unchanged := s.lldp == s.startupLLDP && s.lldpPort == s.startupLLDPPort && policyUnchanged && usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
 		if s.lags != nil {
 			lagConfig := s.lags.configuration()
 			unchanged = unchanged && lagConfig == s.startupLAG
@@ -136,6 +146,7 @@ func (s *testSwitch) command(command string) string {
 			unchanged = unchanged && maps.Equal(s.auth.running, s.auth.startup)
 			s.auth.startup = maps.Clone(s.auth.running)
 		}
+		s.startupLLDP, s.startupLLDPPort = s.lldp, s.lldpPort
 		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
 		s.startupEthernet = maps.Clone(s.ethernet)

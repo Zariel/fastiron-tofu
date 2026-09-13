@@ -66,3 +66,14 @@ func (s *testSwitch) lldpREST(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(404)
 }
+
+func lldpConfiguration(global, port bool) string {
+	var text string
+	if !port {
+		text += "no lldp enable ports ethe 1/1/2\n"
+	}
+	if !global {
+		text += "no lldp run\n"
+	}
+	return text
+}

@@ -78,18 +78,16 @@ func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled 
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
+	if name == "" {
+		return applyGlobal(ctx, d, enabled)
+	}
 	current, err := readEnabled(ctx, d, name)
 	if err != nil {
 		return nil, err
 	}
 	if current != enabled {
-		endpoint := "/lldp/config"
-		body := map[string]any{"config": map[string]any{"enabled": enabled}}
-		if name != "" {
-			endpoint = "/lldp/interfaces"
-			body = map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": enabled}}}}}
-		}
-		writeErr := d.DoREST(ctx, http.MethodPatch, endpoint, body, nil)
+		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": enabled}}}}}
+		writeErr := d.DoREST(ctx, http.MethodPatch, "/lldp/interfaces", body, nil)
 		observed, readErr := readEnabled(ctx, d, name)
 		if readErr != nil {
 			return nil, errors.Join(writeErr, readErr)
