@@ -97,6 +97,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return igmp.NewGlobalDataSource() },
 		func() datasource.DataSource { return igmp.NewInventoryDataSource() },
 		func() datasource.DataSource { return &dns.DataSource{} },
+		func() datasource.DataSource { return lldp.NewGlobalDataSource() },
 		func() datasource.DataSource { return &lldp.DataSource{} },
 		func() datasource.DataSource { return &poe.DataSource{} },
 		func() datasource.DataSource { return ethernet.NewDataSource() },
