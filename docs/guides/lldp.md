@@ -51,4 +51,23 @@ The MED query was verified through OpenTofu on `09.0.10kT213` with grouped polic
 
 On this tested firmware, configuring a tagged or priority-tagged MED policy with priority `0` through CLI or RESTCONF produces native untagged configuration. The query reports that observed untagged mode, with null VLAN and priority, while retaining DSCP. Nonzero tagging priorities were preserved in the captures.
 
-LLDP-MED policy resources and neighbor discovery are not yet implemented.
+Manage one application policy on one Ethernet port:
+
+```hcl
+resource "fastiron_lldp_med_policy" "voice" {
+  interface   = "ethernet 1/1/11"
+  application = "voice"
+  traffic     = "tagged"
+  vlan_id     = 3053
+  priority    = 3
+  dscp        = 46
+}
+```
+
+Tagged policies require `vlan_id` and `priority`. Priority-tagged policies require `priority` and omit `vlan_id`. Untagged policies omit both fields. Omitting `dscp` resets it to zero. Changing `interface` or `application` replaces the resource. Import with `tofu import fastiron_lldp_med_policy.voice 'lldp-med|ethernet 1/1/11|voice'`.
+
+Updates remove cached references for the owned application and port before applying the new policy, temporarily leaving that policy absent. Every write verifies native state and preservation of other policies before continuing or saving. Deletion removes the policy without restoring a prior value. Failed operations retain `persistence_pending = true` through refresh so a retry can reconcile and save, including when native deletion has already completed.
+
+The resource reports nonconvergence if firmware changes the requested tagging mode, including the priority-zero behavior described above; it does not silently substitute untagged configuration. Automated OpenTofu tests cover import, replacement, omission, partial deletion, and failed-save recovery. Full hardware resource lifecycle validation is in progress; backend mutation and read-only query checks have passed on the tested firmware.
+
+Neighbor discovery is not yet implemented.

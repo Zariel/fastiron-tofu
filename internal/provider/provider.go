@@ -63,6 +63,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
 		func() resource.Resource { return lldp.NewGlobalResource() },
+		func() resource.Resource { return lldp.NewMEDResource() },
 		func() resource.Resource { return lldp.NewInterfaceResource() },
 		func() resource.Resource { return &poe.Resource{} },
 		func() resource.Resource { return &ve.Resource{} },

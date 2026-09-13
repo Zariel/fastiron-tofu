@@ -13,8 +13,9 @@ import (
 )
 
 type medWriteResult struct {
-	policy   *config.MEDPolicy
-	verified bool
+	policy    *config.MEDPolicy
+	verified  bool
+	attempted bool
 }
 
 func applyMED(ctx context.Context, device *fastiron.Device, name, application string, desired *config.MEDPolicy) (medWriteResult, error) {
@@ -64,13 +65,14 @@ func applyMED(ctx context.Context, device *fastiron.Device, name, application st
 	// The lock covers every native observation through persistence. A mutation's
 	// HTTP result alone cannot prove convergence or preservation on FastIron.
 	mutate := func(method, path string, body any) error {
+		current.attempted = true
 		writeErr := device.DoREST(ctx, method, path, body, nil)
 		after, remaining, readErr := readMEDNative(ctx, device)
 		if readErr != nil {
 			current.verified = false
 			return errors.Join(writeErr, readErr)
 		}
-		current = medWriteResult{verified: true}
+		current = medWriteResult{verified: true, attempted: true}
 		if p, exists := after[name][application]; exists {
 			current.policy = &p
 		}
