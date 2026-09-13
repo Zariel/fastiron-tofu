@@ -58,6 +58,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return voicevlan.NewResource() },
 		func() resource.Resource { return protectedport.NewResource() },
 		func() resource.Resource { return dscptrust.NewResource() },
+		func() resource.Resource { return jumbo.NewResource() },
 		func() resource.Resource { return stormcontrol.NewResource() },
 		func() resource.Resource { return &vlan.MembershipResource{} },
 		func() resource.Resource { return &dns.Resource{} },
