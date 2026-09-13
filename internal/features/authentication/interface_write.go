@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
@@ -90,7 +92,23 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 	}
 	neighbors := maps.Clone(interfaces)
 	delete(neighbors, name)
-	if desired.Dot1XEnabled && !slices.Contains(unowned, "dot1x enable") || desired.MACEnabled && !slices.Contains(unowned, "mac-authentication enable") {
+	document, err := nativeconfig.Parse(strings.Join(unowned, "\n"))
+	if err != nil {
+		return &current, err
+	}
+	dot1xEnabled, macEnabled := false, false
+	for _, command := range document.Commands {
+		if command.Parent < 0 || document.Commands[command.Parent].Text != "authentication" {
+			continue
+		}
+		switch strings.Join(command.Fields, " ") {
+		case "dot1x enable":
+			dot1xEnabled = true
+		case "mac-authentication enable":
+			macEnabled = true
+		}
+	}
+	if desired.Dot1XEnabled && !dot1xEnabled || desired.MACEnabled && !macEnabled {
 		return &current, errors.New("enable the corresponding global authentication feature before enabling a port")
 	}
 
@@ -202,6 +220,9 @@ func authenticationNeighbors(lines []string, name string, enabling bool) ([]stri
 	vlan := ""
 	for _, line := range lines {
 		f := strings.Fields(line)
+		if len(line) > 0 && line[0] != ' ' && line[0] != '\t' {
+			vlan = ""
+		}
 		if len(f) >= 2 && f[0] == "vlan" {
 			vlan = f[1]
 		}

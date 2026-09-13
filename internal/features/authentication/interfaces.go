@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
@@ -33,28 +35,33 @@ func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfa
 }
 
 func nativeAuthenticationInterfaces(output string) (map[string]interfaceConfig, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
 	var unowned []string
 	interfaces := map[string]interfaceConfig{}
 	controls := map[string]string{}
 	active := false
-	for _, line := range strings.Split(output, "\n") {
-		f := strings.Fields(line)
+	for _, command := range document.Commands {
+		line := command.Text
+		f := command.Fields
 		if len(f) == 0 {
 			continue
 		}
-		if len(f) == 1 && f[0] == "authentication" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+		if len(f) == 1 && f[0] == "authentication" && command.Parent == -1 {
 			active = true
 			unowned = append(unowned, "authentication")
 			continue
 		}
-		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+		if command.Parent == -1 {
 			active = false
 		}
 
 		kind, mode := "", ""
 		var ports []string
 		switch {
-		case (active || line[0] != ' ' && line[0] != '\t') && len(f) >= 3 && f[0] == "dot1x" && f[1] == "port-control":
+		case (active || command.Parent == -1) && len(f) >= 3 && f[0] == "dot1x" && f[1] == "port-control":
 			kind, mode = "control", f[2]
 			if mode != "auto" && mode != "force-authorized" && mode != "force-unauthorized" {
 				return nil, nil, errors.New("unsupported native authentication port-control mode")
@@ -65,7 +72,7 @@ func nativeAuthenticationInterfaces(output string) (map[string]interfaceConfig, 
 		case active && len(f) > 2 && f[0] == "mac-authentication" && f[1] == "enable":
 			kind, ports = "mac", f[2:]
 		default:
-			unowned = append(unowned, strings.Join(f, " "))
+			unowned = append(unowned, line)
 			continue
 		}
 		names, err := authenticationPorts(ports)

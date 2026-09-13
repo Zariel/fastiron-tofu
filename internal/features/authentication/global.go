@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
@@ -41,16 +43,21 @@ func readGlobal(ctx context.Context, d *fastiron.Device) (globalConfig, error) {
 // RESTCONF can retain obsolete leaves after changes. Read native configuration
 // to distinguish configured policy from that projection and operational defaults.
 func nativeGlobal(output string) (globalConfig, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return globalConfig{}, nil, err
+	}
 	var unowned []string
 	result := globalConfig{AuthOrder: "dot1x mac-auth", MaxSessions: 2}
 	active := false
 	seen := map[string]bool{}
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
+	for _, command := range document.Commands {
+		line := command.Text
+		fields := command.Fields
 		if len(fields) == 0 {
 			continue
 		}
-		if line[0] != ' ' && line[0] != '\t' {
+		if command.Parent == -1 {
 			active = line == "authentication"
 			if !active {
 				unowned = append(unowned, line)
