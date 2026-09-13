@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
@@ -69,12 +70,23 @@ func readRESTEnabled(ctx context.Context, d *fastiron.Device, name string) (bool
 	return config.Enabled == nil || *config.Enabled, nil
 }
 
-// Global RESTCONF configuration can remain stale after a CLI change. Validate
-// its capability container, then use native configuration for configured truth.
+// RESTCONF configuration can remain stale after CLI changes. Validate its
+// capability containers, then use native configuration for configured truth.
 func readEnabled(ctx context.Context, device *fastiron.Device, name string) (bool, error) {
 	cached, err := readRESTEnabled(ctx, device, name)
-	if err != nil || name != "" {
+	if err != nil {
 		return cached, err
+	}
+	if name != "" {
+		interfaces, err := readInterfaces(ctx, device)
+		if err != nil {
+			return false, err
+		}
+		enabled, exists := interfaces[name]
+		if !exists {
+			return false, errors.New("LLDP inventory omits the requested interface")
+		}
+		return enabled, nil
 	}
 	observed, err := readGlobalNative(ctx, device)
 	return observed.enabled, err
@@ -114,7 +126,7 @@ func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled 
 	return &current, d.Persist(ctx)
 }
 
-func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]bool, error) {
+func readRESTInterfaces(ctx context.Context, d *fastiron.Device) (map[string]bool, error) {
 	if !d.RESTCONFEnabled() {
 		return nil, errors.New("LLDP discovery currently requires RESTCONF")
 	}
@@ -137,10 +149,41 @@ func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]bool, e
 		if entry.Name == "" || entry.Config == nil || entry.Config.Name != entry.Name {
 			return nil, errors.New("RESTCONF LLDP interface contains an inconsistent identity")
 		}
+		if err := validateInterface(entry.Name); err != nil {
+			return nil, err
+		}
 		if _, duplicate := interfaces[entry.Name]; duplicate {
 			return nil, errors.New("RESTCONF LLDP response contains duplicate interface identities")
 		}
 		interfaces[entry.Name] = entry.Config.Enabled == nil || *entry.Config.Enabled
 	}
 	return interfaces, nil
+}
+
+func readInterfaces(ctx context.Context, device *fastiron.Device) (map[string]bool, error) {
+	inventory, err := readRESTInterfaces(ctx, device)
+	if err != nil {
+		return nil, err
+	}
+	output, err := device.RunningConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	document, err := config.Parse(output)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(inventory))
+	for name := range inventory {
+		names = append(names, name)
+	}
+	modes, _, err := document.LLDPPorts(names)
+	if err != nil {
+		return nil, err
+	}
+	enabled := make(map[string]bool, len(modes))
+	for name, mode := range modes {
+		enabled[name] = mode.Receive || mode.Transmit
+	}
+	return enabled, nil
 }
