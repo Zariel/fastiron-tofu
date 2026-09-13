@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
@@ -40,15 +42,20 @@ func readStandard(ctx context.Context, d *fastiron.Device, name string) (*standa
 // nativeStandard rejects unrepresented rule options rather than silently
 // dropping them during reconciliation. All other ACLs and bindings stay unowned.
 func nativeStandard(output, name string) (*standardConfig, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
 	var current *standardConfig
 	var unowned []string
 	active := false
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
+	for _, command := range document.Commands {
+		line := command.Text
+		fields := command.Fields
 		if len(fields) == 0 || strings.TrimSpace(line) == "!" {
 			continue
 		}
-		topLevel := line[0] != ' ' && line[0] != '\t'
+		topLevel := command.Parent == -1
 		switch {
 		case line == "ip access-list standard "+name:
 			if current != nil {

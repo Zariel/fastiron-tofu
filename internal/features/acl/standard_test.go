@@ -3,11 +3,12 @@ package acl
 import (
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 )
 
 func TestStandardRead(t *testing.T) {
-	current, unowned, err := nativeStandard(`ver 09.0.10kT213
+	current, unowned, err := nativeStandard(nativeFixture(`ver 09.0.10kT213
 ip access-list standard 90
  sequence 30 permit any
  sequence 10 permit 192.0.2.0 0.0.0.255
@@ -16,7 +17,7 @@ ip access-list extended NEIGHBOR
  sequence 10 permit ip any any
 interface ethernet 1/1/9
  ip access-group 90 in
-end`, "90")
+end`), "90")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +57,7 @@ func TestStandardOwnership(t *testing.T) {
 		"duplicate":     "sequence 10 permit any\n sequence 10 deny any",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := nativeStandard("ip access-list standard 90\n "+rule+"\nend", "90"); err == nil {
+			if _, _, err := nativeStandard(nativeFixture("ip access-list standard 90\n "+rule+"\nend"), "90"); err == nil {
 				t.Fatal("unrepresented native configuration accepted")
 			}
 		})
@@ -64,12 +65,23 @@ func TestStandardOwnership(t *testing.T) {
 }
 
 func TestStandardAbsence(t *testing.T) {
-	current, _, err := nativeStandard("ver 09.0.10kT213\nip access-list standard 91\n sequence 10 permit any\nend", "90")
+	current, _, err := nativeStandard(nativeFixture("ver 09.0.10kT213\nip access-list standard 91\n sequence 10 permit any\nend"), "90")
 	if err != nil || current != nil {
 		t.Fatalf("absent ACL = %+v, error=%v", current, err)
 	}
-	current, _, err = nativeStandard("ver 09.0.10kT213\nip access-list standard 90\nend", "90")
+	current, _, err = nativeStandard(nativeFixture("ver 09.0.10kT213\nip access-list standard 90\nend"), "90")
 	if err != nil || current == nil || len(current.Rules) != 0 {
 		t.Fatalf("empty ACL = %+v, error=%v", current, err)
+	}
+}
+
+func TestBannerACL(t *testing.T) {
+	input := "ver 09.0.10k\nbanner motd $\nip access-list standard EDGE\n sequence 10 permit any\n$\nend"
+	acl, unowned, err := nativeStandard(input, "EDGE")
+	if err != nil || acl != nil {
+		t.Fatalf("banner interpreted as an ACL: %v, %v", acl, err)
+	}
+	if strings.Join(unowned, "\n") != input {
+		t.Fatal("banner text changed")
 	}
 }

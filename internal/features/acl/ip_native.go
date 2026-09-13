@@ -6,20 +6,27 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 )
 
 // Native options outside this model must stop reconciliation before a write:
 // otherwise importing or refreshing an ACL could silently discard its policy.
 func nativeIP(output string, family ipFamily, name string) (*ipConfig, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
 	var current *ipConfig
 	var unowned []string
 	active := false
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
+	for _, command := range document.Commands {
+		line := command.Text
+		fields := command.Fields
 		if len(fields) == 0 || strings.TrimSpace(line) == "!" {
 			continue
 		}
-		if line[0] != ' ' && line[0] != '\t' {
+		if command.Parent == -1 {
 			active = line == family.header(name)
 			if family == ipv4ACL && line == "ip access-list standard "+name {
 				return nil, nil, errors.New("ACL name belongs to a standard IPv4 ACL")

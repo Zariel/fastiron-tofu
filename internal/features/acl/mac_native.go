@@ -4,14 +4,21 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 )
 
 func nativeMAC(output, name string) (*macConfig, []string, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
 	var current *macConfig
 	var unowned []string
 	active := false
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
+	for _, command := range document.Commands {
+		line := command.Text
+		fields := command.Fields
 		if len(fields) == 0 || strings.TrimSpace(line) == "!" {
 			continue
 		}
@@ -23,7 +30,7 @@ func nativeMAC(output, name string) (*macConfig, []string, error) {
 			active = true
 			continue
 		}
-		if line[0] != ' ' && line[0] != '\t' {
+		if command.Parent == -1 {
 			active = false
 		}
 		if !active {

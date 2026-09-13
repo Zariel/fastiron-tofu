@@ -12,6 +12,8 @@ import (
 	"strings"
 	"unicode"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
+
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
@@ -84,15 +86,20 @@ func (k accessGroupKey) payload(name string) map[string]any {
 }
 
 func nativeAccessGroup(output string, k accessGroupKey) (accessGroupView, error) {
+	document, err := nativeconfig.Parse(output)
+	if err != nil {
+		return accessGroupView{}, err
+	}
 	view := accessGroupView{Available: map[[2]string]bool{}}
 	active := false
 	vlan := k.isVLAN()
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
+	for _, command := range document.Commands {
+		line := command.Text
+		fields := command.Fields
 		if len(fields) == 0 || strings.TrimSpace(line) == "!" {
 			continue
 		}
-		if line[0] != ' ' && line[0] != '\t' {
+		if command.Parent == -1 {
 			active = line == "interface "+k.Interface
 			if vlan {
 				active = line == k.Interface || strings.HasPrefix(line, k.Interface+" ")

@@ -7,7 +7,7 @@ import (
 )
 
 func TestNativeIP(t *testing.T) {
-	current, unowned, err := nativeIP(`ver 09.0.10kT213
+	current, unowned, err := nativeIP(nativeFixture(`ver 09.0.10kT213
 ip access-list extended EDGE
  sequence 10 permit tcp 192.0.2.0 0.0.0.255 eq 0 host 198.51.100.1 range 3000 4000 dscp-matching 0 dscp-marking 0 internal-priority-marking 0
  sequence 20 permit tcp any range cadlock2 2000 any eq ssl
@@ -18,7 +18,7 @@ mac access-list EDGE
  sequence 10 deny any any
 interface ethernet 1/1/9
  ip access-group EDGE in
-end`, ipv4ACL, "EDGE")
+end`), ipv4ACL, "EDGE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestNativeIPOwnership(t *testing.T) {
 		"invalid action":         "sequence 10 allow ip any any",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := nativeIP("ip access-list extended EDGE\n "+rule+"\nend", ipv4ACL, "EDGE"); err == nil {
+			if _, _, err := nativeIP(nativeFixture("ip access-list extended EDGE\n "+rule+"\nend"), ipv4ACL, "EDGE"); err == nil {
 				t.Fatal("unrepresented native policy accepted")
 			}
 		})
@@ -58,25 +58,25 @@ func TestNativeIPOwnership(t *testing.T) {
 }
 
 func TestNativeIPPresence(t *testing.T) {
-	empty, _, err := nativeIP("ip access-list extended EDGE\nend", ipv4ACL, "EDGE")
+	empty, _, err := nativeIP(nativeFixture("ip access-list extended EDGE\nend"), ipv4ACL, "EDGE")
 	if err != nil || empty == nil || len(empty.Rules) != 0 {
 		t.Fatalf("empty ACL = %+v, %v", empty, err)
 	}
-	absent, _, err := nativeIP("ipv6 access-list EDGE\n sequence 10 permit ipv6 any any\nend", ipv4ACL, "EDGE")
+	absent, _, err := nativeIP(nativeFixture("ipv6 access-list EDGE\n sequence 10 permit ipv6 any any\nend"), ipv4ACL, "EDGE")
 	if err != nil || absent != nil {
 		t.Fatalf("absent ACL = %+v, %v", absent, err)
 	}
-	if _, _, err := nativeIP("ip access-list standard EDGE\n sequence 10 permit any\nend", ipv4ACL, "EDGE"); err == nil {
+	if _, _, err := nativeIP(nativeFixture("ip access-list standard EDGE\n sequence 10 permit any\nend"), ipv4ACL, "EDGE"); err == nil {
 		t.Fatal("IPv4 namespace collision accepted")
 	}
 }
 
 func TestNativeIPv6Protocol(t *testing.T) {
-	current, _, err := nativeIP(`ipv6 access-list EDGE
+	current, _, err := nativeIP(nativeFixture(`ipv6 access-list EDGE
  sequence 10 permit 0 any any
  sequence 20 deny ipv6 any any
  sequence 30 permit icmp 2001:db8:1::/64 2001:db8:2::/64
-end`, ipv6ACL, "EDGE")
+end`), ipv6ACL, "EDGE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,11 +91,11 @@ end`, ipv6ACL, "EDGE")
 }
 
 func TestNativeServices(t *testing.T) {
-	current, _, err := nativeIP(`ip access-list extended EDGE
+	current, _, err := nativeIP(nativeFixture(`ip access-list extended EDGE
  sequence 10 permit udp any eq dns any eq ntp
  sequence 20 permit tcp any range exec login any range asf-rmcp cadlock2
  sequence 30 permit tcp any eq 1023 any eq 65535
-end`, ipv4ACL, "EDGE")
+end`), ipv4ACL, "EDGE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ end`, ipv4ACL, "EDGE")
 func TestNativeProtocolNames(t *testing.T) {
 	for name, number := range map[string]int64{"ipencap": 4, "ipip": 94, "ahp": 51, "ipv6-icmp": 58, "st2": 5, "st": 118, "divert": 254, "253": 253} {
 		t.Run(name, func(t *testing.T) {
-			current, _, err := nativeIP("ip access-list extended 100\n sequence 10 permit "+name+" any any\nend", ipv4ACL, "100")
+			current, _, err := nativeIP(nativeFixture("ip access-list extended 100\n sequence 10 permit "+name+" any any\nend"), ipv4ACL, "100")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -124,7 +124,7 @@ func TestNativeProtocolNames(t *testing.T) {
 }
 
 func TestNativeUDPTime(t *testing.T) {
-	current, _, err := nativeIP("ip access-list extended EDGE\n sequence 10 permit udp any eq time any eq shell\nend", ipv4ACL, "EDGE")
+	current, _, err := nativeIP(nativeFixture("ip access-list extended EDGE\n sequence 10 permit udp any eq time any eq shell\nend"), ipv4ACL, "EDGE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,10 +135,10 @@ func TestNativeUDPTime(t *testing.T) {
 }
 
 func TestNativeIPv6Logging(t *testing.T) {
-	current, _, err := nativeIP(`ipv6 access-list EDGE
+	current, _, err := nativeIP(nativeFixture(`ipv6 access-list EDGE
  sequence 10 permit ipv6 2001:db8:1::/64 2001:db8:2::/64 log
  sequence 20 deny ipv6 any any
-end`, ipv6ACL, "EDGE")
+end`), ipv6ACL, "EDGE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ end`, ipv6ACL, "EDGE")
 		t.Fatalf("IPv6 logging rules = %+v", current)
 	}
 
-	if _, _, err := nativeIP("ipv6 access-list EDGE\n sequence 10 deny ipv6 any any log log\nend", ipv6ACL, "EDGE"); err == nil {
+	if _, _, err := nativeIP(nativeFixture("ipv6 access-list EDGE\n sequence 10 deny ipv6 any any log log\nend"), ipv6ACL, "EDGE"); err == nil {
 		t.Fatal("duplicate logging accepted")
 	}
 }
