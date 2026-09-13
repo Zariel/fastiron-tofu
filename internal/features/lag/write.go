@@ -97,127 +97,119 @@ func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error
 		return nil, err
 	}
 
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-
-	lags, err := readLAGs(ctx, d)
-	if err != nil {
-		return nil, err
-	}
-
-	var current *config
-	for _, lag := range lags {
-		if lag.ID == v.ID {
-			current = &lag
-			continue
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*config, error) {
+		lags, err := readLAGs(ctx, d)
+		if err != nil {
+			return nil, err
 		}
-		if lag.Name == v.Name {
-			return nil, errors.New("another LAG already uses this name")
+
+		var current *config
+		for _, lag := range lags {
+			if lag.ID == v.ID {
+				current = &lag
+				continue
+			}
+			if lag.Name == v.Name {
+				return nil, errors.New("another LAG already uses this name")
+			}
+			for _, name := range v.Members {
+				if slices.Contains(lag.Members, name) {
+					return nil, fmt.Errorf("%s already belongs to lag %d; remove that membership first", name, lag.ID)
+				}
+			}
 		}
+		if current != nil && current.Mode != v.Mode {
+			return nil, errors.New("changing LAG mode requires replacement")
+		}
+
 		for _, name := range v.Members {
-			if slices.Contains(lag.Members, name) {
-				return nil, fmt.Errorf("%s already belongs to lag %d; remove that membership first", name, lag.ID)
+			if current != nil && slices.Contains(current.Members, name) {
+				continue
+			}
+			if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
+				return nil, err
+			}
+			port, err := vlan.ReadSwitchport(ctx, d, name)
+			if err != nil {
+				return nil, err
+			}
+			if port.Access > 1 || len(port.Trunks) != 0 {
+				return nil, fmt.Errorf("%s has independent VLAN membership; remove it before joining a LAG", name)
 			}
 		}
-	}
-	if current != nil && current.Mode != v.Mode {
-		return nil, errors.New("changing LAG mode requires replacement")
-	}
 
-	for _, name := range v.Members {
-		if current != nil && slices.Contains(current.Members, name) {
-			continue
-		}
-		if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
-			return nil, err
-		}
-		port, err := vlan.ReadSwitchport(ctx, d, name)
-		if err != nil {
-			return nil, err
-		}
-		if port.Access > 1 || len(port.Trunks) != 0 {
-			return nil, fmt.Errorf("%s has independent VLAN membership; remove it before joining a LAG", name)
-		}
-	}
-
-	if current == nil || current.Name != v.Name {
-		name := "lag " + strconv.FormatInt(v.ID, 10)
-		mode := "LACP"
-		if v.Mode == "static" {
-			mode = "STATIC"
-		}
-		aggregation := map[string]any{"openconfig-if-aggregate-aug:lag-name": v.Name}
-		entry := map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:ieee8023adLag"}, "openconfig-if-aggregate:aggregation": map[string]any{"config": aggregation}}
-		method := http.MethodPatch
-		body := map[string]any{"interfaces": map[string]any{"interface": []any{entry}}}
-		if current == nil {
-			aggregation["lag-type"] = mode
-			method = http.MethodPost
-			body = map[string]any{"interface": []any{entry}}
-		}
-		writeErr := d.DoREST(ctx, method, "/interfaces", body, nil)
-		observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode })
-		if readErr != nil {
-			return observed, errors.Join(writeErr, readErr)
-		}
-		current = observed
-	}
-
-	for _, name := range slices.Clone(current.Members) {
-		if slices.Contains(v.Members, name) {
-			continue
-		}
-		if err := detachPort(ctx, d, v.ID, name); err != nil {
-			observed, readErr := readLAG(ctx, d, v.ID)
+		if current == nil || current.Name != v.Name {
+			name := "lag " + strconv.FormatInt(v.ID, 10)
+			mode := "LACP"
+			if v.Mode == "static" {
+				mode = "STATIC"
+			}
+			aggregation := map[string]any{"openconfig-if-aggregate-aug:lag-name": v.Name}
+			entry := map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:ieee8023adLag"}, "openconfig-if-aggregate:aggregation": map[string]any{"config": aggregation}}
+			method := http.MethodPatch
+			body := map[string]any{"interfaces": map[string]any{"interface": []any{entry}}}
+			if current == nil {
+				aggregation["lag-type"] = mode
+				method = http.MethodPost
+				body = map[string]any{"interface": []any{entry}}
+			}
+			writeErr := update.REST(method, "/interfaces", body)
+			observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode })
 			if readErr != nil {
-				return nil, errors.Join(err, readErr)
+				return observed, errors.Join(writeErr, readErr)
 			}
-			return &observed, err
+			current = observed
 		}
-	}
 
-	for _, name := range v.Members {
-		lag, err := readLAG(ctx, d, v.ID)
+		for _, name := range slices.Clone(current.Members) {
+			if slices.Contains(v.Members, name) {
+				continue
+			}
+			if err := detachPort(ctx, d, update, v.ID, name); err != nil {
+				observed, readErr := readLAG(ctx, d, v.ID)
+				if readErr != nil {
+					return nil, errors.Join(err, readErr)
+				}
+				return &observed, err
+			}
+		}
+
+		for _, name := range v.Members {
+			lag, err := readLAG(ctx, d, v.ID)
+			if err != nil {
+				return current, err
+			}
+			if slices.Contains(lag.Members, name) {
+				continue
+			}
+			endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/config")
+			body := map[string]any{"config": map[string]any{"openconfig-if-aggregate:aggregate-id": "lag " + strconv.FormatInt(v.ID, 10)}}
+			writeErr := update.REST(http.MethodPatch, endpoint, body)
+			observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && slices.Contains(lag.Members, name) })
+			if readErr != nil {
+				return observed, errors.Join(writeErr, readErr)
+			}
+			current = observed
+		}
+
+		desired := slices.Clone(v.Members)
+		slices.Sort(desired)
+		observed, err := waitLAG(ctx, d, v.ID, func(lag *config) bool {
+			return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode && slices.Equal(lag.Members, desired)
+		})
 		if err != nil {
-			return current, err
+			return observed, err
 		}
-		if slices.Contains(lag.Members, name) {
-			continue
-		}
-		endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/config")
-		body := map[string]any{"config": map[string]any{"openconfig-if-aggregate:aggregate-id": "lag " + strconv.FormatInt(v.ID, 10)}}
-		writeErr := d.DoREST(ctx, http.MethodPatch, endpoint, body, nil)
-		observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && slices.Contains(lag.Members, name) })
-		if readErr != nil {
-			return observed, errors.Join(writeErr, readErr)
-		}
-		current = observed
-	}
 
-	desired := slices.Clone(v.Members)
-	slices.Sort(desired)
-	observed, err := waitLAG(ctx, d, v.ID, func(lag *config) bool {
-		return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode && slices.Equal(lag.Members, desired)
+		return observed, nil
 	})
-	if err != nil {
-		return observed, err
-	}
-
-	return observed, d.Persist(ctx)
 }
 
-func detachPort(ctx context.Context, d *fastiron.Device, id int64, name string) error {
+func detachPort(ctx context.Context, d *fastiron.Device, update *fastiron.Update, id int64, name string) error {
 	// Native removal disables the detached port. Administrative configuration
 	// belongs to the Ethernet resource; do not restore it as a LAG side effect.
 	endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/config/aggregate-id")
-	writeErr := d.DoREST(ctx, http.MethodDelete, endpoint, nil, nil)
+	writeErr := update.REST(http.MethodDelete, endpoint, nil)
 	_, readErr := waitLAG(ctx, d, id, func(lag *config) bool { return lag == nil || !slices.Contains(lag.Members, name) })
 	if readErr != nil {
 		return errors.Join(writeErr, readErr)
@@ -230,44 +222,36 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 		return errors.New("lag_id must be positive")
 	}
 
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
-	if _, err := d.Discover(ctx); err != nil {
-		return err
-	}
-
-	current, err := readLAG(ctx, d, id)
-	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
-		return err
-	}
-	if err == nil {
-		name := "lag " + strconv.FormatInt(id, 10)
-		port, err := vlan.ReadSwitchport(ctx, d, name)
-		if err != nil {
+	return d.Update(ctx, func(update *fastiron.Update) error {
+		current, err := readLAG(ctx, d, id)
+		if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
 			return err
 		}
-		if port.Access > 1 || len(port.Trunks) > 0 {
-			return errors.New("LAG has VLAN memberships; remove them before destroying it")
+		if err == nil {
+			name := "lag " + strconv.FormatInt(id, 10)
+			port, err := vlan.ReadSwitchport(ctx, d, name)
+			if err != nil {
+				return err
+			}
+			if port.Access > 1 || len(port.Trunks) > 0 {
+				return errors.New("LAG has VLAN memberships; remove them before destroying it")
+			}
+			output, err := d.RunningConfig(ctx)
+			if err != nil {
+				return err
+			}
+			if err := lagChildren(output, current); err != nil {
+				return err
+			}
+			writeErr := update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
+			_, readErr := waitLAG(ctx, d, id, func(lag *config) bool { return lag == nil })
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
 		}
-		output, err := d.RunningConfig(ctx)
-		if err != nil {
-			return err
-		}
-		if err := lagChildren(output, current); err != nil {
-			return err
-		}
-		writeErr := d.DoREST(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
-		_, readErr := waitLAG(ctx, d, id, func(lag *config) bool { return lag == nil })
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-	}
 
-	return d.Persist(ctx)
+		return nil
+	})
 }
 
 func lagChildren(config string, lag config) error {

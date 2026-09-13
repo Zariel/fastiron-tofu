@@ -13,7 +13,6 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
-	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 type nativeState struct {
@@ -42,7 +41,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	var response struct {
 		Config *struct{} `json:"openconfig-if-ethernet:config"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, endpoint(name), nil, &response); err != nil {
+	if err := device.ReadREST(ctx, endpoint(name), &response); err != nil {
 		return nativeState{}, err
 	}
 	if response.Config == nil {
@@ -75,62 +74,61 @@ func apply(ctx context.Context, device *fastiron.Device, name string, desired in
 	if desired < 0 || desired > 4095 {
 		return nil, errors.New("voice VLAN must be between 1 and 4095, or zero for removal")
 	}
-	unlock, err := device.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	current, err := read(ctx, device, name)
-	if err != nil {
-		return nil, err
-	}
-	before := current
-	write := func(method, target string, body any) error {
-		writeErr := device.DoREST(ctx, method, target, body, nil)
-		if method == http.MethodDelete && errors.Is(writeErr, restconf.ErrNotFound) {
-			writeErr = nil
+	return fastiron.Reconcile(ctx, device, func(update *fastiron.Update) (*int64, error) {
+		current, err := read(ctx, device, name)
+		if err != nil {
+			return nil, err
 		}
-		configuration, readErr := device.RunningConfig(ctx)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		observed, readErr := parse(configuration, name)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		current = observed
-		if !slices.Equal(current.unowned, before.unowned) {
-			return errors.Join(writeErr, errors.New("voice VLAN mutation changed unrelated configuration"))
-		}
-		return writeErr
-	}
-
-	if current.vlanID != desired {
-		leaf := path.Join(endpoint(name), "ip-voice-vlan")
-		// Removing cached metadata forces PATCH to run the native callback after drift.
-		if err := write(http.MethodDelete, leaf, nil); err != nil {
-			return &current.vlanID, err
-		}
-		id := desired
-		if id == 0 {
-			// Native-only configuration has no deletable RESTCONF entry. Materialize
-			// the current value before deleting, verifying native state after each step.
-			id = current.vlanID
-		}
-		if id != 0 {
-			body := map[string]any{"openconfig-if-ethernet:config": map[string]any{"ip-voice-vlan": id}}
-			if err := write(http.MethodPatch, endpoint(name), body); err != nil {
-				return &current.vlanID, err
+		before := current
+		write := func(method, target string, body any) error {
+			var writeErr error
+			if method == http.MethodDelete {
+				writeErr = update.DeleteIfPresent(target)
+			} else {
+				writeErr = update.REST(method, target, body)
 			}
+			configuration, readErr := device.RunningConfig(ctx)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			observed, readErr := parse(configuration, name)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			current = observed
+			if !slices.Equal(current.unowned, before.unowned) {
+				return errors.Join(writeErr, errors.New("voice VLAN mutation changed unrelated configuration"))
+			}
+			return writeErr
 		}
-		if desired == 0 && current.vlanID != 0 {
+
+		if current.vlanID != desired {
+			leaf := path.Join(endpoint(name), "ip-voice-vlan")
+			// Removing cached metadata forces PATCH to run the native callback after drift.
 			if err := write(http.MethodDelete, leaf, nil); err != nil {
 				return &current.vlanID, err
 			}
+			id := desired
+			if id == 0 {
+				// Native-only configuration has no deletable RESTCONF entry. Materialize
+				// the current value before deleting, verifying native state after each step.
+				id = current.vlanID
+			}
+			if id != 0 {
+				body := map[string]any{"openconfig-if-ethernet:config": map[string]any{"ip-voice-vlan": id}}
+				if err := write(http.MethodPatch, endpoint(name), body); err != nil {
+					return &current.vlanID, err
+				}
+			}
+			if desired == 0 && current.vlanID != 0 {
+				if err := write(http.MethodDelete, leaf, nil); err != nil {
+					return &current.vlanID, err
+				}
+			}
 		}
-	}
-	if current.vlanID != desired {
-		return &current.vlanID, errors.New("native interface voice VLAN did not converge")
-	}
-	return &current.vlanID, device.Persist(ctx)
+		if current.vlanID != desired {
+			return &current.vlanID, errors.New("native interface voice VLAN did not converge")
+		}
+		return &current.vlanID, nil
+	})
 }

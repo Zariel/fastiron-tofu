@@ -70,8 +70,8 @@ func New(cfg Config) (*Device, error) {
 	return d, nil
 }
 
-// Lock serializes a complete mutation workflow for this device.
-func (d *Device) Lock(ctx context.Context) (func(), error) {
+// lock serializes a complete mutation workflow for this device.
+func (d *Device) lock(ctx context.Context) (func(), error) {
 	select {
 	case d.gate <- struct{}{}:
 		return func() { <-d.gate }, nil
@@ -130,7 +130,7 @@ func (d *Device) Save(ctx context.Context) error {
 	if d.config.Persistence == "never" {
 		return errors.New("configuration saves are disabled by persistence_mode = never")
 	}
-	unlock, err := d.Lock(ctx)
+	unlock, err := d.lock(ctx)
 	if err != nil {
 		return err
 	}
@@ -185,21 +185,18 @@ func (d *Device) RESTCONFEnabled() bool {
 	return d.config.Transport != "ssh" && d.rest != nil
 }
 
-// DoREST uses the device's configured RESTCONF connection and transport policy.
-func (d *Device) DoREST(ctx context.Context, method, endpoint string, body, response any) error {
+// ReadREST reads RESTCONF state under the configured transport policy. Configuration
+// writes are available only inside an Update scope.
+func (d *Device) ReadREST(ctx context.Context, endpoint string, response any) error {
+	return d.doREST(ctx, "GET", endpoint, nil, response)
+}
+
+// doREST uses the device's configured RESTCONF connection and transport policy.
+func (d *Device) doREST(ctx context.Context, method, endpoint string, body, response any) error {
 	if !d.RESTCONFEnabled() {
 		return errors.New("RESTCONF transport is unavailable")
 	}
 	return d.rest.Do(ctx, method, endpoint, body, response)
-}
-
-// Persist saves a verified mutation when automatic persistence is configured.
-// The caller holds the device lock across mutation, verification and persistence.
-func (d *Device) Persist(ctx context.Context) error {
-	if d.config.Persistence == "after_each_write" {
-		return d.save(ctx)
-	}
-	return nil
 }
 
 // RunningConfig reads a complete native configuration, preserving its formatting.

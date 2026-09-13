@@ -96,7 +96,7 @@ func readCached(ctx context.Context, d *fastiron.Device, id int64) (config, erro
 			} `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/interfaces", &response); err != nil {
 		return config{}, err
 	}
 	if response.Interfaces == nil {
@@ -146,158 +146,146 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 	if err := validate(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	if _, err := vlan.Read(ctx, d, v.VLANID); err != nil {
-		return nil, fmt.Errorf("VE requires an existing VLAN: %w", err)
-	}
-	cached, cacheErr := readCached(ctx, d, v.ID)
-	if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
-		return nil, cacheErr
-	}
-	before, err := readNative(ctx, d, v.ID)
-	if err != nil {
-		return nil, err
-	}
-	current := before
-	observed := func() *config {
-		if !current.Exists {
-			return nil
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*config, error) {
+		if _, err := vlan.Read(ctx, d, v.VLANID); err != nil {
+			return nil, fmt.Errorf("VE requires an existing VLAN: %w", err)
 		}
-		return &config{ID: v.ID, VLANID: v.ID, PortName: current.PortName}
-	}
-	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
-	defer cancel()
-
-	for {
-		if current.Exists && current.PortName == v.PortName {
-			return observed(), d.Persist(ctx)
-		}
-		// Scalar DELETE removes native-only names even when the cached name is empty.
-		if current.Exists && v.PortName == "" {
-			break
-		}
-		cacheAbsent := errors.Is(cacheErr, fastiron.ErrNotFound)
-		if (!current.Exists && cacheAbsent) || (current.Exists && !cacheAbsent && cached.PortName == current.PortName) {
-			break
-		}
-		// PUT can acknowledge an unchanged cached value without invoking native configuration.
-		select {
-		case <-ctx.Done():
-			return observed(), errors.Join(errors.New("VE configuration cache did not synchronize"), ctx.Err())
-		case <-time.After(250 * time.Millisecond):
-		}
-		cached, cacheErr = readCached(ctx, d, v.ID)
+		cached, cacheErr := readCached(ctx, d, v.ID)
 		if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
-			return observed(), cacheErr
+			return nil, cacheErr
 		}
-		next, err := readNative(ctx, d, v.ID)
+		before, err := readNative(ctx, d, v.ID)
 		if err != nil {
-			return observed(), err
+			return nil, err
 		}
-		current = next
-		if !slices.Equal(before.Remaining, current.Remaining) {
-			return observed(), errors.New("unrelated configuration changed while waiting for VE synchronization")
+		current := before
+		observed := func() *config {
+			if !current.Exists {
+				return nil
+			}
+			return &config{ID: v.ID, VLANID: v.ID, PortName: current.PortName}
 		}
-	}
+		ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+		defer cancel()
 
-	name := "ve " + strconv.FormatInt(v.ID, 10)
-	target := path.Join("/openconfig-interfaces:interfaces/interface", url.PathEscape(name), "config/description")
-	method := http.MethodPut
-	var body any = map[string]string{"openconfig-interfaces:description": v.PortName}
-	if v.PortName == "" {
-		method, body = http.MethodDelete, nil
-	}
-	if !current.Exists {
-		method, target = http.MethodPost, "/interfaces"
-		entry := map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:l3ipvlan", "description": v.PortName}, "openconfig-vlan:routed-vlan": map[string]any{"config": map[string]any{"vlan": v.VLANID}}}
-		body = map[string]any{"interface": []any{entry}}
-	}
-	writeErr := d.DoREST(ctx, method, target, body, nil)
-	for {
-		next, readErr := readNative(ctx, d, v.ID)
-		if readErr != nil {
-			return observed(), errors.Join(writeErr, readErr)
+		for {
+			if current.Exists && current.PortName == v.PortName {
+				return observed(), nil
+			}
+			// Scalar DELETE removes native-only names even when the cached name is empty.
+			if current.Exists && v.PortName == "" {
+				break
+			}
+			cacheAbsent := errors.Is(cacheErr, fastiron.ErrNotFound)
+			if (!current.Exists && cacheAbsent) || (current.Exists && !cacheAbsent && cached.PortName == current.PortName) {
+				break
+			}
+			// PUT can acknowledge an unchanged cached value without invoking native configuration.
+			select {
+			case <-ctx.Done():
+				return observed(), errors.Join(errors.New("VE configuration cache did not synchronize"), ctx.Err())
+			case <-time.After(250 * time.Millisecond):
+			}
+			cached, cacheErr = readCached(ctx, d, v.ID)
+			if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
+				return observed(), cacheErr
+			}
+			next, err := readNative(ctx, d, v.ID)
+			if err != nil {
+				return observed(), err
+			}
+			current = next
+			if !slices.Equal(before.Remaining, current.Remaining) {
+				return observed(), errors.New("unrelated configuration changed while waiting for VE synchronization")
+			}
 		}
-		current = next
-		// Preserve all unowned native commands before allowing any save, including after partial failure.
-		if !slices.Equal(before.Remaining, current.Remaining) {
-			return observed(), errors.Join(writeErr, errors.New("VE mutation changed unrelated configuration"))
+
+		name := "ve " + strconv.FormatInt(v.ID, 10)
+		target := path.Join("/openconfig-interfaces:interfaces/interface", url.PathEscape(name), "config/description")
+		method := http.MethodPut
+		var body any = map[string]string{"openconfig-interfaces:description": v.PortName}
+		if v.PortName == "" {
+			method, body = http.MethodDelete, nil
 		}
-		if writeErr != nil {
-			return observed(), writeErr
+		if !current.Exists {
+			method, target = http.MethodPost, "/interfaces"
+			entry := map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:l3ipvlan", "description": v.PortName}, "openconfig-vlan:routed-vlan": map[string]any{"config": map[string]any{"vlan": v.VLANID}}}
+			body = map[string]any{"interface": []any{entry}}
 		}
-		if current.Exists && current.PortName == v.PortName {
-			return observed(), d.Persist(ctx)
+		writeErr := update.REST(method, target, body)
+		for {
+			next, readErr := readNative(ctx, d, v.ID)
+			if readErr != nil {
+				return observed(), errors.Join(writeErr, readErr)
+			}
+			current = next
+			// Preserve all unowned native commands before allowing any save, including after partial failure.
+			if !slices.Equal(before.Remaining, current.Remaining) {
+				return observed(), errors.Join(writeErr, errors.New("VE mutation changed unrelated configuration"))
+			}
+			if writeErr != nil {
+				return observed(), writeErr
+			}
+			if current.Exists && current.PortName == v.PortName {
+				return observed(), nil
+			}
+			select {
+			case <-ctx.Done():
+				return observed(), errors.Join(errors.New("native VE configuration did not converge"), ctx.Err())
+			case <-time.After(250 * time.Millisecond):
+			}
 		}
-		select {
-		case <-ctx.Done():
-			return observed(), errors.Join(errors.New("native VE configuration did not converge"), ctx.Err())
-		case <-time.After(250 * time.Millisecond):
-		}
-	}
+	})
 }
 
 func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 	if err := validate(config{ID: id, VLANID: id}); err != nil {
 		return err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return err
-	}
-	_, err = readCached(ctx, d, id)
-	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
-		return err
-	}
-	before, err := readNative(ctx, d, id)
-	if err != nil {
-		return err
-	}
-	// Parent deletion must not erase independently owned administrative, address or protocol settings.
-	if before.HasChildren {
-		return errors.New("VE has child configuration; remove addresses, routing bindings, and other settings before destroying it")
-	}
-	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
-	defer cancel()
-	var writeErr error
-	if before.Exists {
-		name := "ve " + strconv.FormatInt(id, 10)
-		writeErr = d.DoREST(ctx, http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil, nil)
-	}
-	for {
-		current, readErr := readNative(ctx, d, id)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
+	return d.Update(ctx, func(update *fastiron.Update) error {
+		_, err := readCached(ctx, d, id)
+		if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
+			return err
 		}
-		if !slices.Equal(before.Remaining, current.Remaining) {
-			return errors.Join(writeErr, errors.New("VE deletion changed unrelated configuration"))
+		before, err := readNative(ctx, d, id)
+		if err != nil {
+			return err
 		}
-		if writeErr != nil {
-			return writeErr
+		// Parent deletion must not erase independently owned administrative, address or protocol settings.
+		if before.HasChildren {
+			return errors.New("VE has child configuration; remove addresses, routing bindings, and other settings before destroying it")
 		}
-		_, cacheErr := readCached(ctx, d, id)
-		if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
-			return cacheErr
+		ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+		defer cancel()
+		var writeErr error
+		if before.Exists {
+			name := "ve " + strconv.FormatInt(id, 10)
+			writeErr = update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
 		}
-		// Wait for both views so a dependent VLAN deletion does not encounter a stale VE binding.
-		if !current.Exists && errors.Is(cacheErr, fastiron.ErrNotFound) {
-			return d.Persist(ctx)
+		for {
+			current, readErr := readNative(ctx, d, id)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			if !slices.Equal(before.Remaining, current.Remaining) {
+				return errors.Join(writeErr, errors.New("VE deletion changed unrelated configuration"))
+			}
+			if writeErr != nil {
+				return writeErr
+			}
+			_, cacheErr := readCached(ctx, d, id)
+			if cacheErr != nil && !errors.Is(cacheErr, fastiron.ErrNotFound) {
+				return cacheErr
+			}
+			// Wait for both views so a dependent VLAN deletion does not encounter a stale VE binding.
+			if !current.Exists && errors.Is(cacheErr, fastiron.ErrNotFound) {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return errors.Join(errors.New("VE absence could not be verified"), ctx.Err())
+			case <-time.After(250 * time.Millisecond):
+			}
 		}
-		select {
-		case <-ctx.Done():
-			return errors.Join(errors.New("VE absence could not be verified"), ctx.Err())
-		case <-time.After(250 * time.Millisecond):
-		}
-	}
+	})
 }

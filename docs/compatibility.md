@@ -49,6 +49,8 @@ The [interface voice VLAN query](guides/voice-vlan.md) reports the configured lo
 
 Configuration resources currently use RESTCONF. SSH is also required for firmware discovery, native configuration verification, persistence, and parent-deletion checks. SSH configuration fallback is not yet available. Configure RESTCONF and its configuration synchronization on the switch before using these resources.
 
+A failed configuration request remains an error even if readback shows that the switch applied it. The failed resource operation stops further writes and skips automatic saving. Resources retain observed state where available and use `persistence_pending` to request reconciliation or saving on the next apply or destroy. A retry can save already converged configuration without repeating the completed mutation.
+
 ## Limits
 
 - IGMP resources own global and VLAN querier mode and version. The tested RESTCONF API cannot reliably configure explicit per-VLAN disabling: its disabled value can select passive mode instead. Per-port versions, multicast group tables and other multicast controls are outside these resources. Queries report configured policy rather than effective forwarding.

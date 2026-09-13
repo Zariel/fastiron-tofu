@@ -42,51 +42,45 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 	if err := validateInterface(name); err != nil {
 		return nil, err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
-		return nil, err
-	}
-	interfaces, err := readInterfaces(ctx, d)
-	if err != nil {
-		return nil, err
-	}
-	current := interfaces[name]
-	if current != desired {
-		edge, guard := "EDGE_DISABLE", "NONE"
-		if desired.AdminEdge {
-			edge = "EDGE_ENABLE"
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*interfaceConfig, error) {
+		if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
+			return nil, err
 		}
-		if desired.RootGuard {
-			guard = "ROOT"
+		interfaces, err := readInterfaces(ctx, d)
+		if err != nil {
+			return nil, err
 		}
-		// Patch only owned leaves; deleting the interface container would erase
-		// unrelated STP options and is not the native default-reset operation.
-		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{
-			"name": name, "edge-port": "openconfig-spanning-tree-types:" + edge, "guard": guard, "bpdu-guard": desired.BPDUGuard,
-		}}}}}
-		writeErr := d.DoREST(ctx, http.MethodPatch, "/stp/interfaces", body, nil)
-		observed, readErr := readInterfaces(ctx, d)
-		if readErr != nil {
-			return &current, errors.Join(writeErr, readErr)
-		}
-		current = observed[name]
-		delete(interfaces, name)
-		delete(observed, name)
-		if !maps.Equal(interfaces, observed) {
-			return &current, errors.Join(writeErr, errors.New("spanning-tree mutation changed neighboring interfaces"))
-		}
+		current := interfaces[name]
 		if current != desired {
-			return &current, errors.Join(writeErr, errors.New("spanning-tree interface configuration did not converge"))
+			edge, guard := "EDGE_DISABLE", "NONE"
+			if desired.AdminEdge {
+				edge = "EDGE_ENABLE"
+			}
+			if desired.RootGuard {
+				guard = "ROOT"
+			}
+			// Patch only owned leaves; deleting the interface container would erase
+			// unrelated STP options and is not the native default-reset operation.
+			body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{
+				"name": name, "edge-port": "openconfig-spanning-tree-types:" + edge, "guard": guard, "bpdu-guard": desired.BPDUGuard,
+			}}}}}
+			writeErr := update.REST(http.MethodPatch, "/stp/interfaces", body)
+			observed, readErr := readInterfaces(ctx, d)
+			if readErr != nil {
+				return &current, errors.Join(writeErr, readErr)
+			}
+			current = observed[name]
+			delete(interfaces, name)
+			delete(observed, name)
+			if !maps.Equal(interfaces, observed) {
+				return &current, errors.Join(writeErr, errors.New("spanning-tree mutation changed neighboring interfaces"))
+			}
+			if current != desired {
+				return &current, errors.Join(writeErr, errors.New("spanning-tree interface configuration did not converge"))
+			}
 		}
-	}
-	return &current, d.Persist(ctx)
+		return &current, nil
+	})
 }
 
 func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {
@@ -106,7 +100,7 @@ func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfa
 			} `json:"interface"`
 		} `json:"openconfig-spanning-tree:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/stp/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/stp/interfaces", &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {

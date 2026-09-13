@@ -53,7 +53,7 @@ func ReadSwitchport(ctx context.Context, d *fastiron.Device, name string) (switc
 			Config *switchport `json:"config"`
 		} `json:"openconfig-vlan:switched-vlan"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, membershipPath(name), nil, &response); err != nil {
+	if err := d.ReadREST(ctx, membershipPath(name), &response); err != nil {
 		return switchport{}, err
 	}
 	if response.Port == nil || response.Port.Config == nil {
@@ -92,80 +92,74 @@ func applyMembership(ctx context.Context, d *fastiron.Device, v membership, pres
 	if err := validateMembership(v); err != nil {
 		return false, err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return false, err
-	}
-	port, err := ReadSwitchport(ctx, d, v.Interface)
-	if err != nil {
-		return false, err
-	}
-	exists := port.contains(v)
-	configuration, err := d.RunningConfig(ctx)
-	if err != nil {
-		return exists, err
-	}
-	defaultVLAN, err := defaultID(configuration)
-	if err != nil {
-		return exists, err
-	}
-	// The implicit membership follows the global default selection. It is
-	// not a separately owned relationship, even when its ID is not 1.
-	if v.VLANID == defaultVLAN {
-		return exists, errors.New("default VLAN membership is implicit and cannot be managed separately")
-	}
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (bool, error) {
+		port, err := ReadSwitchport(ctx, d, v.Interface)
+		if err != nil {
+			return false, err
+		}
+		exists := port.contains(v)
+		configuration, err := d.RunningConfig(ctx)
+		if err != nil {
+			return exists, err
+		}
+		defaultVLAN, err := defaultID(configuration)
+		if err != nil {
+			return exists, err
+		}
+		// The implicit membership follows the global default selection. It is
+		// not a separately owned relationship, even when its ID is not 1.
+		if v.VLANID == defaultVLAN {
+			return exists, errors.New("default VLAN membership is implicit and cannot be managed separately")
+		}
 
-	if exists != present {
-		if present {
-			if _, err := Read(ctx, d, v.VLANID); err != nil {
-				return exists, fmt.Errorf("membership requires an existing VLAN: %w", err)
-			}
-			if v.Tagging == "untagged" && port.Access != 0 && port.Access != defaultVLAN && port.Access != v.VLANID {
-				return exists, errors.New("interface already belongs to another untagged VLAN; remove that membership first")
-			}
-			if (v.Tagging == "tagged" && port.Access == v.VLANID) || (v.Tagging == "untagged" && slices.Contains(port.Trunks, v.VLANID)) {
-				return exists, errors.New("interface already belongs to this VLAN with different tagging; remove that membership first")
-			}
-		}
-		endpoint := membershipPath(v.Interface)
-		method := http.MethodDelete
-		var body any
-		if present {
-			method = http.MethodPatch
-			config := map[string]any{"access-vlan": v.VLANID}
-			if v.Tagging == "tagged" {
-				config = map[string]any{"trunk-vlans": []int64{v.VLANID}}
-			}
-			// Native PATCH merges leaf-list entries. Keyed DELETE removes just this
-			// relationship, avoiding ownership of neighboring memberships.
-			body = map[string]any{"openconfig-vlan:switched-vlan": map[string]any{"config": config}}
-		} else if v.Tagging == "tagged" {
-			endpoint = path.Join(endpoint, "config", fmt.Sprintf("trunk-vlans=%d", v.VLANID))
-		} else {
-			endpoint = path.Join(endpoint, "config/access-vlan")
-		}
-		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
-		observed, readErr := ReadSwitchport(ctx, d, v.Interface)
-		if readErr != nil {
-			return exists, errors.Join(writeErr, readErr)
-		}
-		exists = observed.contains(v)
 		if exists != present {
-			return exists, errors.Join(writeErr, errors.New("VLAN membership did not converge"))
-		}
-		// Verify that the single-relationship operation preserved every neighbor.
-		if v.Tagging == "tagged" && observed.Access != port.Access {
-			return exists, errors.New("tagged membership operation changed the access VLAN")
-		}
-		for _, id := range port.Trunks {
-			if id != v.VLANID && !slices.Contains(observed.Trunks, id) {
-				return exists, errors.New("membership operation removed an unrelated tagged VLAN")
+			if present {
+				if _, err := Read(ctx, d, v.VLANID); err != nil {
+					return exists, fmt.Errorf("membership requires an existing VLAN: %w", err)
+				}
+				if v.Tagging == "untagged" && port.Access != 0 && port.Access != defaultVLAN && port.Access != v.VLANID {
+					return exists, errors.New("interface already belongs to another untagged VLAN; remove that membership first")
+				}
+				if (v.Tagging == "tagged" && port.Access == v.VLANID) || (v.Tagging == "untagged" && slices.Contains(port.Trunks, v.VLANID)) {
+					return exists, errors.New("interface already belongs to this VLAN with different tagging; remove that membership first")
+				}
+			}
+			endpoint := membershipPath(v.Interface)
+			method := http.MethodDelete
+			var body any
+			if present {
+				method = http.MethodPatch
+				config := map[string]any{"access-vlan": v.VLANID}
+				if v.Tagging == "tagged" {
+					config = map[string]any{"trunk-vlans": []int64{v.VLANID}}
+				}
+				// Native PATCH merges leaf-list entries. Keyed DELETE removes just this
+				// relationship, avoiding ownership of neighboring memberships.
+				body = map[string]any{"openconfig-vlan:switched-vlan": map[string]any{"config": config}}
+			} else if v.Tagging == "tagged" {
+				endpoint = path.Join(endpoint, "config", fmt.Sprintf("trunk-vlans=%d", v.VLANID))
+			} else {
+				endpoint = path.Join(endpoint, "config/access-vlan")
+			}
+			writeErr := update.REST(method, endpoint, body)
+			observed, readErr := ReadSwitchport(ctx, d, v.Interface)
+			if readErr != nil {
+				return exists, errors.Join(writeErr, readErr)
+			}
+			exists = observed.contains(v)
+			if exists != present {
+				return exists, errors.Join(writeErr, errors.New("VLAN membership did not converge"))
+			}
+			// Verify that the single-relationship operation preserved every neighbor.
+			if v.Tagging == "tagged" && observed.Access != port.Access {
+				return exists, errors.New("tagged membership operation changed the access VLAN")
+			}
+			for _, id := range port.Trunks {
+				if id != v.VLANID && !slices.Contains(observed.Trunks, id) {
+					return exists, errors.New("membership operation removed an unrelated tagged VLAN")
+				}
 			}
 		}
-	}
-	return exists, d.Persist(ctx)
+		return exists, nil
+	})
 }

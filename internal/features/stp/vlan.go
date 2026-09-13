@@ -3,7 +3,6 @@ package stp
 import (
 	"context"
 	"errors"
-	"net/http"
 	"path"
 	"slices"
 
@@ -56,7 +55,7 @@ func readVLANs(ctx context.Context, d *fastiron.Device) ([]vlan, error) {
 			STP  *vlanCollection `json:"icx-openconfig-spanning-tree-aug:pvst"`
 		} `json:"openconfig-spanning-tree:stp"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/stp", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/stp", &response); err != nil {
 		return nil, err
 	}
 	if response.STP == nil || response.STP.RSTP == nil || response.STP.STP == nil {

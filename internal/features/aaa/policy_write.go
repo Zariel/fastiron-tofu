@@ -11,7 +11,6 @@ import (
 	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
-	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func validatePolicy(p policy) error {
@@ -140,86 +139,80 @@ func applyPolicy(ctx context.Context, d *fastiron.Device, desired policy) (*poli
 	desired.CoAIgnore = slices.Clone(desired.CoAIgnore)
 	slices.Sort(desired.CoAIgnore)
 
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	current, neighbors, err := configuration(ctx, d)
-	if err != nil {
-		return current, err
-	}
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*policy, error) {
+		current, neighbors, err := configuration(ctx, d)
+		if err != nil {
+			return current, err
+		}
 
-	// Verify each native command family before moving to the next. In particular,
-	// CoA's parent PATCH can update the REST projection without applying ignores.
-	write := func(method, endpoint string, body any, expected policy) error {
-		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
-		observed, after, readErr := configuration(ctx, d)
-		if observed != nil {
-			current = observed
+		// Verify each native command family before moving to the next. In particular,
+		// CoA's parent PATCH can update the REST projection without applying ignores.
+		write := func(method, endpoint string, body any, expected policy) error {
+			writeErr := update.REST(method, endpoint, body)
+			observed, after, readErr := configuration(ctx, d)
+			if observed != nil {
+				current = observed
+			}
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			if !slices.Equal(neighbors, after) {
+				return errors.Join(writeErr, errors.New("AAA policy operation changed unrelated native configuration"))
+			}
+			if !sameAAAPolicy(*current, expected) {
+				return errors.Join(writeErr, errors.New("AAA policy did not converge at "+endpoint))
+			}
+			return writeErr
 		}
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		if !slices.Equal(neighbors, after) {
-			return errors.Join(writeErr, errors.New("AAA policy operation changed unrelated native configuration"))
-		}
-		if !sameAAAPolicy(*current, expected) {
-			return errors.Join(writeErr, errors.New("AAA policy did not converge at "+endpoint))
-		}
-		return writeErr
-	}
-	root := "/system/aaa"
-	if !slices.Equal(current.CoAIgnore, desired.CoAIgnore) {
-		flags := map[string]bool{}
-		for _, action := range []string{"disable-port", "dm-request", "flip-port", "modify-acl", "reauth-host"} {
-			flags[action] = slices.Contains(desired.CoAIgnore, action)
-		}
-		expected := *current
-		expected.CoAIgnore = desired.CoAIgnore
-		if err := write(http.MethodPatch, path.Join(root, "authorization/coa/ignore"), map[string]any{"ignore": flags}, expected); err != nil {
-			return current, err
-		}
-	}
-	if current.CoAEnabled != desired.CoAEnabled {
-		expected := *current
-		expected.CoAEnabled = desired.CoAEnabled
-		if err := write(http.MethodPatch, path.Join(root, "authorization/coa"), map[string]any{"coa": map[string]bool{"enable": desired.CoAEnabled}}, expected); err != nil {
-			return current, err
-		}
-	}
-	if current.Dot1XDefault != desired.Dot1XDefault {
-		expected := *current
-		expected.Dot1XDefault = desired.Dot1XDefault
-		method, endpoint := http.MethodDelete, path.Join(root, "authentication/dot1x")
-		var body any
-		if desired.Dot1XDefault != "" {
-			method, endpoint = http.MethodPatch, path.Join(root, "authentication")
-			body = map[string]any{"authentication": map[string]any{"icx-openconfig-aaa-aug:dot1x": map[string]string{"default": desired.Dot1XDefault}}}
-		}
-		if current.Dot1XDefault == "" && desired.Dot1XDefault == "none" {
-			// An implicit REST default suppresses explicit native none creation.
-			// Native absence is already verified; clear only its projection and create
-			// immediately, without an intervening read or another authentication mode.
-			err := d.DoREST(ctx, http.MethodDelete, path.Join(root, "authentication/dot1x"), nil, nil)
-			if err != nil && !errors.Is(err, restconf.ErrNotFound) {
+		root := "/system/aaa"
+		if !slices.Equal(current.CoAIgnore, desired.CoAIgnore) {
+			flags := map[string]bool{}
+			for _, action := range []string{"disable-port", "dm-request", "flip-port", "modify-acl", "reauth-host"} {
+				flags[action] = slices.Contains(desired.CoAIgnore, action)
+			}
+			expected := *current
+			expected.CoAIgnore = desired.CoAIgnore
+			if err := write(http.MethodPatch, path.Join(root, "authorization/coa/ignore"), map[string]any{"ignore": flags}, expected); err != nil {
 				return current, err
 			}
-			method = http.MethodPost
-			body = map[string]any{"icx-openconfig-aaa-aug:dot1x": map[string]string{"default": "none"}}
 		}
-		if err := write(method, endpoint, body, expected); err != nil {
-			return current, err
+		if current.CoAEnabled != desired.CoAEnabled {
+			expected := *current
+			expected.CoAEnabled = desired.CoAEnabled
+			if err := write(http.MethodPatch, path.Join(root, "authorization/coa"), map[string]any{"coa": map[string]bool{"enable": desired.CoAEnabled}}, expected); err != nil {
+				return current, err
+			}
 		}
-	}
-	// Login policy changes run last because they can change transport access.
-	if !slices.Equal(current.LoginMethods, desired.LoginMethods) {
-		if err := write(http.MethodPut, path.Join(root, "authentication/login"), map[string]any{"login": map[string]any{"default": desired.LoginMethods}}, desired); err != nil {
-			return current, err
+		if current.Dot1XDefault != desired.Dot1XDefault {
+			expected := *current
+			expected.Dot1XDefault = desired.Dot1XDefault
+			method, endpoint := http.MethodDelete, path.Join(root, "authentication/dot1x")
+			var body any
+			if desired.Dot1XDefault != "" {
+				method, endpoint = http.MethodPatch, path.Join(root, "authentication")
+				body = map[string]any{"authentication": map[string]any{"icx-openconfig-aaa-aug:dot1x": map[string]string{"default": desired.Dot1XDefault}}}
+			}
+			if current.Dot1XDefault == "" && desired.Dot1XDefault == "none" {
+				// An implicit REST default suppresses explicit native none creation.
+				// Native absence is already verified; clear only its projection and create
+				// immediately, without an intervening read or another authentication mode.
+				err := update.DeleteIfPresent(path.Join(root, "authentication/dot1x"))
+				if err != nil {
+					return current, err
+				}
+				method = http.MethodPost
+				body = map[string]any{"icx-openconfig-aaa-aug:dot1x": map[string]string{"default": "none"}}
+			}
+			if err := write(method, endpoint, body, expected); err != nil {
+				return current, err
+			}
 		}
-	}
-	return current, d.Persist(ctx)
+		// Login policy changes run last because they can change transport access.
+		if !slices.Equal(current.LoginMethods, desired.LoginMethods) {
+			if err := write(http.MethodPut, path.Join(root, "authentication/login"), map[string]any{"login": map[string]any{"default": desired.LoginMethods}}, desired); err != nil {
+				return current, err
+			}
+		}
+		return current, nil
+	})
 }

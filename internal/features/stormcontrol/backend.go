@@ -14,7 +14,6 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
-	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 type interfaceEntry struct {
@@ -82,7 +81,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 			Entries []interfaceEntry `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, "/interfaces", nil, &interfaces); err != nil {
+	if err := device.ReadREST(ctx, "/interfaces", &interfaces); err != nil {
 		return nativeState{}, err
 	}
 	if interfaces.Collection == nil || len(interfaces.Collection.Entries) == 0 {
@@ -107,7 +106,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	var response struct {
 		Policy json.RawMessage `json:"icx-openconfig-stormcontrol:storm_control_config"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, endpoint(name), nil, &response); err != nil {
+	if err := device.ReadREST(ctx, endpoint(name), &response); err != nil {
 		return nativeState{}, err
 	}
 	if len(response.Policy) == 0 || string(response.Policy) == "null" {
@@ -128,120 +127,119 @@ func apply(ctx context.Context, device *fastiron.Device, name string, desired po
 	if err := desired.validate(); err != nil {
 		return nil, err
 	}
-	unlock, err := device.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	current, err := read(ctx, device, name)
-	if errors.Is(err, fastiron.ErrNotFound) && len(desired.limits) == 0 {
-		// Parent removal also removes the policy, but a pending save must still finish.
-		return &policy{}, device.Persist(ctx)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if err := current.writable(); err != nil {
-		return nil, err
-	}
-	if current.policy.equal(desired) {
-		return &current.policy, device.Persist(ctx)
-	}
+	return fastiron.Reconcile(ctx, device, func(update *fastiron.Update) (*policy, error) {
+		current, err := read(ctx, device, name)
+		if errors.Is(err, fastiron.ErrNotFound) && len(desired.limits) == 0 {
+			// Parent removal also removes the policy, but a pending save must still finish.
+			return &policy{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := current.writable(); err != nil {
+			return nil, err
+		}
+		if current.policy.equal(desired) {
+			return &current.policy, nil
+		}
 
-	before := current
-	write := func(method, target string, rates map[string]limit) error {
-		var body any
-		if rates != nil {
-			body = map[string]any{"storm_control_config": rates}
+		before := current
+		write := func(method, target string, rates map[string]limit) error {
+			var body any
+			if rates != nil {
+				body = map[string]any{"storm_control_config": rates}
+			}
+			var writeErr error
+			if method == http.MethodDelete {
+				writeErr = update.DeleteIfPresent(target)
+			} else {
+				writeErr = update.REST(method, target, body)
+			}
+			configuration, readErr := device.RunningConfig(ctx)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			observed, readErr := parse(configuration, name)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			current = observed
+			if current.options || !slices.Equal(before.unowned, current.unowned) {
+				return errors.Join(writeErr, errors.New("storm-control mutation changed unrelated configuration or options"))
+			}
+			return writeErr
 		}
-		writeErr := device.DoREST(ctx, method, target, body, nil)
-		configuration, readErr := device.RunningConfig(ctx)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		observed, readErr := parse(configuration, name)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		current = observed
-		if current.options || !slices.Equal(before.unowned, current.unowned) {
-			return errors.Join(writeErr, errors.New("storm-control mutation changed unrelated configuration or options"))
-		}
-		if method == http.MethodDelete && errors.Is(writeErr, restconf.ErrNotFound) {
-			return nil
-		}
-		return writeErr
-	}
-	target := endpoint(name)
+		target := endpoint(name)
 
-	// Seed current values before changing or deleting them: an unchanged cache entry
-	// can skip the native callback, and native-only settings may lack deletable metadata.
-	prime := map[string]limit{}
-	for class, rate := range current.policy.limits {
-		if desired.unit != current.policy.unit || desired.limits[class] != rate {
-			prime[class] = limit{Rate: rate, KBPS: current.policy.unit == "kbps"}
+		// Seed current values before changing or deleting them: an unchanged cache entry
+		// can skip the native callback, and native-only settings may lack deletable metadata.
+		prime := map[string]limit{}
+		for class, rate := range current.policy.limits {
+			if desired.unit != current.policy.unit || desired.limits[class] != rate {
+				prime[class] = limit{Rate: rate, KBPS: current.policy.unit == "kbps"}
+			}
 		}
-	}
-	if len(prime) > 0 {
-		if err := write(http.MethodPatch, target, prime); err != nil {
-			return &current.policy, err
+		if len(prime) > 0 {
+			if err := write(http.MethodPatch, target, prime); err != nil {
+				return &current.policy, err
+			}
+			if !current.policy.equal(before.policy) {
+				return &current.policy, errors.New("storm cache alignment changed native policy")
+			}
 		}
-		if !current.policy.equal(before.policy) {
-			return &current.policy, errors.New("storm cache alignment changed native policy")
-		}
-	}
 
-	if len(current.policy.limits) > 0 && current.policy.unit != desired.unit {
-		// FastIron requires one mode across all classes; changing it needs a policy reset.
-		if err := write(http.MethodDelete, target, nil); err != nil {
-			return &current.policy, err
+		if len(current.policy.limits) > 0 && current.policy.unit != desired.unit {
+			// FastIron requires one mode across all classes; changing it needs a policy reset.
+			if err := write(http.MethodDelete, target, nil); err != nil {
+				return &current.policy, err
+			}
+			if len(current.policy.limits) != 0 {
+				return &current.policy, errors.New("native storm policy did not clear before the unit change")
+			}
 		}
-		if len(current.policy.limits) != 0 {
-			return &current.policy, errors.New("native storm policy did not clear before the unit change")
-		}
-	}
-	for _, class := range classes {
-		if _, exists := current.policy.limits[class]; !exists {
-			continue
-		}
-		if _, keep := desired.limits[class]; keep {
-			continue
-		}
-		expected := policy{unit: current.policy.unit, limits: maps.Clone(current.policy.limits)}
-		delete(expected.limits, class)
-		if len(expected.limits) == 0 {
-			expected.unit = ""
-		}
-		if err := write(http.MethodDelete, path.Join(target, class), nil); err != nil {
-			return &current.policy, err
-		}
-		if !current.policy.equal(expected) {
-			return &current.policy, errors.New("storm class deletion changed unexpected limits")
-		}
-	}
-	changed := map[string]limit{}
-	for class, rate := range desired.limits {
-		if _, exists := current.policy.limits[class]; !exists {
-			// A CLI removal can leave cached rates that suppress recreation callbacks.
-			expected := current.policy
+		for _, class := range classes {
+			if _, exists := current.policy.limits[class]; !exists {
+				continue
+			}
+			if _, keep := desired.limits[class]; keep {
+				continue
+			}
+			expected := policy{unit: current.policy.unit, limits: maps.Clone(current.policy.limits)}
+			delete(expected.limits, class)
+			if len(expected.limits) == 0 {
+				expected.unit = ""
+			}
 			if err := write(http.MethodDelete, path.Join(target, class), nil); err != nil {
 				return &current.policy, err
 			}
 			if !current.policy.equal(expected) {
-				return &current.policy, errors.New("storm cache invalidation changed native policy")
+				return &current.policy, errors.New("storm class deletion changed unexpected limits")
 			}
 		}
-		if current.policy.unit != desired.unit || current.policy.limits[class] != rate {
-			changed[class] = limit{Rate: rate, KBPS: desired.unit == "kbps"}
+		changed := map[string]limit{}
+		for class, rate := range desired.limits {
+			if _, exists := current.policy.limits[class]; !exists {
+				// A CLI removal can leave cached rates that suppress recreation callbacks.
+				expected := current.policy
+				if err := write(http.MethodDelete, path.Join(target, class), nil); err != nil {
+					return &current.policy, err
+				}
+				if !current.policy.equal(expected) {
+					return &current.policy, errors.New("storm cache invalidation changed native policy")
+				}
+			}
+			if current.policy.unit != desired.unit || current.policy.limits[class] != rate {
+				changed[class] = limit{Rate: rate, KBPS: desired.unit == "kbps"}
+			}
 		}
-	}
-	if len(changed) > 0 {
-		if err := write(http.MethodPatch, target, changed); err != nil {
-			return &current.policy, err
+		if len(changed) > 0 {
+			if err := write(http.MethodPatch, target, changed); err != nil {
+				return &current.policy, err
+			}
 		}
-	}
-	if !current.policy.equal(desired) {
-		return &current.policy, errors.New("native storm policy did not converge")
-	}
-	return &current.policy, device.Persist(ctx)
+		if !current.policy.equal(desired) {
+			return &current.policy, errors.New("native storm policy did not converge")
+		}
+		return &current.policy, nil
+	})
 }

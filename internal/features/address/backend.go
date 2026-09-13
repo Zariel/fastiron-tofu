@@ -78,7 +78,7 @@ func configuredAddresses(ctx context.Context, d *fastiron.Device, name string, i
 			} `json:"address"`
 		} `json:"openconfig-if-ip:addresses"`
 	}
-	err := d.DoREST(ctx, http.MethodGet, addressPath(name, ipv6), nil, &response)
+	err := d.ReadREST(ctx, addressPath(name, ipv6), &response)
 	if errors.Is(err, restconf.ErrNotFound) && strings.HasPrefix(name, "ve ") {
 		id, _ := strconv.ParseInt(strings.TrimPrefix(name, "ve "), 10, 64)
 		// A missing address endpoint is not absence unless the parent is absent too.
@@ -128,61 +128,55 @@ func applyAddress(ctx context.Context, d *fastiron.Device, v address, present bo
 	if err := validateAddress(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	addresses, err := configuredAddresses(ctx, d, v.Interface, v.Address.Addr().Is6())
-	if errors.Is(err, fastiron.ErrNotFound) && !present {
-		return nil, d.Persist(ctx)
-	}
-	if err != nil {
-		return nil, err
-	}
-	entry, exists := addresses[v.Address.Addr()]
-	if exists && entry.Prefix != v.Address {
-		return &entry.Prefix, errors.New("the IP address has a different prefix; refresh and replace its address resource")
-	}
-	if exists != present {
-		if !present && entry.HasChildren {
-			return &entry.Prefix, errors.New("address has VRRP child configuration; remove it before destroying the address")
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*netip.Prefix, error) {
+		addresses, err := configuredAddresses(ctx, d, v.Interface, v.Address.Addr().Is6())
+		if errors.Is(err, fastiron.ErrNotFound) && !present {
+			return nil, nil
 		}
-		endpoint := addressPath(v.Interface, v.Address.Addr().Is6())
-		method := http.MethodPost
-		var body any = map[string]any{"address": []any{map[string]any{"ip": v.Address.Addr().String(), "config": map[string]any{"ip": v.Address.Addr().String(), "prefix-length": v.Address.Bits()}}}}
-		if !present {
-			method = http.MethodDelete
-			endpoint = path.Join(endpoint, "address="+url.PathEscape(v.Address.Addr().String()))
-			body = nil
+		if err != nil {
+			return nil, err
 		}
-		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
-		observed, readErr := configuredAddresses(ctx, d, v.Interface, v.Address.Addr().Is6())
-		if readErr != nil {
-			return nil, errors.Join(writeErr, readErr)
+		entry, exists := addresses[v.Address.Addr()]
+		if exists && entry.Prefix != v.Address {
+			return &entry.Prefix, errors.New("the IP address has a different prefix; refresh and replace its address resource")
 		}
-		actual, found := observed[v.Address.Addr()]
-		var current *netip.Prefix
-		if found {
-			current = &actual.Prefix
-		}
-		if found != present || (found && actual.Prefix != v.Address) {
-			return current, errors.Join(writeErr, errors.New("interface address did not converge"))
-		}
-		// Keyed deletion must preserve neighboring addresses, including their masks.
-		for ip, neighbor := range addresses {
-			if ip != v.Address.Addr() && observed[ip].Prefix != neighbor.Prefix {
-				return current, errors.New("address operation changed an unrelated address")
+		if exists != present {
+			if !present && entry.HasChildren {
+				return &entry.Prefix, errors.New("address has VRRP child configuration; remove it before destroying the address")
 			}
+			endpoint := addressPath(v.Interface, v.Address.Addr().Is6())
+			method := http.MethodPost
+			var body any = map[string]any{"address": []any{map[string]any{"ip": v.Address.Addr().String(), "config": map[string]any{"ip": v.Address.Addr().String(), "prefix-length": v.Address.Bits()}}}}
+			if !present {
+				method = http.MethodDelete
+				endpoint = path.Join(endpoint, "address="+url.PathEscape(v.Address.Addr().String()))
+				body = nil
+			}
+			writeErr := update.REST(method, endpoint, body)
+			observed, readErr := configuredAddresses(ctx, d, v.Interface, v.Address.Addr().Is6())
+			if readErr != nil {
+				return nil, errors.Join(writeErr, readErr)
+			}
+			actual, found := observed[v.Address.Addr()]
+			var current *netip.Prefix
+			if found {
+				current = &actual.Prefix
+			}
+			if found != present || (found && actual.Prefix != v.Address) {
+				return current, errors.Join(writeErr, errors.New("interface address did not converge"))
+			}
+			// Keyed deletion must preserve neighboring addresses, including their masks.
+			for ip, neighbor := range addresses {
+				if ip != v.Address.Addr() && observed[ip].Prefix != neighbor.Prefix {
+					return current, errors.New("address operation changed an unrelated address")
+				}
+			}
+			entry, exists = actual, found
 		}
-		entry, exists = actual, found
-	}
-	var current *netip.Prefix
-	if exists {
-		current = &entry.Prefix
-	}
-	return current, d.Persist(ctx)
+		var current *netip.Prefix
+		if exists {
+			current = &entry.Prefix
+		}
+		return current, nil
+	})
 }

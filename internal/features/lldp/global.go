@@ -29,7 +29,7 @@ func readGlobalNative(ctx context.Context, device *fastiron.Device) (globalState
 }
 
 // The caller holds the device lock through mutation, verification and persistence.
-func applyGlobal(ctx context.Context, device *fastiron.Device, enabled bool) (*bool, error) {
+func applyGlobal(ctx context.Context, device *fastiron.Device, update *fastiron.Update, enabled bool) (*bool, error) {
 	cached, err := readRESTEnabled(ctx, device, "")
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func applyGlobal(ctx context.Context, device *fastiron.Device, enabled bool) (*b
 		return nil, err
 	}
 	if before.enabled == enabled {
-		return &before.enabled, device.Persist(ctx)
+		return &before.enabled, nil
 	}
 
 	targets := []bool{enabled}
@@ -51,7 +51,7 @@ func applyGlobal(ctx context.Context, device *fastiron.Device, enabled bool) (*b
 	current := before
 	for _, target := range targets {
 		body := map[string]any{"config": map[string]bool{"enabled": target}}
-		writeErr := device.DoREST(ctx, http.MethodPatch, "/lldp/config", body, nil)
+		writeErr := update.REST(http.MethodPatch, "/lldp/config", body)
 		after, readErr := readGlobalNative(ctx, device)
 		if readErr != nil {
 			return &current.enabled, errors.Join(writeErr, readErr)
@@ -76,5 +76,5 @@ func applyGlobal(ctx context.Context, device *fastiron.Device, enabled bool) (*b
 			return &current.enabled, errors.New("RESTCONF global LLDP configuration did not converge")
 		}
 	}
-	return &current.enabled, device.Persist(ctx)
+	return &current.enabled, nil
 }

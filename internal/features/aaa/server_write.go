@@ -164,105 +164,99 @@ func applyServer(ctx context.Context, d *fastiron.Device, desired server, secret
 			return nil, errors.New("AAA key must be nonempty, contain no whitespace, and fit the protocol length limit")
 		}
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err = d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	servers, err := readServers(ctx, d)
-	if err != nil {
-		return nil, err
-	}
-	output, err := d.RunningConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	native, neighbors, err := nativeAAA(output, desired)
-	if err != nil {
-		return nil, err
-	}
-	var current *server
-	for _, s := range servers {
-		if s.Kind == desired.Kind && s.Address == desired.Address {
-			current = &s
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*server, error) {
+		servers, err := readServers(ctx, d)
+		if err != nil {
+			return nil, err
 		}
-	}
-	if (current == nil) != (native == nil) || current != nil && *current != native.server {
-		return current, errors.New("native and RESTCONF AAA server configuration disagree; retry after synchronization")
-	}
-	if present && native != nil && native.hasKey && secret == nil {
-		return current, errors.New("existing AAA server has a key; supply its configured key or explicitly replace the server to remove it")
-	}
-	before := native
-	if present || current != nil {
-		endpoint := "/system/aaa/server-groups"
-		method := http.MethodPatch
-		var body any
-		group := desired.Kind + "-default-group"
-		if present {
-			config := map[string]any{"icx-openconfig-aaa-aug:purpose": desired.Purpose}
-			if desired.Kind == "radius" {
-				config["auth-port"], config["acct-port"] = desired.AuthPort, desired.AcctPort
-			} else {
-				config["port"] = desired.AuthPort
-			}
-			if secret != nil {
-				config["secret-key"] = *secret
-			}
-			// FastIron can reset omitted fields, so send complete owned metadata and
-			// configured key together. Never replay opaque keys returned by the API.
-			server := map[string]any{
-				"address":    desired.Address,
-				"config":     map[string]any{"name": desired.Address, "address": desired.Address},
-				desired.Kind: map[string]any{"config": config},
-			}
-			body = map[string]any{"server-groups": map[string]any{"server-group": []any{map[string]any{
-				"name":    group,
-				"config":  map[string]any{"name": group, "type": strings.ToUpper(desired.Kind)},
-				"servers": map[string]any{"server": []any{server}},
-			}}}}
-		} else {
-			method = http.MethodDelete
-			endpoint = path.Join(endpoint, "server-group="+group, "servers", "server="+url.PathEscape(desired.Address))
+		output, err := d.RunningConfig(ctx)
+		if err != nil {
+			return nil, err
 		}
-		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
-		observed, readErr := readServers(ctx, d)
-		if readErr != nil {
-			return current, errors.Join(writeErr, readErr)
+		native, neighbors, err := nativeAAA(output, desired)
+		if err != nil {
+			return nil, err
 		}
-		current = nil
-		for _, s := range observed {
+		var current *server
+		for _, s := range servers {
 			if s.Kind == desired.Kind && s.Address == desired.Address {
 				current = &s
 			}
 		}
-		output, nativeErr := d.RunningConfig(ctx)
-		if nativeErr != nil {
-			return current, errors.Join(writeErr, nativeErr)
+		if (current == nil) != (native == nil) || current != nil && *current != native.server {
+			return current, errors.New("native and RESTCONF AAA server configuration disagree; retry after synchronization")
 		}
-		native, after, parseErr := nativeAAA(output, desired)
-		if parseErr != nil {
-			return current, errors.Join(writeErr, parseErr)
+		if present && native != nil && native.hasKey && secret == nil {
+			return current, errors.New("existing AAA server has a key; supply its configured key or explicitly replace the server to remove it")
 		}
-		// Existing server order determines authentication priority. A metadata
-		// update must not silently move the server behind its neighbors.
-		if present && before != nil && native != nil && before.position != native.position {
-			return current, errors.Join(writeErr, errors.New("AAA update changed native server ordering"))
+		before := native
+		if present || current != nil {
+			endpoint := "/system/aaa/server-groups"
+			method := http.MethodPatch
+			var body any
+			group := desired.Kind + "-default-group"
+			if present {
+				config := map[string]any{"icx-openconfig-aaa-aug:purpose": desired.Purpose}
+				if desired.Kind == "radius" {
+					config["auth-port"], config["acct-port"] = desired.AuthPort, desired.AcctPort
+				} else {
+					config["port"] = desired.AuthPort
+				}
+				if secret != nil {
+					config["secret-key"] = *secret
+				}
+				// FastIron can reset omitted fields, so send complete owned metadata and
+				// configured key together. Never replay opaque keys returned by the API.
+				server := map[string]any{
+					"address":    desired.Address,
+					"config":     map[string]any{"name": desired.Address, "address": desired.Address},
+					desired.Kind: map[string]any{"config": config},
+				}
+				body = map[string]any{"server-groups": map[string]any{"server-group": []any{map[string]any{
+					"name":    group,
+					"config":  map[string]any{"name": group, "type": strings.ToUpper(desired.Kind)},
+					"servers": map[string]any{"server": []any{server}},
+				}}}}
+			} else {
+				method = http.MethodDelete
+				endpoint = path.Join(endpoint, "server-group="+group, "servers", "server="+url.PathEscape(desired.Address))
+			}
+			writeErr := update.REST(method, endpoint, body)
+			observed, readErr := readServers(ctx, d)
+			if readErr != nil {
+				return current, errors.Join(writeErr, readErr)
+			}
+			current = nil
+			for _, s := range observed {
+				if s.Kind == desired.Kind && s.Address == desired.Address {
+					current = &s
+				}
+			}
+			output, nativeErr := d.RunningConfig(ctx)
+			if nativeErr != nil {
+				return current, errors.Join(writeErr, nativeErr)
+			}
+			native, after, parseErr := nativeAAA(output, desired)
+			if parseErr != nil {
+				return current, errors.Join(writeErr, parseErr)
+			}
+			// Existing server order determines authentication priority. A metadata
+			// update must not silently move the server behind its neighbors.
+			if present && before != nil && native != nil && before.position != native.position {
+				return current, errors.Join(writeErr, errors.New("AAA update changed native server ordering"))
+			}
+			if !slices.Equal(neighbors, after) {
+				return current, errors.Join(writeErr, errors.New("AAA operation changed unrelated native configuration"))
+			}
+			if present && (current == nil || *current != desired || native == nil || native.server != desired || native.hasKey != (secret != nil)) || !present && (current != nil || native != nil) {
+				return current, errors.Join(writeErr, errors.New("AAA server configuration did not converge"))
+			}
+			// Metadata read-back cannot prove a secret write succeeded after an ambiguous
+			// transport failure. Leave the failure visible so reconciliation retries it.
+			if writeErr != nil {
+				return current, writeErr
+			}
 		}
-		if !slices.Equal(neighbors, after) {
-			return current, errors.Join(writeErr, errors.New("AAA operation changed unrelated native configuration"))
-		}
-		if present && (current == nil || *current != desired || native == nil || native.server != desired || native.hasKey != (secret != nil)) || !present && (current != nil || native != nil) {
-			return current, errors.Join(writeErr, errors.New("AAA server configuration did not converge"))
-		}
-		// Metadata read-back cannot prove a secret write succeeded after an ambiguous
-		// transport failure. Leave the failure visible so reconciliation retries it.
-		if writeErr != nil {
-			return current, writeErr
-		}
-	}
-	return current, d.Persist(ctx)
+		return current, nil
+	})
 }

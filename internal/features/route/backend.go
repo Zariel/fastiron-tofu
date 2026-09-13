@@ -72,7 +72,7 @@ func configuredRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) 
 			} `json:"static"`
 		} `json:"openconfig-network-instance:static-routes"`
 	}
-	err := d.DoREST(ctx, http.MethodGet, staticRoutesPath, nil, &response)
+	err := d.ReadREST(ctx, staticRoutesPath, &response)
 	if errors.Is(err, restconf.ErrNotFound) {
 		// The static protocol need not exist before its first route. Confirm parent
 		// discovery instead of interpreting every missing endpoint as an empty table.
@@ -84,7 +84,7 @@ func configuredRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) 
 				} `json:"protocol"`
 			} `json:"openconfig-network-instance:protocols"`
 		}
-		if parentErr := d.DoREST(ctx, http.MethodGet, protocolsPath, nil, &parent); parentErr != nil {
+		if parentErr := d.ReadREST(ctx, protocolsPath, &parent); parentErr != nil {
 			return nil, parentErr
 		}
 		if parent.Protocols == nil {
@@ -146,86 +146,80 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 	if err := validateRoute(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	routes, err := configuredRoutes(ctx, d)
-	createProtocol := errors.Is(err, fastiron.ErrNotFound)
-	if err != nil && !createProtocol {
-		return nil, err
-	}
-	var current *route
-	for _, route := range routes {
-		if route.Prefix == v.Prefix && route.NextHop == v.NextHop {
-			current = &route
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*route, error) {
+		routes, err := configuredRoutes(ctx, d)
+		createProtocol := errors.Is(err, fastiron.ErrNotFound)
+		if err != nil && !createProtocol {
+			return nil, err
 		}
-	}
-	if current != nil && current.Distance != v.Distance {
-		return current, errors.New("the route has a different distance; refresh and replace its resource")
-	}
-	if (current != nil) != present {
-		endpoint := staticRoutesPath
-		method := http.MethodPost
-		var body any
-		if present {
-			hop := map[string]any{"index": v.NextHop.String(), "config": map[string]any{"index": v.NextHop.String(), "next-hop": v.NextHop.String(), "metric": v.Distance}}
-			route := map[string]any{"prefix": v.Prefix.String(), "config": map[string]any{"prefix": v.Prefix.String()}, "next-hops": map[string]any{"next-hop": []any{hop}}}
-			body = map[string]any{"static": []any{route}}
-
-			// POST creates a prefix; PATCH merges a new next hop into an existing one.
-			for _, existing := range routes {
-				if existing.Prefix == v.Prefix {
-					method = http.MethodPatch
-					body = map[string]any{"openconfig-network-instance:static-routes": body}
-					break
-				}
-			}
-			if createProtocol {
-				endpoint = protocolsPath
-				body = map[string]any{"protocol": map[string]any{"identifier": "openconfig-policy-types:STATIC", "name": "icx-static", "config": map[string]any{"identifier": "openconfig-policy-types:STATIC", "name": "icx-static"}, "static-routes": map[string]any{"static": []any{route}}}}
-			}
-		} else {
-			// Deleting the next hop also removes native options absent from this API.
-			// Refuse to erase those options until their owner has removed them.
-			output, err := d.RunningConfig(ctx)
-			if err != nil {
-				return current, err
-			}
-			if err := routeOptions(output, v); err != nil {
-				return current, err
-			}
-			method = http.MethodDelete
-			endpoint = path.Join(staticRoutesPath, "static="+url.PathEscape(v.Prefix.String()), "next-hops", "next-hop="+url.PathEscape(v.NextHop.String()))
-		}
-		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
-		observed, readErr := readRoutes(ctx, d)
-		if readErr != nil {
-			return current, errors.Join(writeErr, readErr)
-		}
-		current = nil
-		for _, route := range observed {
+		var current *route
+		for _, route := range routes {
 			if route.Prefix == v.Prefix && route.NextHop == v.NextHop {
 				current = &route
 			}
 		}
-		if (current != nil) != present || (current != nil && *current != v) {
-			return current, errors.Join(writeErr, errors.New("static route did not converge"))
+		if current != nil && current.Distance != v.Distance {
+			return current, errors.New("the route has a different distance; refresh and replace its resource")
 		}
-		for _, neighbor := range routes {
-			if neighbor.Prefix == v.Prefix && neighbor.NextHop == v.NextHop {
-				continue
+		if (current != nil) != present {
+			endpoint := staticRoutesPath
+			method := http.MethodPost
+			var body any
+			if present {
+				hop := map[string]any{"index": v.NextHop.String(), "config": map[string]any{"index": v.NextHop.String(), "next-hop": v.NextHop.String(), "metric": v.Distance}}
+				route := map[string]any{"prefix": v.Prefix.String(), "config": map[string]any{"prefix": v.Prefix.String()}, "next-hops": map[string]any{"next-hop": []any{hop}}}
+				body = map[string]any{"static": []any{route}}
+
+				// POST creates a prefix; PATCH merges a new next hop into an existing one.
+				for _, existing := range routes {
+					if existing.Prefix == v.Prefix {
+						method = http.MethodPatch
+						body = map[string]any{"openconfig-network-instance:static-routes": body}
+						break
+					}
+				}
+				if createProtocol {
+					endpoint = protocolsPath
+					body = map[string]any{"protocol": map[string]any{"identifier": "openconfig-policy-types:STATIC", "name": "icx-static", "config": map[string]any{"identifier": "openconfig-policy-types:STATIC", "name": "icx-static"}, "static-routes": map[string]any{"static": []any{route}}}}
+				}
+			} else {
+				// Deleting the next hop also removes native options absent from this API.
+				// Refuse to erase those options until their owner has removed them.
+				output, err := d.RunningConfig(ctx)
+				if err != nil {
+					return current, err
+				}
+				if err := routeOptions(output, v); err != nil {
+					return current, err
+				}
+				method = http.MethodDelete
+				endpoint = path.Join(staticRoutesPath, "static="+url.PathEscape(v.Prefix.String()), "next-hops", "next-hop="+url.PathEscape(v.NextHop.String()))
 			}
-			if !slices.Contains(observed, neighbor) {
-				return current, errors.New("static route operation changed an unrelated next hop")
+			writeErr := update.REST(method, endpoint, body)
+			observed, readErr := readRoutes(ctx, d)
+			if readErr != nil {
+				return current, errors.Join(writeErr, readErr)
+			}
+			current = nil
+			for _, route := range observed {
+				if route.Prefix == v.Prefix && route.NextHop == v.NextHop {
+					current = &route
+				}
+			}
+			if (current != nil) != present || (current != nil && *current != v) {
+				return current, errors.Join(writeErr, errors.New("static route did not converge"))
+			}
+			for _, neighbor := range routes {
+				if neighbor.Prefix == v.Prefix && neighbor.NextHop == v.NextHop {
+					continue
+				}
+				if !slices.Contains(observed, neighbor) {
+					return current, errors.New("static route operation changed an unrelated next hop")
+				}
 			}
 		}
-	}
-	return current, d.Persist(ctx)
+		return current, nil
+	})
 }
 
 func routeOptions(config string, v route) error {

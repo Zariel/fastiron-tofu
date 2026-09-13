@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -68,7 +67,7 @@ func readObservations(ctx context.Context, device *fastiron.Device) ([]observati
 			Interface []interfaceEntry `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+	if err := device.ReadREST(ctx, "/interfaces", &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil || len(response.Interfaces.Interface) == 0 {

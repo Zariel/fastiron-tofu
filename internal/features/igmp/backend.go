@@ -11,7 +11,6 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
-	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 const vlanPath = "/igmp-mld-snooping/vlans"
@@ -55,7 +54,7 @@ func checkRESTCONF(ctx context.Context, device *fastiron.Device) error {
 			VLAN []vlanEntry `json:"vlan"`
 		} `json:"icx-igmp-mld-snooping:vlans"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, vlanPath, nil, &response); err != nil {
+	if err := device.ReadREST(ctx, vlanPath, &response); err != nil {
 		return err
 	}
 	if response.VLANs == nil {
@@ -115,97 +114,95 @@ func apply(ctx context.Context, device *fastiron.Device, id int64, desired setti
 	if err := validate(id, desired); err != nil {
 		return nil, err
 	}
-	unlock, err := device.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	current, err := read(ctx, device, id)
-	if errors.Is(err, fastiron.ErrNotFound) && !present {
-		return nil, device.Persist(ctx)
-	}
-	if err != nil {
-		return nil, err
-	}
-	before := current
-	endpoint := path.Join(vlanPath, "vlan", strconv.FormatInt(id, 10), "proto/igmp/config")
+	return fastiron.Reconcile(ctx, device, func(update *fastiron.Update) (*settings, error) {
+		current, err := read(ctx, device, id)
+		if errors.Is(err, fastiron.ErrNotFound) && !present {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		before := current
+		endpoint := path.Join(vlanPath, "vlan", strconv.FormatInt(id, 10), "proto/igmp/config")
 
-	// Each mutation verifies native overrides and preserves every unowned command.
-	// RESTCONF can omit a native disable flag, so its echo is not a convergence check.
-	write := func(method, endpoint string, body any) error {
-		writeErr := device.DoREST(ctx, method, endpoint, body, nil)
-		if method == http.MethodDelete && errors.Is(writeErr, restconf.ErrNotFound) {
-			// Missing metadata does not prove the native override is absent.
-			writeErr = nil
-		}
-		configuration, readErr := device.RunningConfig(ctx)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		observed, readErr := parse(configuration, id)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		current = observed
-		if !slices.Equal(observed.unowned, before.unowned) {
-			return errors.Join(writeErr, errors.New("IGMP mutation changed unrelated configuration"))
-		}
-		return writeErr
-	}
-	patch := func(values settings) error {
-		entry := vlanEntry{ID: id}
-		entry.Proto.ID = id
-		entry.Proto.IGMP.Config = &values
-		body := map[string]any{"icx-igmp-mld-snooping:vlans": map[string]any{"vlan": []vlanEntry{entry}}}
-		return write(http.MethodPatch, vlanPath, body)
-	}
-
-	// Replacing a changed leaf forces its native callback even if RESTCONF
-	// already caches the desired value. Unchanged leaves retain their ownership.
-	if current.Mode != desired.Mode {
-		leaf := path.Join(endpoint, "querier-mode")
-		if err := write(http.MethodDelete, leaf, nil); err != nil {
-			return &current.settings, err
-		}
-		mode := desired.Mode
-		if mode == "" && current.Mode != "" {
-			// A native-only override needs a deletable RESTCONF entry. Passive
-			// mode also clears the native disable flag without sending queries.
-			mode = "passive"
-		}
-		if mode != "" {
-			if err := patch(settings{Mode: mode}); err != nil {
-				return &current.settings, err
+		// Each mutation verifies native overrides and preserves every unowned command.
+		// RESTCONF can omit a native disable flag, so its echo is not a convergence check.
+		write := func(method, endpoint string, body any) error {
+			var writeErr error
+			if method == http.MethodDelete {
+				writeErr = update.DeleteIfPresent(endpoint)
+			} else {
+				writeErr = update.REST(method, endpoint, body)
 			}
+			configuration, readErr := device.RunningConfig(ctx)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			observed, readErr := parse(configuration, id)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			current = observed
+			if !slices.Equal(observed.unowned, before.unowned) {
+				return errors.Join(writeErr, errors.New("IGMP mutation changed unrelated configuration"))
+			}
+			return writeErr
 		}
-		if desired.Mode == "" && current.Mode != "" {
+		patch := func(values settings) error {
+			entry := vlanEntry{ID: id}
+			entry.Proto.ID = id
+			entry.Proto.IGMP.Config = &values
+			body := map[string]any{"icx-igmp-mld-snooping:vlans": map[string]any{"vlan": []vlanEntry{entry}}}
+			return write(http.MethodPatch, vlanPath, body)
+		}
+
+		// Replacing a changed leaf forces its native callback even if RESTCONF
+		// already caches the desired value. Unchanged leaves retain their ownership.
+		if current.Mode != desired.Mode {
+			leaf := path.Join(endpoint, "querier-mode")
 			if err := write(http.MethodDelete, leaf, nil); err != nil {
 				return &current.settings, err
 			}
-		}
-	}
-	if current.Version != desired.Version {
-		leaf := path.Join(endpoint, "version")
-		if err := write(http.MethodDelete, leaf, nil); err != nil {
-			return &current.settings, err
-		}
-		version := desired.Version
-		if version == 0 {
-			version = current.Version
-		}
-		if version != 0 {
-			if err := patch(settings{Version: version}); err != nil {
-				return &current.settings, err
+			mode := desired.Mode
+			if mode == "" && current.Mode != "" {
+				// A native-only override needs a deletable RESTCONF entry. Passive
+				// mode also clears the native disable flag without sending queries.
+				mode = "passive"
+			}
+			if mode != "" {
+				if err := patch(settings{Mode: mode}); err != nil {
+					return &current.settings, err
+				}
+			}
+			if desired.Mode == "" && current.Mode != "" {
+				if err := write(http.MethodDelete, leaf, nil); err != nil {
+					return &current.settings, err
+				}
 			}
 		}
-		if desired.Version == 0 && current.Version != 0 {
+		if current.Version != desired.Version {
+			leaf := path.Join(endpoint, "version")
 			if err := write(http.MethodDelete, leaf, nil); err != nil {
 				return &current.settings, err
 			}
+			version := desired.Version
+			if version == 0 {
+				version = current.Version
+			}
+			if version != 0 {
+				if err := patch(settings{Version: version}); err != nil {
+					return &current.settings, err
+				}
+			}
+			if desired.Version == 0 && current.Version != 0 {
+				if err := write(http.MethodDelete, leaf, nil); err != nil {
+					return &current.settings, err
+				}
+			}
 		}
-	}
-	if current.settings != desired {
-		return &current.settings, errors.New("native IGMP overrides did not converge")
-	}
-	return &current.settings, device.Persist(ctx)
+		if current.settings != desired {
+			return &current.settings, errors.New("native IGMP overrides did not converge")
+		}
+		return &current.settings, nil
+	})
 }

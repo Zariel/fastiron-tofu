@@ -55,7 +55,7 @@ func Read(ctx context.Context, d *fastiron.Device, id int64) (Config, error) {
 	var response struct {
 		VLANs []vlanEntry `json:"openconfig-network-instance:vlan"`
 	}
-	err := d.DoREST(ctx, http.MethodGet, path.Join(vlanPath, "vlan="+strconv.FormatInt(id, 10)), nil, &response)
+	err := d.ReadREST(ctx, path.Join(vlanPath, "vlan="+strconv.FormatInt(id, 10)), &response)
 	if errors.Is(err, restconf.ErrNotFound) {
 		// A missing item URL is also how unsupported endpoints can respond. Only
 		// a readable parent collection establishes that this identity is absent.
@@ -64,7 +64,7 @@ func Read(ctx context.Context, d *fastiron.Device, id int64) (Config, error) {
 				VLAN []vlanEntry `json:"vlan"`
 			} `json:"openconfig-network-instance:vlans"`
 		}
-		if err := d.DoREST(ctx, http.MethodGet, vlanPath, nil, &collection); err != nil {
+		if err := d.ReadREST(ctx, vlanPath, &collection); err != nil {
 			return Config{}, err
 		}
 		if collection.VLANs == nil {
@@ -111,81 +111,69 @@ func apply(ctx context.Context, d *fastiron.Device, v Config) (*Config, error) {
 	if err := Validate(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err = d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	// The global default may have changed since planning. Its implicit VLAN
-	// and membership belong to a different configuration domain.
-	if err := rejectDefault(ctx, d, v.ID); err != nil {
-		return nil, err
-	}
-	current, err := Read(ctx, d, v.ID)
-	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
-		return nil, err
-	}
-	absent := errors.Is(err, fastiron.ErrNotFound)
-	if absent || current != v {
-		entry := vlanEntry{ID: v.ID}
-		entry.Config.ID = v.ID
-		entry.Config.Name = v.Name
-		method := http.MethodPatch
-		var body any = map[string]any{"vlans": map[string]any{"vlan": []vlanEntry{entry}}}
-		if absent {
-			method = http.MethodPost
-			body = map[string]any{"vlan": []vlanEntry{entry}}
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*Config, error) {
+		// The global default may have changed since planning. Its implicit VLAN
+		// and membership belong to a different configuration domain.
+		if err := rejectDefault(ctx, d, v.ID); err != nil {
+			return nil, err
 		}
-		writeErr := d.DoREST(ctx, method, vlanPath, body, nil)
-		// Read after every attempted write, including ambiguous transport failures.
-		observed, readErr := Read(ctx, d, v.ID)
-		if readErr != nil {
-			return nil, errors.Join(writeErr, fmt.Errorf("cannot verify VLAN after write: %w", readErr))
+		current, err := Read(ctx, d, v.ID)
+		if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
+			return nil, err
 		}
-		if observed != v {
-			return &observed, errors.Join(writeErr, errors.New("VLAN did not converge to the planned name"))
+		absent := errors.Is(err, fastiron.ErrNotFound)
+		if absent || current != v {
+			entry := vlanEntry{ID: v.ID}
+			entry.Config.ID = v.ID
+			entry.Config.Name = v.Name
+			method := http.MethodPatch
+			var body any = map[string]any{"vlans": map[string]any{"vlan": []vlanEntry{entry}}}
+			if absent {
+				method = http.MethodPost
+				body = map[string]any{"vlan": []vlanEntry{entry}}
+			}
+			writeErr := update.REST(method, vlanPath, body)
+			// Read after every attempted write, including ambiguous transport failures.
+			observed, readErr := Read(ctx, d, v.ID)
+			if readErr != nil {
+				return nil, errors.Join(writeErr, fmt.Errorf("cannot verify VLAN after write: %w", readErr))
+			}
+			if observed != v {
+				return &observed, errors.Join(writeErr, errors.New("VLAN did not converge to the planned name"))
+			}
+			current = observed
 		}
-		current = observed
-	}
-	// A retry must save even if running state already matches after a failed save.
-	return &current, d.Persist(ctx)
+		// A retry must save even if running state already matches after a failed save.
+		return &current, nil
+	})
 }
 
 func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 	if err := Validate(Config{ID: id}); err != nil {
 		return err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	if _, err = d.Discover(ctx); err != nil {
-		return err
-	}
-	_, err = Read(ctx, d, id)
-	if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
-		return err
-	}
-	if err == nil {
-		// Deleting a parent VLAN must not silently erase separately owned children.
-		out, err := d.RunningConfig(ctx)
-		if err != nil {
+	return d.Update(ctx, func(update *fastiron.Update) error {
+		_, err := Read(ctx, d, id)
+		if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
 			return err
 		}
-		if err := vlanChildren(out, id); err != nil {
-			return err
+		if err == nil {
+			// Deleting a parent VLAN must not silently erase separately owned children.
+			out, err := d.RunningConfig(ctx)
+			if err != nil {
+				return err
+			}
+			if err := vlanChildren(out, id); err != nil {
+				return err
+			}
+			writeErr := update.REST(http.MethodDelete, path.Join(vlanPath, "vlan="+strconv.FormatInt(id, 10)), nil)
+			_, readErr := Read(ctx, d, id)
+			if !errors.Is(readErr, fastiron.ErrNotFound) {
+				return errors.Join(writeErr, readErr, errors.New("VLAN absence could not be verified"))
+			}
 		}
-		writeErr := d.DoREST(ctx, http.MethodDelete, path.Join(vlanPath, "vlan="+strconv.FormatInt(id, 10)), nil, nil)
-		_, readErr := Read(ctx, d, id)
-		if !errors.Is(readErr, fastiron.ErrNotFound) {
-			return errors.Join(writeErr, readErr, errors.New("VLAN absence could not be verified"))
-		}
-	}
-	return d.Persist(ctx)
+		return nil
+	})
 }
 
 func vlanChildren(config string, id int64) error {

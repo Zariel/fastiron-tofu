@@ -57,17 +57,17 @@ func TestHostLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	release, err := a.Lock(context.Background())
+	release, err := a.lock(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	if _, err = b.Lock(ctx); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err = b.lock(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("lock: %v", err)
 	}
 	release()
-	release, err = b.Lock(context.Background())
+	release, err = b.lock(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

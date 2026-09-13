@@ -3,7 +3,6 @@ package aaa
 import (
 	"context"
 	"errors"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -49,7 +48,7 @@ func readServers(ctx context.Context, d *fastiron.Device) ([]server, error) {
 			} `json:"server-group"`
 		} `json:"openconfig-system:server-groups"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/system/aaa/server-groups", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/system/aaa/server-groups", &response); err != nil {
 		return nil, err
 	}
 	if response.Groups == nil {

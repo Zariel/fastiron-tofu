@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"net/netip"
 	"path"
 	"slices"
@@ -86,7 +85,7 @@ func configuredAreas(ctx context.Context, d *fastiron.Device) ([]area, error) {
 			} `json:"area"`
 		} `json:"openconfig-network-instance:areas"`
 	}
-	err := d.DoREST(ctx, http.MethodGet, ospfAreasPath, nil, &response)
+	err := d.ReadREST(ctx, ospfAreasPath, &response)
 	if errors.Is(err, restconf.ErrNotFound) {
 		var parent struct {
 			Protocols *struct {
@@ -96,7 +95,7 @@ func configuredAreas(ctx context.Context, d *fastiron.Device) ([]area, error) {
 				} `json:"protocol"`
 			} `json:"openconfig-network-instance:protocols"`
 		}
-		if parentErr := d.DoREST(ctx, http.MethodGet, protocolsPath, nil, &parent); parentErr != nil {
+		if parentErr := d.ReadREST(ctx, protocolsPath, &parent); parentErr != nil {
 			return nil, parentErr
 		}
 		if parent.Protocols == nil {

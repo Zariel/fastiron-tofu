@@ -108,85 +108,79 @@ func applyUser(ctx context.Context, d *fastiron.Device, u account, password stri
 	if present && (len(password) < 1 || len(password) > 48 || strings.IndexFunc(password, unicode.IsControl) >= 0) {
 		return nil, errors.New("user password must contain 1–48 bytes without control characters")
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err = d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	users, err := readUsers(ctx, d)
-	if err != nil {
-		return nil, err
-	}
-	output, err := d.RunningConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	native, neighbors, err := userConfiguration(output, u.Username)
-	if err != nil {
-		return nil, err
-	}
-	var current *account
-	for _, user := range users {
-		if user.Username == u.Username {
-			current = &user
-		}
-	}
-	if (current == nil) != (native == nil) || current != nil && *current != native.user {
-		return current, errors.New("native and RESTCONF user configuration disagree; retry after synchronization")
-	}
-	if present || current != nil {
-		document, err := nativeconfig.Parse(output)
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*account, error) {
+		users, err := readUsers(ctx, d)
 		if err != nil {
-			return current, err
+			return nil, err
 		}
-		for _, command := range document.Commands {
-			if command.Parent == -1 && command.Text == "service local-user-protection" {
-				return current, errors.New("local-user protection requires an authenticated user-update operation not currently supported")
-			}
+		output, err := d.RunningConfig(ctx)
+		if err != nil {
+			return nil, err
 		}
-		endpoint := "/system/aaa/authentication/users"
-		method := http.MethodDelete
-		var body any
-		if present {
-			method = http.MethodPatch
-			// Keep password and privilege in one complete native user update. Never
-			// replay the password hash returned by discovery as a plaintext password.
-			body = map[string]any{"users": map[string]any{"user": []any{map[string]any{"username": u.Username, "config": map[string]any{"username": u.Username, "password": password, "icx-openconfig-aaa-aug:privilege": u.Privilege}}}}}
-		} else {
-			endpoint = path.Join(endpoint, "user="+url.PathEscape(u.Username))
+		native, neighbors, err := userConfiguration(output, u.Username)
+		if err != nil {
+			return nil, err
 		}
-		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
-		observed, readErr := readUsers(ctx, d)
-		if readErr != nil {
-			return current, errors.Join(writeErr, readErr)
-		}
-		current = nil
-		for _, user := range observed {
+		var current *account
+		for _, user := range users {
 			if user.Username == u.Username {
 				current = &user
 			}
 		}
-		output, nativeErr := d.RunningConfig(ctx)
-		if nativeErr != nil {
-			return current, errors.Join(writeErr, nativeErr)
+		if (current == nil) != (native == nil) || current != nil && *current != native.user {
+			return current, errors.New("native and RESTCONF user configuration disagree; retry after synchronization")
 		}
-		native, after, parseErr := userConfiguration(output, u.Username)
-		if parseErr != nil {
-			return current, errors.Join(writeErr, parseErr)
+		if present || current != nil {
+			document, err := nativeconfig.Parse(output)
+			if err != nil {
+				return current, err
+			}
+			for _, command := range document.Commands {
+				if command.Parent == -1 && command.Text == "service local-user-protection" {
+					return current, errors.New("local-user protection requires an authenticated user-update operation not currently supported")
+				}
+			}
+			endpoint := "/system/aaa/authentication/users"
+			method := http.MethodDelete
+			var body any
+			if present {
+				method = http.MethodPatch
+				// Keep password and privilege in one complete native user update. Never
+				// replay the password hash returned by discovery as a plaintext password.
+				body = map[string]any{"users": map[string]any{"user": []any{map[string]any{"username": u.Username, "config": map[string]any{"username": u.Username, "password": password, "icx-openconfig-aaa-aug:privilege": u.Privilege}}}}}
+			} else {
+				endpoint = path.Join(endpoint, "user="+url.PathEscape(u.Username))
+			}
+			writeErr := update.REST(method, endpoint, body)
+			observed, readErr := readUsers(ctx, d)
+			if readErr != nil {
+				return current, errors.Join(writeErr, readErr)
+			}
+			current = nil
+			for _, user := range observed {
+				if user.Username == u.Username {
+					current = &user
+				}
+			}
+			output, nativeErr := d.RunningConfig(ctx)
+			if nativeErr != nil {
+				return current, errors.Join(writeErr, nativeErr)
+			}
+			native, after, parseErr := userConfiguration(output, u.Username)
+			if parseErr != nil {
+				return current, errors.Join(writeErr, parseErr)
+			}
+			if !slices.Equal(neighbors, after) {
+				return current, errors.Join(writeErr, errors.New("user operation changed unrelated native accounts"))
+			}
+			if present && (current == nil || *current != u || native == nil || native.user != u || !native.hasPassword) || !present && (current != nil || native != nil) {
+				return current, errors.Join(writeErr, errors.New("user configuration did not converge"))
+			}
+			// Account metadata cannot resolve an ambiguous password write failure.
+			if writeErr != nil {
+				return current, writeErr
+			}
 		}
-		if !slices.Equal(neighbors, after) {
-			return current, errors.Join(writeErr, errors.New("user operation changed unrelated native accounts"))
-		}
-		if present && (current == nil || *current != u || native == nil || native.user != u || !native.hasPassword) || !present && (current != nil || native != nil) {
-			return current, errors.Join(writeErr, errors.New("user configuration did not converge"))
-		}
-		// Account metadata cannot resolve an ambiguous password write failure.
-		if writeErr != nil {
-			return current, writeErr
-		}
-	}
-	return current, d.Persist(ctx)
+		return current, nil
+	})
 }

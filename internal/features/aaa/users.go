@@ -3,7 +3,6 @@ package aaa
 import (
 	"context"
 	"errors"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -30,7 +29,7 @@ func readUsers(ctx context.Context, d *fastiron.Device) ([]account, error) {
 			} `json:"user"`
 		} `json:"openconfig-system:users"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/system/aaa/authentication/users", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/system/aaa/authentication/users", &response); err != nil {
 		return nil, err
 	}
 	if response.Users == nil {

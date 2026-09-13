@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"path"
 
@@ -46,7 +45,7 @@ func readMEDCache(ctx context.Context, device *fastiron.Device) ([]medAttachment
 	var response struct {
 		MED json.RawMessage `json:"icx-openconfig-lldp-aug:med"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, "/lldp/med", nil, &response); err != nil {
+	if err := device.ReadREST(ctx, "/lldp/med", &response); err != nil {
 		return nil, err
 	}
 	return decodeMEDCache(response.MED)

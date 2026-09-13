@@ -3,7 +3,6 @@ package vlan
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -98,7 +97,7 @@ func readAll(ctx context.Context, device *fastiron.Device) (map[string]vlanStatu
 			VLAN []vlanEntry `json:"vlan"`
 		} `json:"openconfig-network-instance:vlans"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, vlanPath, nil, &response); err != nil {
+	if err := device.ReadREST(ctx, vlanPath, &response); err != nil {
 		return nil, err
 	}
 	if response.VLANs == nil {

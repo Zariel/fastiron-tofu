@@ -19,7 +19,7 @@ type cachedPort struct {
 	mu             sync.Mutex
 	native, cached config
 	writes         int
-	failPrime      bool
+	failWrite      bool
 }
 
 func (s *cachedPort) handle(t *testing.T, w http.ResponseWriter, r *http.Request) {
@@ -86,10 +86,10 @@ func (s *cachedPort) handle(t *testing.T, w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	if s.failPrime {
-		s.failPrime = false
+	if s.failWrite {
+		s.failWrite = false
 		w.WriteHeader(500)
-		fmt.Fprint(w, "synchronization interrupted")
+		fmt.Fprint(w, "mutation interrupted")
 		return
 	}
 	w.WriteHeader(204)
@@ -99,18 +99,19 @@ func TestCachedConfiguration(t *testing.T) {
 	for _, tc := range []struct {
 		name                    string
 		native, cached, desired config
-		failPrime               bool
+		failWrite, partial      bool
 	}{
 		{name: "description reset", native: config{PortName: "RESTORED"}, cached: config{}, desired: config{}},
 		{name: "admin drift", native: config{PortName: "PHONE"}, cached: config{PortName: "PHONE", Enabled: true}, desired: config{PortName: "PHONE", Enabled: true}},
 		{name: "both fields", native: config{PortName: "RESTORED"}, cached: config{Enabled: true}, desired: config{Enabled: true}},
-		{name: "failed synchronization", native: config{PortName: "RESTORED"}, cached: config{}, desired: config{}, failPrime: true},
+		{name: "failed synchronization", native: config{PortName: "RESTORED"}, cached: config{}, desired: config{}, failWrite: true},
+		{name: "failed mutation", native: config{}, cached: config{}, desired: config{Enabled: true}, failWrite: true, partial: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			native, cached, desired := tc.native, tc.cached, tc.desired
 			native.Port, cached.Port, desired.Port = "1/1/12", "1/1/12", "1/1/12"
 			initial := native
-			sim := &cachedPort{native: native, cached: cached, failPrime: tc.failPrime}
+			sim := &cachedPort{native: native, cached: cached, failWrite: tc.failWrite}
 			server := testswitch.New(t, func(command string) string {
 				switch command {
 				case "skip-page-display":
@@ -133,9 +134,13 @@ func TestCachedConfiguration(t *testing.T) {
 				t.Fatalf("read stale configuration: %+v, %v", current, err)
 			}
 			observed, err := apply(context.Background(), device, desired)
-			if tc.failPrime {
-				if err == nil || observed == nil || *observed != initial {
-					t.Fatalf("failed synchronization lost current state: %v, %v", observed, err)
+			if tc.failWrite {
+				expected := initial
+				if tc.partial {
+					expected = desired
+				}
+				if err == nil || observed == nil || *observed != expected {
+					t.Fatalf("failed mutation lost current state: %v, %v", observed, err)
 				}
 				observed, err = apply(context.Background(), device, desired)
 			}

@@ -3,7 +3,6 @@ package aaa
 import (
 	"context"
 	"errors"
-	"net/http"
 	"slices"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
@@ -38,7 +37,7 @@ func readPolicy(ctx context.Context, d *fastiron.Device) (*policy, error) {
 			} `json:"authorization"`
 		} `json:"openconfig-system:aaa"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/system/aaa", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/system/aaa", &response); err != nil {
 		return nil, err
 	}
 	if response.AAA == nil || response.AAA.Authentication == nil || response.AAA.Authorization == nil {

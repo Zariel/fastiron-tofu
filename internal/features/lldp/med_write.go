@@ -30,122 +30,116 @@ func applyMED(ctx context.Context, device *fastiron.Device, name, application st
 			return medWriteResult{}, err
 		}
 	}
-	unlock, err := device.Lock(ctx)
-	if err != nil {
-		return medWriteResult{}, err
-	}
-	defer unlock()
-	if _, err := device.Discover(ctx); err != nil {
-		return medWriteResult{}, err
-	}
-	inventory, err := readRESTInterfaces(ctx, device)
-	if err != nil {
-		return medWriteResult{}, err
-	}
-	if _, exists := inventory[name]; !exists {
-		return medWriteResult{}, errors.New("LLDP inventory omits the requested MED interface")
-	}
-	cached, err := readMEDCache(ctx, device)
-	if err != nil {
-		return medWriteResult{}, err
-	}
-	before, unowned, err := readMEDNative(ctx, device)
-	if err != nil {
-		return medWriteResult{}, err
-	}
-	current := medWriteResult{verified: true}
-	if p, exists := before[name][application]; exists {
-		current.policy = &p
-	}
-	if desired != nil && current.policy != nil && *desired == *current.policy {
-		return current, device.Persist(ctx)
-	}
-	others := withoutMED(before, name, application)
-
-	// The lock covers every native observation through persistence. A mutation's
-	// HTTP result alone cannot prove convergence or preservation on FastIron.
-	mutate := func(method, path string, body any) error {
-		current.attempted = true
-		writeErr := device.DoREST(ctx, method, path, body, nil)
-		after, remaining, readErr := readMEDNative(ctx, device)
-		if readErr != nil {
-			current.verified = false
-			return errors.Join(writeErr, readErr)
+	return fastiron.Reconcile(ctx, device, func(update *fastiron.Update) (medWriteResult, error) {
+		inventory, err := readRESTInterfaces(ctx, device)
+		if err != nil {
+			return medWriteResult{}, err
 		}
-		current = medWriteResult{verified: true, attempted: true}
-		if p, exists := after[name][application]; exists {
+		if _, exists := inventory[name]; !exists {
+			return medWriteResult{}, errors.New("LLDP inventory omits the requested MED interface")
+		}
+		cached, err := readMEDCache(ctx, device)
+		if err != nil {
+			return medWriteResult{}, err
+		}
+		before, unowned, err := readMEDNative(ctx, device)
+		if err != nil {
+			return medWriteResult{}, err
+		}
+		current := medWriteResult{verified: true}
+		if p, exists := before[name][application]; exists {
 			current.policy = &p
 		}
-		if !slices.Equal(unowned, remaining) || !reflect.DeepEqual(others, withoutMED(after, name, application)) {
-			return errors.Join(writeErr, errors.New("MED mutation changed unrelated configuration"))
+		if desired != nil && current.policy != nil && *desired == *current.policy {
+			return current, nil
 		}
-		return writeErr
-	}
-	targets := medTargets(cached, name, application)
-	if len(targets) == 0 && current.policy != nil {
-		native := *current.policy
-		if err := mutate(http.MethodPatch, "/lldp/med", medPayload(name, application, native)); err != nil {
-			return current, err
-		}
-		if current.policy == nil || *current.policy != native {
-			return current, errors.New("MED cache synchronization changed native policy")
-		}
-		cached, err = readMEDCache(ctx, device)
-		if err != nil {
-			return current, err
-		}
-		targets = medTargets(cached, name, application)
-		if len(targets) == 0 {
-			return current, errors.New("MED cache synchronization did not create a port attachment")
-		}
-	}
-	// Stale port references can delete the current native policy, regardless of
-	// their cached values. Remove all owned references before creating its successor.
-	for _, attachment := range targets {
-		if !slices.Contains(cached, attachment) {
-			continue
-		}
-		if err := mutate(http.MethodDelete, attachment.path(), nil); err != nil {
-			return current, err
-		}
-		cached, err = readMEDCache(ctx, device)
-		if err != nil {
-			return current, err
-		}
-		if slices.Contains(cached, attachment) {
-			return current, errors.New("MED port deletion did not converge in RESTCONF")
-		}
-	}
-	if current.policy != nil {
-		return current, errors.New("native MED policy remains after removing cached port attachments")
-	}
-	cached, err = readMEDCache(ctx, device)
-	if err != nil {
-		return current, err
-	}
-	if len(medTargets(cached, name, application)) != 0 {
-		return current, errors.New("MED cache still references the owned application and port")
-	}
-	if desired == nil {
-		return current, device.Persist(ctx)
-	}
+		others := withoutMED(before, name, application)
 
-	if err := mutate(http.MethodPatch, "/lldp/med", medPayload(name, application, *desired)); err != nil {
-		return current, err
-	}
-	if current.policy == nil || *current.policy != *desired {
-		return current, errors.New("native MED policy did not converge to the requested tagging and priority values")
-	}
-	cached, err = readMEDCache(ctx, device)
-	if err != nil {
-		return current, err
-	}
-	expected := medAttachment{Interface: name, Application: application, Policy: *desired}
-	targets = medTargets(cached, name, application)
-	if len(targets) != 1 || targets[0] != expected {
-		return current, errors.New("MED cache did not converge to the requested port policy")
-	}
-	return current, device.Persist(ctx)
+		// The lock covers every native observation through persistence. A mutation's
+		// HTTP result alone cannot prove convergence or preservation on FastIron.
+		mutate := func(method, path string, body any) error {
+			current.attempted = true
+			writeErr := update.REST(method, path, body)
+			after, remaining, readErr := readMEDNative(ctx, device)
+			if readErr != nil {
+				current.verified = false
+				return errors.Join(writeErr, readErr)
+			}
+			current = medWriteResult{verified: true, attempted: true}
+			if p, exists := after[name][application]; exists {
+				current.policy = &p
+			}
+			if !slices.Equal(unowned, remaining) || !reflect.DeepEqual(others, withoutMED(after, name, application)) {
+				return errors.Join(writeErr, errors.New("MED mutation changed unrelated configuration"))
+			}
+			return writeErr
+		}
+		targets := medTargets(cached, name, application)
+		if len(targets) == 0 && current.policy != nil {
+			native := *current.policy
+			if err := mutate(http.MethodPatch, "/lldp/med", medPayload(name, application, native)); err != nil {
+				return current, err
+			}
+			if current.policy == nil || *current.policy != native {
+				return current, errors.New("MED cache synchronization changed native policy")
+			}
+			cached, err = readMEDCache(ctx, device)
+			if err != nil {
+				return current, err
+			}
+			targets = medTargets(cached, name, application)
+			if len(targets) == 0 {
+				return current, errors.New("MED cache synchronization did not create a port attachment")
+			}
+		}
+		// Stale port references can delete the current native policy, regardless of
+		// their cached values. Remove all owned references before creating its successor.
+		for _, attachment := range targets {
+			if !slices.Contains(cached, attachment) {
+				continue
+			}
+			if err := mutate(http.MethodDelete, attachment.path(), nil); err != nil {
+				return current, err
+			}
+			cached, err = readMEDCache(ctx, device)
+			if err != nil {
+				return current, err
+			}
+			if slices.Contains(cached, attachment) {
+				return current, errors.New("MED port deletion did not converge in RESTCONF")
+			}
+		}
+		if current.policy != nil {
+			return current, errors.New("native MED policy remains after removing cached port attachments")
+		}
+		cached, err = readMEDCache(ctx, device)
+		if err != nil {
+			return current, err
+		}
+		if len(medTargets(cached, name, application)) != 0 {
+			return current, errors.New("MED cache still references the owned application and port")
+		}
+		if desired == nil {
+			return current, nil
+		}
+
+		if err := mutate(http.MethodPatch, "/lldp/med", medPayload(name, application, *desired)); err != nil {
+			return current, err
+		}
+		if current.policy == nil || *current.policy != *desired {
+			return current, errors.New("native MED policy did not converge to the requested tagging and priority values")
+		}
+		cached, err = readMEDCache(ctx, device)
+		if err != nil {
+			return current, err
+		}
+		expected := medAttachment{Interface: name, Application: application, Policy: *desired}
+		targets = medTargets(cached, name, application)
+		if len(targets) != 1 || targets[0] != expected {
+			return current, errors.New("MED cache did not converge to the requested port policy")
+		}
+		return current, nil
+	})
 }
 
 func validateMEDPolicy(p config.MEDPolicy) error {

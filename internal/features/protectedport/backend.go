@@ -15,7 +15,6 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
-	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 type nativeState struct {
@@ -55,7 +54,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 			Entries []interfaceEntry `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, "/interfaces", nil, &interfaces); err != nil {
+	if err := device.ReadREST(ctx, "/interfaces", &interfaces); err != nil {
 		return nativeState{}, err
 	}
 	if interfaces.Collection == nil || len(interfaces.Collection.Entries) == 0 {
@@ -80,7 +79,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	var response struct {
 		Protected json.RawMessage `json:"icx-openconfig-pp:protectedport"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, "/protectedport", nil, &response); err != nil {
+	if err := device.ReadREST(ctx, "/protectedport", &response); err != nil {
 		return nativeState{}, err
 	}
 	if len(response.Protected) == 0 || string(response.Protected) == "null" {
@@ -111,70 +110,69 @@ func apply(ctx context.Context, device *fastiron.Device, name string, desired bo
 	if err := validateInterface(name); err != nil {
 		return nil, err
 	}
-	unlock, err := device.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	current, err := read(ctx, device, name)
-	if errors.Is(err, fastiron.ErrNotFound) && !desired {
-		// A deleted parent has no remaining protection, but a pending save must finish.
-		return &current.enabled, device.Persist(ctx)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if current.enabled == desired {
-		return &current.enabled, device.Persist(ctx)
-	}
+	return fastiron.Reconcile(ctx, device, func(update *fastiron.Update) (*bool, error) {
+		current, err := read(ctx, device, name)
+		if errors.Is(err, fastiron.ErrNotFound) && !desired {
+			// A deleted parent has no remaining protection, but a pending save must finish.
+			return &current.enabled, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if current.enabled == desired {
+			return &current.enabled, nil
+		}
 
-	before := current
-	leaf := path.Join("/protectedport/interfaces", "interface="+url.PathEscape(name))
-	write := func(method string) error {
-		target := leaf
-		var body any
-		if method == http.MethodPatch {
-			target = "/protectedport"
-			entry := map[string]any{"name": name, "config": map[string]any{"name": name, "protectedport": true}}
-			body = map[string]any{"protectedport": map[string]any{"interfaces": map[string]any{"interface": entry}}}
+		before := current
+		leaf := path.Join("/protectedport/interfaces", "interface="+url.PathEscape(name))
+		write := func(method string) error {
+			target := leaf
+			var body any
+			if method == http.MethodPatch {
+				target = "/protectedport"
+				entry := map[string]any{"name": name, "config": map[string]any{"name": name, "protectedport": true}}
+				body = map[string]any{"protectedport": map[string]any{"interfaces": map[string]any{"interface": entry}}}
+			}
+			var writeErr error
+			if method == http.MethodDelete {
+				writeErr = update.DeleteIfPresent(target)
+			} else {
+				writeErr = update.REST(method, target, body)
+			}
+			configuration, readErr := device.RunningConfig(ctx)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			observed, readErr := parse(configuration, name)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			current = observed
+			// Verify each narrow mutation before saving; never reconstruct unrelated settings.
+			if !slices.Equal(before.unowned, current.unowned) {
+				return errors.Join(writeErr, errors.New("protected-port mutation changed unrelated configuration"))
+			}
+			return writeErr
 		}
-		writeErr := device.DoREST(ctx, method, target, body, nil)
-		configuration, readErr := device.RunningConfig(ctx)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		observed, readErr := parse(configuration, name)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		current = observed
-		// Verify each narrow mutation before saving; never reconstruct unrelated settings.
-		if !slices.Equal(before.unowned, current.unowned) {
-			return errors.Join(writeErr, errors.New("protected-port mutation changed unrelated configuration"))
-		}
-		if method == http.MethodDelete && errors.Is(writeErr, restconf.ErrNotFound) {
-			return nil
-		}
-		return writeErr
-	}
 
-	// LAG callbacks can skip an unchanged cached value after native drift.
-	if err := write(http.MethodDelete); err != nil {
-		return &current.enabled, err
-	}
-	if desired || current.enabled {
-		// Native-only protection needs a RESTCONF entry before it can be deleted.
-		if err := write(http.MethodPatch); err != nil {
-			return &current.enabled, err
-		}
-	}
-	if !desired && current.enabled {
+		// LAG callbacks can skip an unchanged cached value after native drift.
 		if err := write(http.MethodDelete); err != nil {
 			return &current.enabled, err
 		}
-	}
-	if current.enabled != desired {
-		return &current.enabled, errors.New("native protected-port configuration did not converge")
-	}
-	return &current.enabled, device.Persist(ctx)
+		if desired || current.enabled {
+			// Native-only protection needs a RESTCONF entry before it can be deleted.
+			if err := write(http.MethodPatch); err != nil {
+				return &current.enabled, err
+			}
+		}
+		if !desired && current.enabled {
+			if err := write(http.MethodDelete); err != nil {
+				return &current.enabled, err
+			}
+		}
+		if current.enabled != desired {
+			return &current.enabled, errors.New("native protected-port configuration did not converge")
+		}
+		return &current.enabled, nil
+	})
 }

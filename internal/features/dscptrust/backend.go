@@ -46,7 +46,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 			Entries []interfaceEntry `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, "/interfaces", nil, &interfaces); err != nil {
+	if err := device.ReadREST(ctx, "/interfaces", &interfaces); err != nil {
 		return nativeState{}, err
 	}
 	if interfaces.Collection == nil || len(interfaces.Collection.Entries) == 0 {
@@ -75,7 +75,7 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 			} `json:"config"`
 		} `json:"icx-openconfig-if-trust-dscp-aug:trust-dscp"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, endpoint(name), nil, &response); err != nil {
+	if err := device.ReadREST(ctx, endpoint(name), &response); err != nil {
 		return nativeState{}, err
 	}
 	if response.Trust == nil || response.Trust.Config == nil || response.Trust.Config.Enabled == nil {
@@ -98,57 +98,54 @@ func apply(ctx context.Context, device *fastiron.Device, name string, enabled bo
 	if err := validateInterface(name); err != nil {
 		return nil, err
 	}
-	unlock, err := device.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	current, err := read(ctx, device, name)
-	if errors.Is(err, fastiron.ErrNotFound) && !enabled {
-		return new(false), device.Persist(ctx)
-	}
-	if err != nil {
-		return nil, err
-	}
-	// Alignment can require an enable write even when the desired result is disabled.
-	if err := current.validate(current.enabled || enabled); err != nil {
-		return nil, err
-	}
-	if current.enabled == enabled {
-		return &current.enabled, device.Persist(ctx)
-	}
+	return fastiron.Reconcile(ctx, device, func(update *fastiron.Update) (*bool, error) {
+		current, err := read(ctx, device, name)
+		if errors.Is(err, fastiron.ErrNotFound) && !enabled {
+			return new(false), nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		// Alignment can require an enable write even when the desired result is disabled.
+		if err := current.validate(current.enabled || enabled); err != nil {
+			return nil, err
+		}
+		if current.enabled == enabled {
+			return &current.enabled, nil
+		}
 
-	before := current
-	put := func(value bool) error {
-		body := map[string]any{"icx-openconfig-if-trust-dscp-aug:trust-dscp": map[string]any{"config": map[string]bool{"enabled": value}}}
-		writeErr := device.DoREST(ctx, http.MethodPut, endpoint(name), body, nil)
-		configuration, readErr := device.RunningConfig(ctx)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
+		before := current
+		put := func(value bool) error {
+			body := map[string]any{"icx-openconfig-if-trust-dscp-aug:trust-dscp": map[string]any{"config": map[string]bool{"enabled": value}}}
+			writeErr := update.REST(http.MethodPut, endpoint(name), body)
+			configuration, readErr := device.RunningConfig(ctx)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			observed, readErr := parse(configuration, name)
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			current = observed
+			if !slices.Equal(before.unowned, current.unowned) {
+				return errors.Join(writeErr, errors.New("DSCP trust mutation changed unrelated configuration"))
+			}
+			return writeErr
 		}
-		observed, readErr := parse(configuration, name)
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		current = observed
-		if !slices.Equal(before.unowned, current.unowned) {
-			return errors.Join(writeErr, errors.New("DSCP trust mutation changed unrelated configuration"))
-		}
-		return writeErr
-	}
 
-	// Materialize the native value first so stale metadata cannot skip the desired update.
-	if err := put(before.enabled); err != nil {
-		return &current.enabled, err
-	}
-	if current.enabled != before.enabled {
-		return &current.enabled, errors.New("DSCP trust alignment changed native configuration")
-	}
-	if err := put(enabled); err != nil {
-		return &current.enabled, err
-	}
-	if current.enabled != enabled {
-		return &current.enabled, errors.New("native DSCP trust did not converge")
-	}
-	return &current.enabled, device.Persist(ctx)
+		// Materialize the native value first so stale metadata cannot skip the desired update.
+		if err := put(before.enabled); err != nil {
+			return &current.enabled, err
+		}
+		if current.enabled != before.enabled {
+			return &current.enabled, errors.New("DSCP trust alignment changed native configuration")
+		}
+		if err := put(enabled); err != nil {
+			return &current.enabled, err
+		}
+		if current.enabled != enabled {
+			return &current.enabled, errors.New("native DSCP trust did not converge")
+		}
+		return &current.enabled, nil
+	})
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
@@ -28,7 +27,7 @@ func checkIPSequences(ctx context.Context, d *fastiron.Device, family ipFamily, 
 	var response struct {
 		ACLs *collection `json:"openconfig-acl:acl-sets"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, aclPath, nil, &response); err != nil {
+	if err := d.ReadREST(ctx, aclPath, &response); err != nil {
 		return err
 	}
 	if response.ACLs == nil {

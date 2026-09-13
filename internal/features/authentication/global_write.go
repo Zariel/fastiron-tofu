@@ -12,7 +12,6 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/vlan"
-	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func validateGlobal(p globalConfig) error {
@@ -92,113 +91,108 @@ func applyGlobal(ctx context.Context, d *fastiron.Device, desired globalConfig) 
 	if !d.RESTCONFEnabled() {
 		return nil, errors.New("global authentication configuration requires RESTCONF")
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-
-	read := func() (globalConfig, []string, string, error) {
-		output, err := d.RunningConfig(ctx)
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*globalConfig, error) {
+		read := func() (globalConfig, []string, string, error) {
+			output, err := d.RunningConfig(ctx)
+			if err != nil {
+				return globalConfig{}, nil, "", err
+			}
+			output, err = fastiron.NormalizeConfiguration(output)
+			if err != nil {
+				return globalConfig{}, nil, "", err
+			}
+			p, unowned, err := nativeGlobal(output)
+			return p, unowned, output, err
+		}
+		current, unowned, output, err := read()
 		if err != nil {
-			return globalConfig{}, nil, "", err
+			return nil, err
 		}
-		output, err = fastiron.NormalizeConfiguration(output)
+		interfaces, _, err := nativeAuthenticationInterfaces(output)
 		if err != nil {
-			return globalConfig{}, nil, "", err
-		}
-		p, unowned, err := nativeGlobal(output)
-		return p, unowned, output, err
-	}
-	current, unowned, output, err := read()
-	if err != nil {
-		return nil, err
-	}
-	interfaces, _, err := nativeAuthenticationInterfaces(output)
-	if err != nil {
-		return &current, err
-	}
-	for name, p := range interfaces {
-		if current.Dot1XEnabled && !desired.Dot1XEnabled && p.Dot1XEnabled || current.MACEnabled && !desired.MACEnabled && p.MACEnabled {
-			return &current, fmt.Errorf("disable authentication on %s before disabling its global feature", name)
-		}
-	}
-	if current.FailureAction != "" && current.FailureAction != "restricted-vlan" {
-		return &current, errors.New("global failure action has unsupported voice VLAN settings")
-	}
-	if strings.Contains(current.TimeoutAction, " ") {
-		return &current, errors.New("global timeout action has unsupported voice VLAN settings")
-	}
-	for _, id := range []int64{desired.DefaultVLAN, desired.RestrictedVLAN, desired.CriticalVLAN, desired.VoiceVLAN} {
-		if id == 0 {
-			continue
-		}
-		if _, err := vlan.Read(ctx, d, id); err != nil {
-			return &current, fmt.Errorf("authentication VLAN %d must exist: %w", id, err)
-		}
-	}
-	values, wanted := globalValues(current), globalValues(desired)
-	write := func(key string, value any) error {
-		method, endpoint, body := globalRequest(key, value)
-		writeErr := d.DoREST(ctx, method, endpoint, body, nil)
-		if method == http.MethodDelete && errors.Is(writeErr, restconf.ErrNotFound) {
-			writeErr = nil
-		}
-		expected := maps.Clone(values)
-		expected[key] = value
-		observed, neighbors, _, readErr := read()
-		if readErr != nil {
-			return errors.Join(writeErr, readErr)
-		}
-		current = observed
-		values = globalValues(current)
-		if !slices.Equal(unowned, neighbors) {
-			return errors.Join(writeErr, errors.New("global authentication operation changed unrelated native configuration"))
-		}
-		if !maps.Equal(values, expected) {
-			return errors.Join(writeErr, fmt.Errorf("global authentication did not converge at %s", endpoint))
-		}
-		if writeErr != nil {
-			return fmt.Errorf("global authentication %s %s: %w", method, endpoint, writeErr)
-		}
-		return nil
-	}
-	// Clear changed actions before removing their VLAN prerequisites. Reapply
-	// desired actions after other settings, including retries after partial failure.
-	for _, key := range []string{"fail-action", "timeout-action"} {
-		if values[key] == "" || values[key] == wanted[key] {
-			continue
-		}
-		if err := write(key, ""); err != nil {
 			return &current, err
 		}
-	}
-	for _, key := range []string{"mac-authentication/dot1x-disable", "mac-authentication/dot1x-override", "dot1x/enable", "mac-authentication/enable"} {
-		if values[key] == wanted[key] || wanted[key] != false {
-			continue
+		for name, p := range interfaces {
+			if current.Dot1XEnabled && !desired.Dot1XEnabled && p.Dot1XEnabled || current.MACEnabled && !desired.MACEnabled && p.MACEnabled {
+				return &current, fmt.Errorf("disable authentication on %s before disabling its global feature", name)
+			}
 		}
-		if err := write(key, false); err != nil {
-			return &current, err
+		if current.FailureAction != "" && current.FailureAction != "restricted-vlan" {
+			return &current, errors.New("global failure action has unsupported voice VLAN settings")
 		}
-	}
-	for _, key := range []string{"auth-default-vlan", "restricted-vlan", "critical-vlan", "voice-vlan", "max-sessions", "re-authentication", "auth-order", "dot1x/enable", "mac-authentication/enable", "mac-authentication/dot1x-disable", "mac-authentication/dot1x-override"} {
-		if values[key] == wanted[key] {
-			continue
+		if strings.Contains(current.TimeoutAction, " ") {
+			return &current, errors.New("global timeout action has unsupported voice VLAN settings")
 		}
-		if err := write(key, wanted[key]); err != nil {
-			return &current, err
+		for _, id := range []int64{desired.DefaultVLAN, desired.RestrictedVLAN, desired.CriticalVLAN, desired.VoiceVLAN} {
+			if id == 0 {
+				continue
+			}
+			if _, err := vlan.Read(ctx, d, id); err != nil {
+				return &current, fmt.Errorf("authentication VLAN %d must exist: %w", id, err)
+			}
 		}
-	}
-	for _, key := range []string{"fail-action", "timeout-action"} {
-		if wanted[key] == "" {
-			continue
+		values, wanted := globalValues(current), globalValues(desired)
+		write := func(key string, value any) error {
+			method, endpoint, body := globalRequest(key, value)
+			var writeErr error
+			if method == http.MethodDelete {
+				writeErr = update.DeleteIfPresent(endpoint)
+			} else {
+				writeErr = update.REST(method, endpoint, body)
+			}
+			expected := maps.Clone(values)
+			expected[key] = value
+			observed, neighbors, _, readErr := read()
+			if readErr != nil {
+				return errors.Join(writeErr, readErr)
+			}
+			current = observed
+			values = globalValues(current)
+			if !slices.Equal(unowned, neighbors) {
+				return errors.Join(writeErr, errors.New("global authentication operation changed unrelated native configuration"))
+			}
+			if !maps.Equal(values, expected) {
+				return errors.Join(writeErr, fmt.Errorf("global authentication did not converge at %s", endpoint))
+			}
+			if writeErr != nil {
+				return fmt.Errorf("global authentication %s %s: %w", method, endpoint, writeErr)
+			}
+			return nil
 		}
-		if err := write(key, wanted[key]); err != nil {
-			return &current, err
+		// Clear changed actions before removing their VLAN prerequisites. Reapply
+		// desired actions after other settings, including retries after partial failure.
+		for _, key := range []string{"fail-action", "timeout-action"} {
+			if values[key] == "" || values[key] == wanted[key] {
+				continue
+			}
+			if err := write(key, ""); err != nil {
+				return &current, err
+			}
 		}
-	}
-	return &current, d.Persist(ctx)
+		for _, key := range []string{"mac-authentication/dot1x-disable", "mac-authentication/dot1x-override", "dot1x/enable", "mac-authentication/enable"} {
+			if values[key] == wanted[key] || wanted[key] != false {
+				continue
+			}
+			if err := write(key, false); err != nil {
+				return &current, err
+			}
+		}
+		for _, key := range []string{"auth-default-vlan", "restricted-vlan", "critical-vlan", "voice-vlan", "max-sessions", "re-authentication", "auth-order", "dot1x/enable", "mac-authentication/enable", "mac-authentication/dot1x-disable", "mac-authentication/dot1x-override"} {
+			if values[key] == wanted[key] {
+				continue
+			}
+			if err := write(key, wanted[key]); err != nil {
+				return &current, err
+			}
+		}
+		for _, key := range []string{"fail-action", "timeout-action"} {
+			if wanted[key] == "" {
+				continue
+			}
+			if err := write(key, wanted[key]); err != nil {
+				return &current, err
+			}
+		}
+		return &current, nil
+	})
 }

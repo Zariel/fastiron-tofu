@@ -3,7 +3,6 @@ package igmp
 import (
 	"context"
 	"errors"
-	"net/http"
 
 	"github.com/zariel/fastiron-tofu/internal/config"
 
@@ -33,7 +32,7 @@ func readGlobal(ctx context.Context, device *fastiron.Device) (nativeState, erro
 			} `json:"igmp"`
 		} `json:"icx-igmp-mld-snooping:global"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, globalPath, nil, &response); err != nil {
+	if err := device.ReadREST(ctx, globalPath, &response); err != nil {
 		return nativeState{}, err
 	}
 	if response.Global == nil || response.Global.IGMP == nil {

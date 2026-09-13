@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,7 +67,7 @@ func readCollection(ctx context.Context, d *fastiron.Device) ([]config, error) {
 			} `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/interfaces", &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {

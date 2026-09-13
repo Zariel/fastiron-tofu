@@ -42,7 +42,7 @@ func readRESTEnabled(ctx context.Context, d *fastiron.Device, name string) (bool
 		var response struct {
 			Config *lldpConfig `json:"openconfig-lldp:config"`
 		}
-		if err := d.DoREST(ctx, http.MethodGet, "/lldp/config", nil, &response); err != nil {
+		if err := d.ReadREST(ctx, "/lldp/config", &response); err != nil {
 			return false, err
 		}
 		config = response.Config
@@ -53,7 +53,7 @@ func readRESTEnabled(ctx context.Context, d *fastiron.Device, name string) (bool
 				Config *lldpConfig `json:"config"`
 			} `json:"openconfig-lldp:interface"`
 		}
-		if err := d.DoREST(ctx, http.MethodGet, path.Join("/lldp/interfaces", "interface="+url.PathEscape(name)), nil, &response); err != nil {
+		if err := d.ReadREST(ctx, path.Join("/lldp/interfaces", "interface="+url.PathEscape(name)), &response); err != nil {
 			return false, err
 		}
 		if len(response.Interfaces) != 1 || response.Interfaces[0].Name != name {
@@ -95,75 +95,69 @@ func readEnabled(ctx context.Context, device *fastiron.Device, name string) (boo
 }
 
 func applyEnabled(ctx context.Context, d *fastiron.Device, name string, enabled bool) (*bool, error) {
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	if name == "" {
-		return applyGlobal(ctx, d, enabled)
-	}
-	cached, err := readRESTEnabled(ctx, d, name)
-	if err != nil {
-		return nil, err
-	}
-	before, unowned, err := readPortModes(ctx, d)
-	if err != nil {
-		return nil, err
-	}
-	mode, exists := before[name]
-	if !exists {
-		return nil, errors.New("LLDP inventory omits the requested interface")
-	}
-	current := mode.Receive || mode.Transmit
-	if current == enabled {
-		return &current, d.Persist(ctx)
-	}
-	targets := []bool{enabled}
-	if cached != current {
-		// FastIron skips a native update when the requested value is cached.
-		// Priming true enables both directions on the owned port, even when
-		// only one direction was enabled; verify it before the desired write.
-		targets = []bool{current, enabled}
-	}
-	delete(before, name)
-	for _, target := range targets {
-		body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": target}}}}}
-		writeErr := d.DoREST(ctx, http.MethodPatch, "/lldp/interfaces", body, nil)
-		after, remaining, readErr := readPortModes(ctx, d)
-		if readErr != nil {
-			return nil, errors.Join(writeErr, readErr)
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*bool, error) {
+		if name == "" {
+			return applyGlobal(ctx, d, update, enabled)
 		}
-		mode, exists := after[name]
-		if !exists {
-			return nil, errors.Join(writeErr, errors.New("LLDP inventory omits the requested interface after mutation"))
-		}
-		observed := mode.Receive || mode.Transmit
-		delete(after, name)
-		// Native range regrouping is allowed; other ports' directional state
-		// and independently owned commands must survive before saving.
-		if !maps.Equal(before, after) || !slices.Equal(unowned, remaining) {
-			return &observed, errors.Join(writeErr, errors.New("LLDP port mutation changed unrelated configuration"))
-		}
-		if observed != target {
-			return &observed, errors.Join(writeErr, errors.New("LLDP configuration did not converge"))
-		}
-		if writeErr != nil {
-			return &observed, writeErr
-		}
-		current = observed
-		cached, err = readRESTEnabled(ctx, d, name)
+		cached, err := readRESTEnabled(ctx, d, name)
 		if err != nil {
-			return &current, err
+			return nil, err
 		}
+		before, unowned, err := readPortModes(ctx, d)
+		if err != nil {
+			return nil, err
+		}
+		mode, exists := before[name]
+		if !exists {
+			return nil, errors.New("LLDP inventory omits the requested interface")
+		}
+		current := mode.Receive || mode.Transmit
+		if current == enabled {
+			return &current, nil
+		}
+		targets := []bool{enabled}
 		if cached != current {
-			return &current, errors.New("RESTCONF LLDP port configuration did not converge")
+			// FastIron skips a native update when the requested value is cached.
+			// Priming true enables both directions on the owned port, even when
+			// only one direction was enabled; verify it before the desired write.
+			targets = []bool{current, enabled}
 		}
-	}
-	return &current, d.Persist(ctx)
+		delete(before, name)
+		for _, target := range targets {
+			body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{"name": name, "enabled": target}}}}}
+			writeErr := update.REST(http.MethodPatch, "/lldp/interfaces", body)
+			after, remaining, readErr := readPortModes(ctx, d)
+			if readErr != nil {
+				return nil, errors.Join(writeErr, readErr)
+			}
+			mode, exists := after[name]
+			if !exists {
+				return nil, errors.Join(writeErr, errors.New("LLDP inventory omits the requested interface after mutation"))
+			}
+			observed := mode.Receive || mode.Transmit
+			delete(after, name)
+			// Native range regrouping is allowed; other ports' directional state
+			// and independently owned commands must survive before saving.
+			if !maps.Equal(before, after) || !slices.Equal(unowned, remaining) {
+				return &observed, errors.Join(writeErr, errors.New("LLDP port mutation changed unrelated configuration"))
+			}
+			if observed != target {
+				return &observed, errors.Join(writeErr, errors.New("LLDP configuration did not converge"))
+			}
+			if writeErr != nil {
+				return &observed, writeErr
+			}
+			current = observed
+			cached, err = readRESTEnabled(ctx, d, name)
+			if err != nil {
+				return &current, err
+			}
+			if cached != current {
+				return &current, errors.New("RESTCONF LLDP port configuration did not converge")
+			}
+		}
+		return &current, nil
+	})
 }
 
 func readRESTInterfaces(ctx context.Context, d *fastiron.Device) (map[string]bool, error) {
@@ -178,7 +172,7 @@ func readRESTInterfaces(ctx context.Context, d *fastiron.Device) (map[string]boo
 			} `json:"interface"`
 		} `json:"openconfig-lldp:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/lldp/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/lldp/interfaces", &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"path"
 	"slices"
@@ -203,7 +202,7 @@ func restAccessGroup(ctx context.Context, d *fastiron.Device, k accessGroupKey) 
 			Interface []bindingInterface `json:"interface"`
 		} `json:"openconfig-acl:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/acl/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/acl/interfaces", &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {
@@ -277,7 +276,7 @@ func checkAccessGroupInterface(ctx context.Context, d *fastiron.Device, k access
 			Interface []entry `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/interfaces", &response); err != nil {
 		return err
 	}
 	if response.Interfaces == nil || len(response.Interfaces.Interface) == 0 {

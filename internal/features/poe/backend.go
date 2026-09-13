@@ -64,7 +64,7 @@ func readPort(ctx context.Context, d *fastiron.Device, name string) (port, error
 	var response struct {
 		PoE *entry `json:"icx-openconfig-if-poe-aug:poe"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), nil, &response); err != nil {
+	if err := d.ReadREST(ctx, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), &response); err != nil {
 		return port{}, err
 	}
 	if response.PoE == nil {
@@ -87,7 +87,7 @@ func readPorts(ctx context.Context, d *fastiron.Device) ([]port, error) {
 			} `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/interfaces", &response); err != nil {
 		return nil, err
 	}
 	if response.Interfaces == nil {
@@ -114,32 +114,26 @@ func readPorts(ctx context.Context, d *fastiron.Device) ([]port, error) {
 }
 
 func applyPort(ctx context.Context, d *fastiron.Device, name string, enabled bool) (*port, error) {
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err := d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	current, err := readPort(ctx, d, name)
-	if err != nil {
-		return nil, err
-	}
-	if current.Enabled != enabled {
-		body := map[string]any{"poe": map[string]any{"config": map[string]any{"enabled": enabled}}}
-		writeErr := d.DoREST(ctx, http.MethodPatch, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), body, nil)
-		observed, readErr := readPort(ctx, d, name)
-		if readErr != nil {
-			return nil, errors.Join(writeErr, readErr)
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*port, error) {
+		current, err := readPort(ctx, d, name)
+		if err != nil {
+			return nil, err
 		}
-		if observed.Enabled != enabled {
-			return &observed, errors.Join(writeErr, errors.New("PoE configuration did not converge"))
+		if current.Enabled != enabled {
+			body := map[string]any{"poe": map[string]any{"config": map[string]any{"enabled": enabled}}}
+			writeErr := update.REST(http.MethodPatch, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), body)
+			observed, readErr := readPort(ctx, d, name)
+			if readErr != nil {
+				return nil, errors.Join(writeErr, readErr)
+			}
+			if observed.Enabled != enabled {
+				return &observed, errors.Join(writeErr, errors.New("PoE configuration did not converge"))
+			}
+			if writeErr != nil {
+				return &observed, writeErr
+			}
+			current = observed
 		}
-		if writeErr != nil {
-			return &observed, writeErr
-		}
-		current = observed
-	}
-	return &current, d.Persist(ctx)
+		return &current, nil
+	})
 }

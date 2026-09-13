@@ -51,7 +51,7 @@ func readEntry(ctx context.Context, d *fastiron.Device, port string) (portEntry,
 			Interface []portEntry `json:"interface"`
 		} `json:"openconfig-interfaces:interfaces"`
 	}
-	if err := d.DoREST(ctx, http.MethodGet, "/interfaces", nil, &response); err != nil {
+	if err := d.ReadREST(ctx, "/interfaces", &response); err != nil {
 		return portEntry{}, err
 	}
 	if response.Interfaces == nil || len(response.Interfaces.Interface) == 0 {
@@ -110,68 +110,62 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 	if err := validate(v); err != nil {
 		return nil, err
 	}
-	unlock, err := d.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	if _, err = d.Discover(ctx); err != nil {
-		return nil, err
-	}
-	entry, err := readEntry(ctx, d, v.Port)
-	if err != nil {
-		return nil, err
-	}
-	current, err := entry.current(v.Port)
-	if err != nil {
-		return nil, err
-	}
-	values, prime := map[string]any{}, map[string]any{}
-	if current.PortName != v.PortName {
-		values["description"] = v.PortName
-		if entry.Config.Description != nil && *entry.Config.Description == v.PortName {
-			prime["description"] = current.PortName
+	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*config, error) {
+		entry, err := readEntry(ctx, d, v.Port)
+		if err != nil {
+			return nil, err
 		}
-	}
-	if current.Enabled != v.Enabled {
-		values["enabled"] = v.Enabled
-		if entry.Config.Enabled != nil && *entry.Config.Enabled == v.Enabled {
-			prime["enabled"] = current.Enabled
+		current, err := entry.current(v.Port)
+		if err != nil {
+			return nil, err
 		}
-	}
-	if len(prime) != 0 {
-		// Align cached fields with existing native values before requesting a cached
-		// desired value. This forces the callback without changing native settings first.
-		before := current
-		observed, writeErr := patch(ctx, d, v.Port, prime)
-		if observed == nil {
-			return nil, writeErr
+		values, prime := map[string]any{}, map[string]any{}
+		if current.PortName != v.PortName {
+			values["description"] = v.PortName
+			if entry.Config.Description != nil && *entry.Config.Description == v.PortName {
+				prime["description"] = current.PortName
+			}
 		}
-		current = *observed
-		if writeErr != nil {
-			return &current, writeErr
+		if current.Enabled != v.Enabled {
+			values["enabled"] = v.Enabled
+			if entry.Config.Enabled != nil && *entry.Config.Enabled == v.Enabled {
+				prime["enabled"] = current.Enabled
+			}
 		}
-		if current != before {
-			return &current, errors.New("Ethernet cache synchronization changed native configuration")
+		if len(prime) != 0 {
+			// Align cached fields with existing native values before requesting a cached
+			// desired value. This forces the callback without changing native settings first.
+			before := current
+			observed, writeErr := patch(ctx, d, update, v.Port, prime)
+			if observed == nil {
+				return nil, writeErr
+			}
+			current = *observed
+			if writeErr != nil {
+				return &current, writeErr
+			}
+			if current != before {
+				return &current, errors.New("Ethernet cache synchronization changed native configuration")
+			}
 		}
-	}
-	if len(values) != 0 {
-		observed, writeErr := patch(ctx, d, v.Port, values)
-		if observed == nil {
-			return nil, writeErr
+		if len(values) != 0 {
+			observed, writeErr := patch(ctx, d, update, v.Port, values)
+			if observed == nil {
+				return nil, writeErr
+			}
+			current = *observed
+			if current != v {
+				return &current, errors.Join(writeErr, errors.New("Ethernet configuration did not converge"))
+			}
 		}
-		current = *observed
-		if current != v {
-			return &current, errors.Join(writeErr, errors.New("Ethernet configuration did not converge"))
-		}
-	}
-	return &current, d.Persist(ctx)
+		return &current, nil
+	})
 }
 
-func patch(ctx context.Context, d *fastiron.Device, port string, values map[string]any) (*config, error) {
+func patch(ctx context.Context, d *fastiron.Device, update *fastiron.Update, port string, values map[string]any) (*config, error) {
 	values["name"], values["type"] = "ethernet "+port, "iana-if-type:ethernetCsmacd"
 	body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": "ethernet " + port, "config": values}}}}
-	writeErr := d.DoREST(ctx, http.MethodPatch, "/interfaces", body, nil)
+	writeErr := update.REST(http.MethodPatch, "/interfaces", body)
 	observed, readErr := read(ctx, d, port)
 	if readErr != nil {
 		return nil, errors.Join(writeErr, readErr)

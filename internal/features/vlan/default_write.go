@@ -14,7 +14,6 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
-	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 type defaultState struct {
@@ -95,7 +94,7 @@ func (state defaultState) preserves(previous defaultState) bool {
 	return slices.Equal(state.properties, previous.properties) && slices.Equal(state.routed, previous.routed) && slices.Equal(state.unowned, previous.unowned)
 }
 
-func cleanDefaultEntries(ctx context.Context, device *fastiron.Device, current defaultState) error {
+func cleanDefaultEntries(ctx context.Context, device *fastiron.Device, update *fastiron.Update, current defaultState) error {
 	inventory, err := readAll(ctx, device)
 	if err != nil {
 		return err
@@ -114,10 +113,7 @@ func cleanDefaultEntries(ctx context.Context, device *fastiron.Device, current d
 		if observed.id != current.id || !observed.preserves(current) {
 			return errors.New("native configuration changed during default VLAN reconciliation; retry")
 		}
-		writeErr := device.DoREST(ctx, http.MethodDelete, path.Join(vlanPath, "vlan="+key), nil, nil)
-		if errors.Is(writeErr, restconf.ErrNotFound) {
-			writeErr = nil
-		}
+		writeErr := update.DeleteIfPresent(path.Join(vlanPath, "vlan="+key))
 		observed, err = readDefault(ctx, device)
 		if err != nil {
 			return errors.Join(writeErr, err)
@@ -146,54 +142,51 @@ func applyDefault(ctx context.Context, device *fastiron.Device, desired int64) (
 	if !device.RESTCONFEnabled() {
 		return nil, errors.New("default VLAN selection requires RESTCONF")
 	}
-	unlock, err := device.Lock(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	current, err := readDefault(ctx, device)
-	if err != nil {
-		return nil, err
-	}
-	if desired != current.id && current.vlans[desired] {
-		return nil, errors.New("default VLAN target is already in use; select an unused VLAN ID")
-	}
-	if err := cleanDefaultEntries(ctx, device, current); err != nil {
-		return &current.id, err
-	}
-	if desired == current.id {
-		return &current.id, device.Persist(ctx)
-	}
-	inventory, err := readAll(ctx, device)
-	if err != nil {
-		return &current.id, err
-	}
-	if _, exists := inventory[strconv.FormatInt(desired, 10)]; exists {
-		return &current.id, errors.New("default VLAN target still exists in RESTCONF; synchronize and retry")
-	}
-	observed, err := readDefault(ctx, device)
-	if err != nil {
-		return &current.id, err
-	}
-	if observed.id != current.id || !observed.preserves(current) {
-		return &observed.id, errors.New("native configuration changed before default VLAN selection; retry")
-	}
-	entry := vlanEntry{ID: desired}
-	entry.Config.ID, entry.Config.Name = desired, "DEFAULT-VLAN"
-	body := map[string]any{"vlans": map[string]any{"vlan": []vlanEntry{entry}}}
-	writeErr := device.DoREST(ctx, http.MethodPatch, vlanPath, body, nil)
-	observed, err = readDefault(ctx, device)
-	if err != nil {
-		return &current.id, errors.Join(writeErr, err)
-	}
-	if observed.id != desired || !observed.preserves(current) {
-		return &observed.id, errors.Join(writeErr, errors.New("default VLAN selection did not preserve native configuration"))
-	}
-	if writeErr != nil {
-		return &observed.id, writeErr
-	}
-	if err := cleanDefaultEntries(ctx, device, observed); err != nil {
-		return &observed.id, err
-	}
-	return &observed.id, device.Persist(ctx)
+	return fastiron.Reconcile(ctx, device, func(update *fastiron.Update) (*int64, error) {
+		current, err := readDefault(ctx, device)
+		if err != nil {
+			return nil, err
+		}
+		if desired != current.id && current.vlans[desired] {
+			return nil, errors.New("default VLAN target is already in use; select an unused VLAN ID")
+		}
+		if err := cleanDefaultEntries(ctx, device, update, current); err != nil {
+			return &current.id, err
+		}
+		if desired == current.id {
+			return &current.id, nil
+		}
+		inventory, err := readAll(ctx, device)
+		if err != nil {
+			return &current.id, err
+		}
+		if _, exists := inventory[strconv.FormatInt(desired, 10)]; exists {
+			return &current.id, errors.New("default VLAN target still exists in RESTCONF; synchronize and retry")
+		}
+		observed, err := readDefault(ctx, device)
+		if err != nil {
+			return &current.id, err
+		}
+		if observed.id != current.id || !observed.preserves(current) {
+			return &observed.id, errors.New("native configuration changed before default VLAN selection; retry")
+		}
+		entry := vlanEntry{ID: desired}
+		entry.Config.ID, entry.Config.Name = desired, "DEFAULT-VLAN"
+		body := map[string]any{"vlans": map[string]any{"vlan": []vlanEntry{entry}}}
+		writeErr := update.REST(http.MethodPatch, vlanPath, body)
+		observed, err = readDefault(ctx, device)
+		if err != nil {
+			return &current.id, errors.Join(writeErr, err)
+		}
+		if observed.id != desired || !observed.preserves(current) {
+			return &observed.id, errors.Join(writeErr, errors.New("default VLAN selection did not preserve native configuration"))
+		}
+		if writeErr != nil {
+			return &observed.id, writeErr
+		}
+		if err := cleanDefaultEntries(ctx, device, update, observed); err != nil {
+			return &observed.id, err
+		}
+		return &observed.id, nil
+	})
 }

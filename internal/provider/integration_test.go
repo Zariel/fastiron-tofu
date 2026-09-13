@@ -607,9 +607,42 @@ func TestOpenTofu(t *testing.T) {
 	s.mu.Lock()
 	s.ambiguous = true
 	s.mu.Unlock()
+	run(1, "apply", "-auto-approve", "-no-color")
+	var document struct {
+		Values struct {
+			Root struct {
+				Resources []struct {
+					Address string
+					Values  map[string]any
+				} `json:"resources"`
+			} `json:"root_module"`
+		} `json:"values"`
+	}
+	if err := json.Unmarshal([]byte(run(0, "show", "-json")), &document); err != nil {
+		t.Fatal(err)
+	}
+	var partial map[string]any
+	for _, resource := range document.Values.Root.Resources {
+		if resource.Address == "fastiron_vlan.test" {
+			partial = resource.Values
+		}
+	}
+	if partial["name"] != name || partial["persistence_pending"] != true {
+		t.Fatalf("partial VLAN state lost: %v", partial)
+	}
+
+	s.mu.Lock()
+	if s.running[53] != name || s.startup[53] != "" {
+		t.Errorf("partial VLAN write persisted: running=%q startup=%q", s.running[53], s.startup[53])
+	}
+	writes := s.writes
+	s.mu.Unlock()
 	run(0, "apply", "-auto-approve", "-no-color")
 	check(name, true)
 	s.mu.Lock()
+	if s.writes != writes {
+		t.Error("retry repeated an already converged VLAN mutation")
+	}
 	s.ambiguous = false
 	s.failSave = true
 	s.mu.Unlock()

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -83,7 +82,7 @@ func macEntries(ctx context.Context, device *fastiron.Device, name string, curre
 			Sets []aclSet `json:"acl-set"`
 		} `json:"openconfig-acl:acl-sets"`
 	}
-	if err := device.DoREST(ctx, http.MethodGet, aclPath, nil, &response); err != nil {
+	if err := device.ReadREST(ctx, aclPath, &response); err != nil {
 		return nil, err
 	}
 	if response.ACLs == nil {
