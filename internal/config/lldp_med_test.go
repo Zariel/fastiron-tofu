@@ -29,7 +29,7 @@ func TestMEDCaptures(t *testing.T) {
 			}
 			var want struct {
 				Inventory []string
-				Policies  map[string]map[string]medPolicy
+				Policies  map[string]map[string]MEDPolicy
 			}
 			if err := json.Unmarshal(expected, &want); err != nil {
 				t.Fatal(err)
@@ -41,7 +41,7 @@ func TestMEDCaptures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, _, err := document.medPolicies(want.Inventory)
+			got, _, err := document.MEDPolicies(want.Inventory)
 			if err != nil || !reflect.DeepEqual(got, want.Policies) {
 				t.Fatalf("policies=%+v error=%v; want %+v", got, err, want.Policies)
 			}
@@ -66,7 +66,7 @@ func TestMEDSyntax(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := d.medPolicies([]string{"ethernet 1/1/11"}); err == nil {
+			if _, _, err := d.MEDPolicies([]string{"ethernet 1/1/11"}); err == nil {
 				t.Fatal("accepted malformed, duplicate or incomplete policy")
 			}
 		})
@@ -79,7 +79,7 @@ func TestMEDScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policies, remaining, err := d.medPolicies([]string{"ethernet 1/1/11"})
+	policies, remaining, err := d.MEDPolicies([]string{"ethernet 1/1/11"})
 	if err != nil || len(policies) != 0 || strings.Join(remaining, "\n") != unowned {
 		t.Fatalf("unowned configuration adopted: %v, %v", policies, err)
 	}
@@ -90,8 +90,8 @@ func TestMEDAllPorts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policies, remaining, err := document.medPolicies([]string{"ethernet 1/1/1", "ethernet 2/3/4"})
-	want := map[string]map[string]medPolicy{
+	policies, remaining, err := document.MEDPolicies([]string{"ethernet 1/1/1", "ethernet 2/3/4"})
+	want := map[string]map[string]MEDPolicy{
 		"ethernet 1/1/1": {"voice": {Traffic: "tagged", VLAN: 4094, Priority: 7, DSCP: 63}},
 		"ethernet 2/3/4": {"voice": {Traffic: "tagged", VLAN: 4094, Priority: 7, DSCP: 63}},
 	}

@@ -5,15 +5,16 @@ import (
 	"strings"
 )
 
-type medPolicy struct {
+type MEDPolicy struct {
 	Traffic  string
 	VLAN     int64
 	Priority int64
 	DSCP     int64
 }
 
-// Resolve grouping against inventory rather than expanding untrusted numeric ranges.
-func (d *Document) medPolicies(names []string) (map[string]map[string]medPolicy, []string, error) {
+// MEDPolicies returns policies keyed by Ethernet interface and application, plus
+// unowned commands. Port ranges are resolved against complete Ethernet inventory.
+func (d *Document) MEDPolicies(names []string) (map[string]map[string]MEDPolicy, []string, error) {
 	ports := make(map[string][3]uint64, len(names))
 	for _, name := range names {
 		raw, canonical := strings.CutPrefix(name, "ethernet ")
@@ -26,7 +27,7 @@ func (d *Document) medPolicies(names []string) (map[string]map[string]medPolicy,
 		}
 		ports[name] = id
 	}
-	policies := map[string]map[string]medPolicy{}
+	policies := map[string]map[string]MEDPolicy{}
 	var remaining []string
 	for _, command := range d.Commands {
 		if command.Parent != -1 || command.kind != lldpMED {
@@ -43,7 +44,7 @@ func (d *Document) medPolicies(names []string) (map[string]map[string]medPolicy,
 		}
 		for _, name := range members {
 			if policies[name] == nil {
-				policies[name] = map[string]medPolicy{}
+				policies[name] = map[string]MEDPolicy{}
 			}
 			if _, exists := policies[name][command.name]; exists {
 				return nil, nil, errors.New("native LLDP-MED application is repeated on a port")

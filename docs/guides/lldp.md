@@ -35,4 +35,18 @@ Global enable configuration was verified through OpenTofu on FastIron `09.0.10kT
 
 Ethernet enable configuration was also verified through OpenTofu on `09.0.10kT213`: defaults, disable, receive-only CLI drift repair, import without configuration changes, replacement, omission, deletion, and persistence across reboot. Native running and saved configuration matched exactly across reload, with a stable plan afterward. The workflow preserved another port's receive-only mode and unrelated configuration, then restored the original running and saved baseline. Automated tests cover native range regrouping, collateral direction changes, stale-cache synchronization, partial failures, and retries without repeating completed mutations.
 
-LLDP-MED network policies and neighbor discovery are not yet implemented.
+Read configured LLDP-MED policies without taking ownership:
+
+```hcl
+data "fastiron_lldp_med_policies" "switch" {}
+
+output "med_policies" {
+  value = data.fastiron_lldp_med_policies.switch.policies
+}
+```
+
+Each policy contains `interface`, `application`, `traffic`, `vlan_id`, `priority`, and `dscp`. Results are sorted by interface and application. `vlan_id` is null unless traffic is tagged; `priority` is null for untagged traffic. An empty list means no native policies are configured. The query uses native configuration because the RESTCONF MED response can be stale, even reporting `[null]` while policies exist.
+
+The MED query was verified through OpenTofu on `09.0.10kT213` with grouped policies, a per-port tagging change, CLI removal, and stable plans. Queries left running and saved configuration unchanged. These are configured policies, not evidence of endpoint advertisement or negotiation.
+
+LLDP-MED policy resources and neighbor discovery are not yet implemented.

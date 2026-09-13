@@ -44,7 +44,7 @@ type parsedCommand struct {
 	direction          string
 	portRanges         []portRange
 	allPorts           bool
-	med                medPolicy
+	med                MEDPolicy
 }
 
 // Command retains the original command text and its indentation scope. Unknown
