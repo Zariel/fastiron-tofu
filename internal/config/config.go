@@ -23,6 +23,7 @@ const (
 	adminDisable
 	defaultVLAN
 	vlanHeader
+	lagHeader
 	interfaceStanza
 	aclHeader
 	multicastConfig

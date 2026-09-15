@@ -17,6 +17,8 @@ Members must satisfy FastIron's LAG formation rules, including matching speeds a
 
 Removing a member or deleting a LAG disables its detached Ethernet ports, following FastIron's native behavior. This also applies during LAG replacement. The provider does not restore prior port settings. A separately managed Ethernet resource can re-enable a port on a subsequent apply; do not assume this happens within the same apply that detaches it.
 
+Deleting a LAG through CLI on tested FastIron `09.0.10kT213` copies its STP protection flags onto the detached Ethernet ports. Those settings become independent port policy; removing the former LAG policy must not clear them. RESTCONF can retain the deleted aggregate entry, so interface policy resources check native LAG existence.
+
 If saving fails, `persistence_pending` remains true so a subsequent apply can finish saving the observed configuration.
 
 Remove VLAN relationships and independent interface or protocol settings before destroying the LAG. Deletion rejects remaining child configuration.

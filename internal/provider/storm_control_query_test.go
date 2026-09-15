@@ -18,7 +18,7 @@ func TestOpenTofuStormControlQueries(t *testing.T) {
 		case "show version":
 			return "SW: Version 09.0.10kT213"
 		case "show running-config":
-			return "ver 09.0.10kT213\ninterface lag 11\n broadcast limit 111 kbps log\n multicast limit 222 kbps\nend"
+			return "ver 09.0.10kT213\nlag test static id 11\ninterface lag 11\n broadcast limit 111 kbps log\n multicast limit 222 kbps\nend"
 		default:
 			t.Errorf("unexpected query command %q", command)
 			return "% Invalid input"

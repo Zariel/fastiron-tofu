@@ -1,0 +1,12 @@
+{
+  "ethernet 1/1/9": {
+    "AdminEdge": true,
+    "BPDUGuard": true,
+    "RootGuard": true
+  },
+  "ethernet 1/1/10": {
+    "AdminEdge": true,
+    "BPDUGuard": true,
+    "RootGuard": true
+  }
+}
