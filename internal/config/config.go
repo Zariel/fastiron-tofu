@@ -33,6 +33,9 @@ const (
 	inlinePower
 	inlinePowerPort
 	spanningTree
+	stpEdge
+	stpRoot
+	stpBPDU
 )
 
 type portRange struct{ first, last [3]uint64 }

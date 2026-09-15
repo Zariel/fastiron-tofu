@@ -7,17 +7,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
-type interfaceConfig struct {
-	AdminEdge bool
-	BPDUGuard bool
-	RootGuard bool
-}
+type interfaceConfig = config.STPInterface
 
 func validateInterface(name string) error {
 	if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
@@ -84,6 +81,31 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 }
 
 func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {
+	cached, err := readRESTInterfaces(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	output, err := d.RunningConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	document, err := config.Parse(output)
+	if err != nil {
+		return nil, err
+	}
+	native, err := document.STPInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	// Cached entries may outlive their native flags; retain their identities with defaults.
+	for name := range cached {
+		cached[name] = interfaceConfig{}
+	}
+	maps.Copy(cached, native)
+	return cached, nil
+}
+
+func readRESTInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {
 	if !d.RESTCONFEnabled() {
 		return nil, errors.New("spanning-tree configuration currently requires RESTCONF")
 	}

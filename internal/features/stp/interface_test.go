@@ -14,7 +14,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
-func TestSTPInterfaces(t *testing.T) {
+func TestRESTInterfaces(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
 		want       map[string]interfaceConfig
@@ -46,7 +46,7 @@ func TestSTPInterfaces(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got, err := readInterfaces(context.Background(), d)
+			got, err := readRESTInterfaces(context.Background(), d)
 			if (err != nil) != tc.failure {
 				t.Fatalf("interfaces=%v error=%v", got, err)
 			}

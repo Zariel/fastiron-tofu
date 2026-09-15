@@ -12,8 +12,13 @@ import (
  h = [ \t];
  tail = (h (any - '\n')*)?;
  poe_port = ('no' h+)? 'inline' h+ 'power' h+ ('ethernet' | 'ethe') tail;
+ stp_edge = ('no' h+)? 'spanning-tree' h+ '802-1w' h+ 'admin-edge-port' tail;
+ stp_root = ('no' h+)? 'spanning-tree' h+ 'root-protect' tail;
  main := (
-  (('no' h+)? 'spanning-tree' tail) @{ kind = spanningTree } |
+  stp_edge @{ kind = stpEdge } |
+  stp_root @{ kind = stpRoot } |
+  (('no' h+)? 'stp-bpdu-guard' tail) @{ kind = stpBPDU } |
+  ((('no' h+)? 'spanning-tree' tail) - stp_edge - stp_root) @{ kind = spanningTree } |
   poe_port @{ kind = inlinePowerPort } |
   ((('no' h+)? 'inline' h+ 'power' tail) - poe_port) @{ kind = inlinePower } |
   ('trust' h+ 'dscp' tail) @{ kind = trustDSCP } |
@@ -148,7 +153,9 @@ func commandFields(data string) (fields []string) {
        ('inline' h+ 'power' (h+ poe_target)? (h+ (poe_priority | poe_class | poe_limit))*);
  stp = 'spanning-tree' (h+ '802-1w' %{ parsed.family = "rstp" })?
        (h+ 'priority' h+ number >mark %value %options)?;
- main := (stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
+ stp_flag = ('no' h+ %{ parsed.negated = true })?
+            ('spanning-tree' h+ ('802-1w' h+ 'admin-edge-port' | 'root-protect') | 'stp-bpdu-guard');
+ main := (stp_flag | stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%

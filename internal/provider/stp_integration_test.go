@@ -54,7 +54,7 @@ func stpConfiguration(base string, vlans map[int64]stpSetting, extra bool) strin
 			base = strings.TrimSuffix(base, "end") + prefix + " by port\n" + b.String() + "!\nend"
 		}
 	}
-	return base
+	return stpPortConfiguration(base, map[string]stpPortOptions{"ethernet 1/1/12": {bpdu: true, root: true}})
 }
 
 func (s *stpSwitch) rest(w http.ResponseWriter, r *http.Request) {
