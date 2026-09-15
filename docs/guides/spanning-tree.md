@@ -55,4 +55,6 @@ These flags do not enable spanning tree on a VLAN. Configure the corresponding V
 
 Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`. Interface flags have been verified through creation, individual updates, omitted defaults, CLI drift repair, import, replacement, deletion and reboot.
 
+On that firmware, the `/stp/global`, `/stp/rstp` and `/stp/mstp` RESTCONF containers return “unknown resource”. Per-VLAN RSTP is available through `/stp/rapid-pvst`.
+
 VLAN priority recovery after CLI drift remains incomplete: RESTCONF can report the desired priority without applying it natively. The provider detects that mismatch and returns an error without saving. VLAN spanning-tree persistence across reboot remains unverified.
