@@ -20,7 +20,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Interface voice VLAN | Implemented | [Local Ethernet policy and native query](docs/guides/voice-vlan.md), with lifecycle and reboot validation. FlexAuth voice actions and LLDP-MED remain separate. |
 | Management VLAN selection | Not yet | Unavailable through the tested router image's documented RESTCONF paths; see [compatibility limits](docs/compatibility.md). |
 | LAGs | Implemented | Static/dynamic mode, name, members and discovery. Detached ports follow native behavior and become disabled. |
-| Ethernet interfaces | Partial | Port name and administrative enable state; [single and inventory queries](docs/guides/ethernet.md) with status, link reports and precise counters. Speed, duplex and clock writes remain; jumbo mode is global. |
+| Ethernet interfaces | Partial | Port name and administrative enable state; [single and inventory queries](docs/guides/ethernet.md) with status, link reports and precise counters. Speed, duplex and clock writes await SSH support because RESTCONF cannot reliably reset them; jumbo mode is global. |
 | Protected ports | Implemented | [Ethernet and LAG isolation configuration](docs/guides/protected-ports.md) and native query, with lifecycle and reboot validation. Separate ownership from interface settings and LAG membership. |
 | Storm control | Implemented | [Ethernet and LAG rate policies](docs/guides/storm-control.md) with a shared unit, per-class limits and native query. Logging, threshold and shutdown options are not managed. |
 | Jumbo frames | Implemented | [Global configuration and native query](docs/guides/jumbo.md). Changes require saving and reloading; active mode and reload requirements are reported. Per-interface MTUs remain separate. |
