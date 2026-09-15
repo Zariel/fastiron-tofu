@@ -11,7 +11,9 @@ resource "fastiron_spanning_tree_vlan" "servers" {
   priority = 4096
 }
 
-data "fastiron_spanning_tree" "configured" {}
+data "fastiron_spanning_tree" "configured" {
+  depends_on = [fastiron_spanning_tree_vlan.servers]
+}
 ```
 
 Modes are `stp` (classic 802.1D) and `rstp` (802.1w). FastIron exposes per-VLAN RSTP through its RESTCONF `rapid-pvst` container. Bridge priority defaults to 32768 and accepts 0–65535, including values that are not multiples of 4096.
@@ -23,6 +25,8 @@ tofu import fastiron_spanning_tree_vlan.servers 53
 ```
 
 The data source returns a `vlans` map keyed by VLAN ID, with native `mode` and `priority` for each enabled configuration, including the default VLAN. CLI-only settings are included and stale RESTCONF entries are excluded. Unsupported native spanning-tree settings produce a diagnostic instead of potentially incorrect defaults. Managing spanning-tree settings does not create or delete the VLAN itself.
+
+Use `depends_on` when the query must follow resource changes. After removing a resource, run `tofu apply -refresh-only` if you need stored query outputs to reflect its deletion: OpenTofu may have evaluated the query before destruction.
 
 Its `interfaces` map reports configured `admin_edge`, `bpdu_guard` and `root_guard` options, keyed by canonical interface name (for example, `ethernet 1/1/12`). Interfaces without explicit native STP flags are omitted. Flag values and interface identities come from native configuration, including settings absent from RESTCONF, so rebuilding the RESTCONF cache after a reboot does not change the reported configuration. These values describe configuration, not operational protection or forwarding state. An ignored RESTCONF update returns an error and is not saved.
 
@@ -59,4 +63,4 @@ On that firmware, the `/stp/global`, `/stp/rstp` and `/stp/mstp` RESTCONF contai
 
 VLAN updates wait for RESTCONF and native configuration to agree before writing: a priority update matching stale RESTCONF state can otherwise be ignored, and stale presence can reject recreation. Synchronization is bounded by the configured RESTCONF timeout; a timeout or ignored update returns an error without saving, and a later apply can retry.
 
-On non-default VLANs, validation covers creation, default and boundary priorities, classic STP and RSTP priority drift repair, import, mode replacement, recreation after external deletion, replacement onto another VLAN and deletion. RSTP configuration survived reboot with unchanged running and saved configuration and an empty plan afterward. Relocated default-VLAN lifecycle validation is still in progress.
+On non-default VLANs, validation covers creation, default and boundary priorities, classic STP and RSTP priority drift repair, import, mode replacement, recreation after external deletion, replacement onto another VLAN and deletion. RSTP configuration survived reboot with unchanged running and saved configuration and an empty plan afterward. Relocated default VLAN 4095 has also passed import, priority updates and default reset, replacement from classic STP to RSTP, deletion and a fresh query after deletion; unrelated configuration was preserved.
