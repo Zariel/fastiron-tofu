@@ -1,0 +1,16 @@
+{
+  "icx-openconfig-if-poe-aug:poe": {
+    "config": {
+      "enabled": true,
+      "priority": 1,
+      "power-limit": 18000
+    },
+    "state": {
+      "enabled": true,
+      "priority": 1,
+      "power-by-class": 0,
+      "power-used": "0.0",
+      "power-allocated": "0.0"
+    }
+  }
+}

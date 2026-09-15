@@ -1,0 +1,9 @@
+{
+  "interface": "ethernet 1/1/10",
+  "policy": {
+    "Enabled": true,
+    "Priority": 1,
+    "PowerByClass": 0,
+    "PowerLimitMilliwatts": 18000
+  }
+}
