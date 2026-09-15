@@ -38,7 +38,7 @@ func TestSTPVLAN(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := d.STPVLAN(53)
+			got, _, err := d.STPVLAN(53)
 			if (err != nil) != tc.invalid {
 				t.Fatalf("policy=%+v error=%v", got, err)
 			}
@@ -77,7 +77,7 @@ func TestSTPCaptures(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(policies, wantPolicies) {
 				t.Fatalf("policies=%v error=%v; want %v", policies, err, wantPolicies)
 			}
-			got, err := document.STPVLAN(want.VLANID)
+			got, _, err := document.STPVLAN(want.VLANID)
 			if err != nil || got == nil || *got != want {
 				t.Fatalf("policy=%+v error=%v; want %+v", got, err, want)
 			}
@@ -192,5 +192,20 @@ func TestSTPVLANInventory(t *testing.T) {
 				t.Fatalf("policies=%v; want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSTPVLANOwnership(t *testing.T) {
+	document, err := Parse("ver 09.0.10k\nvlan 52\n spanning-tree\nvlan 53 name servers by port\n tagged ethe 1/1/12\n spanning-tree 802-1w\n spanning-tree 802-1w priority 12345\ninterface ethernet 1/1/12\n stp-bpdu-guard\nend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, remaining, err := document.STPVLAN(53)
+	if err != nil || policy == nil || *policy != (STPVLAN{53, "rstp", 12345}) {
+		t.Fatalf("policy=%v error=%v", policy, err)
+	}
+	want := []string{"ver 09.0.10k", "vlan 52", " spanning-tree", "vlan 53 name servers by port", " tagged ethe 1/1/12", "interface ethernet 1/1/12", " stp-bpdu-guard", "end"}
+	if !reflect.DeepEqual(remaining, want) {
+		t.Fatalf("unowned=%v; want %v", remaining, want)
 	}
 }

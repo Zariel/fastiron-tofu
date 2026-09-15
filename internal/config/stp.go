@@ -13,11 +13,12 @@ type STPVLAN struct {
 	Priority int64
 }
 
-// STPVLAN returns nil when the VLAN has no explicit spanning-tree policy.
+// STPVLAN returns the selected policy and all unowned commands, including the VLAN header.
+// The policy is nil when the VLAN has no explicit spanning-tree configuration.
 // Additional settings are rejected because deleting the mode would erase them.
-func (d *Document) STPVLAN(id int64) (*STPVLAN, error) {
+func (d *Document) STPVLAN(id int64) (*STPVLAN, []string, error) {
 	if id < 1 || id > 4095 {
-		return nil, errors.New("invalid spanning-tree VLAN identity")
+		return nil, nil, errors.New("invalid spanning-tree VLAN identity")
 	}
 	header := -1
 	for i, command := range d.Commands {
@@ -25,46 +26,45 @@ func (d *Document) STPVLAN(id int64) (*STPVLAN, error) {
 			continue
 		}
 		if !command.valid || header != -1 {
-			return nil, errors.New("native configuration has an invalid or repeated VLAN header")
+			return nil, nil, errors.New("native configuration has an invalid or repeated VLAN header")
 		}
 		header = i
 	}
-	if header == -1 {
-		return nil, nil
-	}
 
+	var remaining []string
 	var policy *STPVLAN
 	modeSeen, prioritySeen := false, false
 	for _, command := range d.Commands {
-		if command.Parent != header || (command.kind != spanningTree && command.kind != stpEdge && command.kind != stpRoot) {
+		if header < 0 || command.Parent != header || (command.kind != spanningTree && command.kind != stpEdge && command.kind != stpRoot) {
+			remaining = append(remaining, command.Text)
 			continue
 		}
 		if !command.valid || command.kind != spanningTree {
-			return nil, errors.New("native VLAN has malformed or unsupported spanning-tree settings")
+			return nil, nil, errors.New("native VLAN has malformed or unsupported spanning-tree settings")
 		}
 		if command.number < 0 || command.number > 65535 {
-			return nil, errors.New("invalid native spanning-tree bridge priority")
+			return nil, nil, errors.New("invalid native spanning-tree bridge priority")
 		}
 		if policy == nil {
 			policy = &STPVLAN{VLANID: id, Mode: command.family, Priority: 32768}
 		}
 		if policy.Mode != command.family {
-			return nil, errors.New("native VLAN contains conflicting spanning-tree modes")
+			return nil, nil, errors.New("native VLAN contains conflicting spanning-tree modes")
 		}
 		if command.options {
 			if prioritySeen {
-				return nil, errors.New("native VLAN repeats its spanning-tree priority")
+				return nil, nil, errors.New("native VLAN repeats its spanning-tree priority")
 			}
 			prioritySeen = true
 			policy.Priority = command.number
 			continue
 		}
 		if modeSeen {
-			return nil, errors.New("native VLAN repeats its spanning-tree mode")
+			return nil, nil, errors.New("native VLAN repeats its spanning-tree mode")
 		}
 		modeSeen = true
 	}
-	return policy, nil
+	return policy, remaining, nil
 }
 
 // STPVLANs reports explicit native VLAN policies, ordered by VLAN ID.
@@ -78,7 +78,7 @@ func (d *Document) STPVLANs() ([]STPVLAN, error) {
 		if !command.valid {
 			return nil, errors.New("native configuration has an invalid VLAN header")
 		}
-		policy, err := d.STPVLAN(command.number)
+		policy, _, err := d.STPVLAN(command.number)
 		if err != nil {
 			return nil, fmt.Errorf("cannot read spanning-tree VLAN %d: %w", command.number, err)
 		}

@@ -26,6 +26,8 @@ Its `interfaces` map reports configured `admin_edge`, `bpdu_guard` and `root_gua
 
 On the tested firmware, removing RSTP leaves classic STP enabled. Resource deletion waits for RESTCONF and native configuration to agree, then removes the remaining classic entry and verifies native absence. Other VLANs retain their settings. If deletion fails partway through, a subsequent apply resumes from the observed configuration.
 
+Before saving, VLAN writes verify native policy and check that unrelated configuration is preserved, including the target VLAN's name, membership and existence. A detected unrelated change returns an error without saving.
+
 Deletion refuses to erase additional native spanning-tree settings, such as timers or per-VLAN port costs. Remove those settings before destroying or replacing this resource.
 
 `fastiron_spanning_tree_interface` owns three options on an existing Ethernet interface:

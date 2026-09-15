@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
-
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	vlanfeature "github.com/zariel/fastiron-tofu/internal/features/vlan"
 )
@@ -21,21 +19,19 @@ func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*
 		return nil, err
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*vlan, error) {
-		var vlans []vlan
+		var current *vlan
+		var unowned []string
 		var err error
 		if present {
-			vlans, err = readVLANs(ctx, d)
+			if _, err := readRESTVLANs(ctx, d); err != nil {
+				return nil, err
+			}
+			current, unowned, err = readNativeVLAN(ctx, d, v.VLANID)
 		} else {
-			vlans, err = waitVLAN(ctx, d, v.VLANID)
+			current, unowned, err = waitVLAN(ctx, d, v.VLANID)
 		}
 		if err != nil {
-			return nil, err
-		}
-		var current *vlan
-		for _, entry := range vlans {
-			if entry.VLANID == v.VLANID {
-				current = &entry
-			}
+			return current, err
 		}
 		if present {
 			if _, err := vlanfeature.Read(ctx, d, v.VLANID); err != nil {
@@ -76,26 +72,22 @@ func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*
 				endpoint = path.Join(stpVLANPath(current.Mode), "vlan="+strconv.FormatInt(v.VLANID, 10))
 			}
 			writeErr := update.REST(method, endpoint, body)
-			var observed []vlan
+			var observed *vlan
+			var remaining []string
 			var readErr error
 			if present {
-				observed, readErr = readVLANs(ctx, d)
+				observed, remaining, readErr = readNativeVLAN(ctx, d, v.VLANID)
 			} else {
-				observed, readErr = waitVLAN(ctx, d, v.VLANID)
+				observed, remaining, readErr = waitVLAN(ctx, d, v.VLANID)
+			}
+			if remaining != nil {
+				current = observed
 			}
 			if readErr != nil {
 				return current, errors.Join(writeErr, readErr)
 			}
-			current = nil
-			for _, entry := range observed {
-				if entry.VLANID == v.VLANID {
-					current = &entry
-				}
-			}
-			for _, neighbor := range vlans {
-				if neighbor.VLANID != v.VLANID && !slices.Contains(observed, neighbor) {
-					return current, errors.New("spanning-tree operation changed an unrelated VLAN")
-				}
+			if !slices.Equal(unowned, remaining) {
+				return current, errors.Join(writeErr, errors.New("spanning-tree mutation changed unrelated configuration"))
 			}
 			if present {
 				if current == nil || *current != v {
@@ -104,31 +96,26 @@ func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*
 			} else if current != nil && (removed[current.Mode] || current.Mode != "stp") {
 				return current, errors.Join(writeErr, errors.New("spanning-tree VLAN deletion did not converge"))
 			}
+			if writeErr != nil {
+				return current, writeErr
+			}
 		}
 		return current, nil
 	})
 }
 
-func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error) {
+func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) (*vlan, []string, error) {
 	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
 	defer cancel()
 
 	for {
 		vlans, err := readRESTVLANs(ctx, d)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		output, err := d.RunningConfig(ctx)
+		native, remaining, err := readNativeVLAN(ctx, d, id)
 		if err != nil {
-			return vlans, err
-		}
-		document, err := nativeconfig.Parse(output)
-		if err != nil {
-			return vlans, err
-		}
-		native, err := document.STPVLAN(id)
-		if err != nil {
-			return vlans, err
+			return nil, nil, err
 		}
 		var current *vlan
 		for _, entry := range vlans {
@@ -137,7 +124,7 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error)
 			}
 		}
 		if current == nil && native == nil || current != nil && native != nil && *current == *native {
-			return document.STPVLANs()
+			return native, remaining, nil
 		}
 
 		// RSTP removal can briefly hide its classic fallback in RESTCONF. Only
@@ -146,7 +133,7 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return vlans, fmt.Errorf("native and RESTCONF spanning-tree state did not converge: %w", ctx.Err())
+			return native, remaining, fmt.Errorf("native and RESTCONF spanning-tree state did not converge: %w", ctx.Err())
 		case <-timer.C:
 		}
 	}

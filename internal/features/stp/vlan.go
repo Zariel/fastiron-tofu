@@ -102,3 +102,15 @@ func readRESTVLANs(ctx context.Context, d *fastiron.Device) ([]vlan, error) {
 	slices.SortFunc(vlans, func(a, b vlan) int { return int(a.VLANID - b.VLANID) })
 	return vlans, nil
 }
+
+func readNativeVLAN(ctx context.Context, d *fastiron.Device, id int64) (*vlan, []string, error) {
+	output, err := d.RunningConfig(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	document, err := config.Parse(output)
+	if err != nil {
+		return nil, nil, err
+	}
+	return document.STPVLAN(id)
+}
