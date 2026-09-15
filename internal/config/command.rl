@@ -11,7 +11,10 @@ import (
  alphtype byte;
  h = [ \t];
  tail = (h (any - '\n')*)?;
+ poe_port = ('no' h+)? 'inline' h+ 'power' h+ ('ethernet' | 'ethe') tail;
  main := (
+  poe_port @{ kind = inlinePowerPort } |
+  ((('no' h+)? 'inline' h+ 'power' tail) - poe_port) @{ kind = inlinePower } |
   ('trust' h+ 'dscp' tail) @{ kind = trustDSCP } |
   ('protected-port' tail) @{ kind = protectedPort } |
   ('voice-vlan' tail) @{ kind = voiceVLAN } |
@@ -59,8 +62,8 @@ func commandFields(data string) (fields []string) {
  return fields
 }
 
-// Syntax recognition and argument capture belong to this machine. Numeric ranges,
-// duplicate settings and ownership across stanzas are checked by the extractors.
+// Syntax recognition and argument capture belong to this machine. Numeric ranges
+// and ownership across stanzas are checked by the extractors.
 %%{
  machine syntax;
  alphtype byte;
@@ -124,7 +127,25 @@ func commandFields(data string) (fields []string) {
   'run' | 'enable' h+ (('receive' | 'transmit') >mark %{ parsed.direction = data[start:p] } h+)?
   'ports' h+ port_list
  );
- main := (med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
+ poe_target = ('ethernet' | 'ethe') h+ port_id >mark %name;
+ poe_priority = 'priority' h+ digit+ >mark %value %{
+  numberValid = numberValid && parsed.poeFields & 1 == 0
+  parsed.poeFields |= 1
+  parsed.poe.Priority = parsed.number
+ };
+ poe_class = 'power-by-class' h+ digit+ >mark %value %{
+  numberValid = numberValid && parsed.poeFields & 6 == 0
+  parsed.poeFields |= 2
+  parsed.poe.PowerByClass = parsed.number
+ };
+ poe_limit = 'power-limit' h+ digit+ >mark %value %{
+  numberValid = numberValid && parsed.poeFields & 6 == 0
+  parsed.poeFields |= 4
+  parsed.poe.PowerLimitMilliwatts = parsed.number
+ };
+ poe = ('no' h+ 'inline' h+ 'power' %{ parsed.poe.Enabled = false } (h+ poe_target)?) |
+       ('inline' h+ 'power' (h+ poe_target)? (h+ (poe_priority | poe_class | poe_limit))*);
+ main := (poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%
@@ -132,6 +153,7 @@ func commandFields(data string) (fields []string) {
 
 func parseCommand(data string) (parsed parsedCommand) {
  parsed.kind = commandKind(data)
+ if parsed.kind == inlinePower || parsed.kind == inlinePowerPort { parsed.poe = PoEPolicy{Enabled: true, Priority: 3} }
  if parsed.kind == unknown { return parsed }
  data += "\n"
  p, pe := 0, len(data)

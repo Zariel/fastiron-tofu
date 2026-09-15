@@ -9,13 +9,14 @@ import (
 	"path"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
 
 type port struct {
-	Name                string
-	Enabled             bool
+	Name string
+	config.PoEPolicy
 	PowerClass          *int64
 	PowerUsedMilliwatts *float64
 }
@@ -37,13 +38,11 @@ func validateInterface(name string) error {
 	return nil
 }
 
-func (e entry) observed(name string) (port, error) {
+func (e entry) telemetry(name string) (port, error) {
 	if e.Config == nil {
 		return port{}, errors.New("RESTCONF PoE response is missing its configuration container")
 	}
-	// Native enabled-leaf deletion restores inline power while omitting the leaf.
-	// Operational enabled may lag that reset and is not configuration evidence.
-	p := port{Name: name, Enabled: e.Config.Enabled == nil || *e.Config.Enabled, PowerClass: e.State.PowerClass}
+	p := port{Name: name, PowerClass: e.State.PowerClass}
 	if e.State.PowerUsed != nil {
 		power, err := e.State.PowerUsed.Float64()
 		if err != nil || power < 0 {
@@ -70,7 +69,20 @@ func readPort(ctx context.Context, d *fastiron.Device, name string) (port, error
 	if response.PoE == nil {
 		return port{}, errors.New("RESTCONF interface does not expose PoE")
 	}
-	return response.PoE.observed(name)
+	observed, err := response.PoE.telemetry(name)
+	if err != nil {
+		return port{}, err
+	}
+	document, err := readNative(ctx, d)
+	if err != nil {
+		return port{}, err
+	}
+	policy, _, err := document.PoE(name)
+	if err != nil {
+		return port{}, err
+	}
+	observed.PoEPolicy = policy
+	return observed, nil
 }
 
 func readPorts(ctx context.Context, d *fastiron.Device) ([]port, error) {
@@ -104,13 +116,35 @@ func readPorts(ctx context.Context, d *fastiron.Device) ([]port, error) {
 		if err := validateInterface(entry.Name); err != nil {
 			return nil, err
 		}
-		p, err := entry.Ethernet.PoE.observed(entry.Name)
+		p, err := entry.Ethernet.PoE.telemetry(entry.Name)
 		if err != nil {
 			return nil, err
 		}
 		ports = append(ports, p)
 	}
+	if len(ports) == 0 {
+		return ports, nil
+	}
+	document, err := readNative(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	for i := range ports {
+		policy, _, err := document.PoE(ports[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		ports[i].PoEPolicy = policy
+	}
 	return ports, nil
+}
+
+func readNative(ctx context.Context, device *fastiron.Device) (*config.Document, error) {
+	output, err := device.RunningConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return config.Parse(output)
 }
 
 func applyPort(ctx context.Context, d *fastiron.Device, name string, enabled bool) (*port, error) {
@@ -120,6 +154,11 @@ func applyPort(ctx context.Context, d *fastiron.Device, name string, enabled boo
 			return nil, err
 		}
 		if current.Enabled != enabled {
+			// Native enable changes reset allocation and priority. Those settings
+			// are outside this resource's current ownership and must not be cleared.
+			if current.Priority != 3 || current.PowerByClass != 0 || current.PowerLimitMilliwatts != 0 {
+				return &current, errors.New("PoE enable changes require default priority and power allocation; explicit settings are not owned by this resource")
+			}
 			body := map[string]any{"poe": map[string]any{"config": map[string]any{"enabled": enabled}}}
 			writeErr := update.REST(http.MethodPatch, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), body)
 			observed, readErr := readPort(ctx, d, name)

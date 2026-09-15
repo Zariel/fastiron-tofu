@@ -65,7 +65,7 @@ type testSwitch struct {
 	dns                             map[string]bool
 	startupLLDP, startupLLDPPort    bool
 	lldp, lldpPort                  bool
-	poe                             bool
+	poe, startupPoE                 bool
 }
 
 func newSwitch(t *testing.T) *testSwitch {
@@ -76,7 +76,7 @@ func newSwitch(t *testing.T) *testSwitch {
 	s.addresses = map[string]int{}
 	s.lldp, s.lldpPort = true, true
 	s.startupLLDP, s.startupLLDPPort = true, true
-	s.poe = true
+	s.poe, s.startupPoE = true, true
 	transport := testswitch.New(t, s.command)
 	transport.HandleFunc("/", s.restconf)
 	s.server = transport.REST
@@ -89,9 +89,15 @@ func (s *testSwitch) command(command string) (output string) {
 	defer s.mu.Unlock()
 	defer func() {
 		if command == "show running-config" {
+			if !s.poe {
+				output = strings.Replace(output, "interface ethernet 1/1/2\n", "interface ethernet 1/1/2\n no inline power\n", 1)
+			}
 			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.lldp, s.lldpPort) + "end"
 		}
 		if command == "show configuration" {
+			if !s.startupPoE {
+				output = strings.Replace(output, "interface ethernet 1/1/2\n", "interface ethernet 1/1/2\n no inline power\n", 1)
+			}
 			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.startupLLDP, s.startupLLDPPort) + "end"
 		}
 	}()
@@ -117,7 +123,7 @@ func (s *testSwitch) command(command string) (output string) {
 		if s.aaa != nil {
 			s.aaa.startup = maps.Clone(s.aaa.running)
 		}
-		unchanged := s.lldp == s.startupLLDP && s.lldpPort == s.startupLLDPPort && policyUnchanged && usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
+		unchanged := s.poe == s.startupPoE && s.lldp == s.startupLLDP && s.lldpPort == s.startupLLDPPort && policyUnchanged && usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
 		if s.lags != nil {
 			lagConfig := s.lags.configuration()
 			unchanged = unchanged && lagConfig == s.startupLAG
@@ -146,6 +152,7 @@ func (s *testSwitch) command(command string) (output string) {
 			unchanged = unchanged && maps.Equal(s.auth.running, s.auth.startup)
 			s.auth.startup = maps.Clone(s.auth.running)
 		}
+		s.startupPoE = s.poe
 		s.startupLLDP, s.startupLLDPPort = s.lldp, s.lldpPort
 		s.startupManagementAddresses = maps.Clone(s.managementAddresses)
 		s.startup = maps.Clone(s.running)
@@ -860,6 +867,8 @@ resource "fastiron_lldp_interface" "test" { interface = "ethernet 1/1/2" }
 	if !global || !port {
 		t.Fatal("LLDP destroy did not reset to enabled")
 	}
+	base = strings.Replace(base, `persistence_mode = "manual"`, `persistence_mode = "after_each_write"`, 1)
+	config(&name)
 	write("poe.tf", `resource "fastiron_interface_poe" "test" {
  interface = "ethernet 1/1/2"
  enabled = false
@@ -888,7 +897,23 @@ output "poe" { value = data.fastiron_poe_interfaces.test.interfaces }
 	}
 	write("poe.tf", `resource "fastiron_interface_poe" "test" { interface = "ethernet 1/1/2" }
 `)
+	s.mu.Lock()
+	s.falseSave = true
+	s.mu.Unlock()
+	run(1, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	if !s.poe || s.startupPoE {
+		t.Error("failed PoE save lost the distinction between running and startup")
+	}
+	writes = s.writes
+	s.falseSave = false
+	s.mu.Unlock()
 	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	if s.writes != writes || !s.startupPoE {
+		t.Error("PoE persistence retry repeated a mutation or failed to save")
+	}
+	s.mu.Unlock()
 	s.mu.Lock()
 	poe = s.poe
 	s.mu.Unlock()
@@ -906,6 +931,8 @@ output "poe" { value = data.fastiron_poe_interfaces.test.interfaces }
 	if !poe {
 		t.Fatal("PoE destroy did not restore default")
 	}
+	base = strings.Replace(base, `persistence_mode = "after_each_write"`, `persistence_mode = "manual"`, 1)
+	config(&name)
 	write("ve.tf", `resource "fastiron_interface_ve" "test" {
  ve_id = 53
  vlan_id = fastiron_vlan.test.vlan_id
