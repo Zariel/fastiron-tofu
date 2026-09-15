@@ -47,18 +47,14 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	if response.Config == nil {
 		return nativeState{}, errors.New("RESTCONF Ethernet response omitted its configuration container")
 	}
-	configuration, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nativeState{}, err
 	}
-	return parse(configuration, name)
+	return parse(document, name)
 }
 
-func parse(configuration, name string) (nativeState, error) {
-	document, err := config.Parse(configuration)
-	if err != nil {
-		return nativeState{}, err
-	}
+func parse(document *config.Document, name string) (nativeState, error) {
 	observed, err := document.InterfacePolicy(name, config.VoiceVLAN)
 	if err != nil {
 		return nativeState{}, err
@@ -87,11 +83,11 @@ func apply(ctx context.Context, device *fastiron.Device, name string, desired in
 			} else {
 				writeErr = update.REST(method, target, body)
 			}
-			configuration, readErr := device.RunningConfig(ctx)
+			document, readErr := device.RunningConfig(ctx)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}
-			observed, readErr := parse(configuration, name)
+			observed, readErr := parse(document, name)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}

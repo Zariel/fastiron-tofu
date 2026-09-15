@@ -32,21 +32,17 @@ func readGlobal(ctx context.Context, d *fastiron.Device) (globalConfig, error) {
 	if _, err := d.Discover(ctx); err != nil {
 		return globalConfig{}, err
 	}
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return globalConfig{}, err
 	}
-	current, _, err := nativeGlobal(output)
+	current, _, err := nativeGlobal(document)
 	return current, err
 }
 
 // RESTCONF can retain obsolete leaves after changes. Read native configuration
 // to distinguish configured policy from that projection and operational defaults.
-func nativeGlobal(output string) (globalConfig, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return globalConfig{}, nil, err
-	}
+func nativeGlobal(document *nativeconfig.Document) (globalConfig, []string, error) {
 	var unowned []string
 	result := globalConfig{AuthOrder: "dot1x mac-auth", MaxSessions: 2}
 	active := false

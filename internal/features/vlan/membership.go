@@ -98,11 +98,11 @@ func applyMembership(ctx context.Context, d *fastiron.Device, v membership, pres
 			return false, err
 		}
 		exists := port.contains(v)
-		configuration, err := d.RunningConfig(ctx)
+		document, err := d.RunningConfig(ctx)
 		if err != nil {
 			return exists, err
 		}
-		defaultVLAN, err := defaultID(configuration)
+		defaultVLAN, err := document.DefaultVLAN()
 		if err != nil {
 			return exists, err
 		}

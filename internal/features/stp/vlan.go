@@ -36,14 +36,11 @@ func readVLANs(ctx context.Context, d *fastiron.Device) ([]vlan, error) {
 	if _, err := readRESTVLANs(ctx, d); err != nil {
 		return nil, err
 	}
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	document, err := config.Parse(output)
-	if err != nil {
-		return nil, err
-	}
+
 	// Cached modes and priorities can outlive CLI changes or omit native policies.
 	return document.STPVLANs()
 }
@@ -104,13 +101,10 @@ func readRESTVLANs(ctx context.Context, d *fastiron.Device) ([]vlan, error) {
 }
 
 func readNativeVLAN(ctx context.Context, d *fastiron.Device, id int64) (*vlan, []string, error) {
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	document, err := config.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+
 	return document.STPVLAN(id)
 }

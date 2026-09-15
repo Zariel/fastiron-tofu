@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/testswitch"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -19,7 +20,7 @@ import (
 
 func TestNative(t *testing.T) {
 	configuration := "ver 09.0.10k\nip multicast active\nvlan 53 name MEDIA by port\n multicast disable-igmp-snoop\n multicast tracking\n multicast version 3\nvlan 54 by port\n multicast passive\nend"
-	got, err := parse(configuration, 53)
+	got, err := parse(configtest.Parse(t, configuration), 53)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,14 +31,11 @@ func TestNative(t *testing.T) {
 	if strings.Join(got.unowned, "\n") != want {
 		t.Fatalf("unowned configuration: %q", got.unowned)
 	}
-	if _, err := parse(configuration, 55); !errors.Is(err, fastiron.ErrNotFound) {
+	if _, err := parse(configtest.Parse(t, configuration), 55); !errors.Is(err, fastiron.ErrNotFound) {
 		t.Fatalf("missing VLAN: %v", err)
 	}
-	if _, err := parse(strings.Replace(configuration, " multicast tracking", " multicast active", 1), 53); err == nil {
+	if _, err := parse(configtest.Parse(t, strings.Replace(configuration, " multicast tracking", " multicast active", 1)), 53); err == nil {
 		t.Fatal("accepted ambiguous modes")
-	}
-	if _, err := parse(strings.TrimSuffix(configuration, "end"), 53); err == nil {
-		t.Fatal("accepted incomplete configuration")
 	}
 }
 

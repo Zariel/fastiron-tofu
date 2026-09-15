@@ -38,18 +38,14 @@ func readGlobal(ctx context.Context, device *fastiron.Device) (nativeState, erro
 	if response.Global == nil || response.Global.IGMP == nil {
 		return nativeState{}, errors.New("RESTCONF omitted the global IGMP container")
 	}
-	configuration, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nativeState{}, err
 	}
-	return parseGlobal(configuration)
+	return parseGlobal(document)
 }
 
-func parseGlobal(configuration string) (nativeState, error) {
-	document, err := config.Parse(configuration)
-	if err != nil {
-		return nativeState{}, err
-	}
+func parseGlobal(document *config.Document) (nativeState, error) {
 	observed, err := document.IGMP(-1)
 	if err != nil {
 		return nativeState{}, err

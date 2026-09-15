@@ -45,11 +45,11 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 				if len(current.Interfaces) > 0 {
 					return current, errors.New("OSPF area still has interface bindings; remove them before destroying the area")
 				}
-				output, err := d.RunningConfig(ctx)
+				document, err := d.RunningConfig(ctx)
 				if err != nil {
 					return current, err
 				}
-				if err := ospfAreaChildren(output, id); err != nil {
+				if err := ospfAreaChildren(document, id); err != nil {
 					return current, err
 				}
 				endpoint = path.Join(ospfAreasPath, "area="+url.PathEscape(current.key))
@@ -84,11 +84,7 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 	})
 }
 
-func ospfAreaChildren(config, id string) error {
-	document, parseErr := nativeconfig.Parse(config)
-	if parseErr != nil {
-		return parseErr
-	}
+func ospfAreaChildren(document *nativeconfig.Document, id string) error {
 	inside, found := false, false
 	for _, command := range document.Commands {
 		line := command.Text
@@ -161,11 +157,11 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 			var body any = map[string]any{"interface": []any{map[string]any{"id": name, "config": map[string]any{"id": name}}}}
 			if !present {
 				// Unbinding must not erase independently configured OSPF interface options.
-				output, err := d.RunningConfig(ctx)
+				document, err := d.RunningConfig(ctx)
 				if err != nil {
 					return exists, err
 				}
-				if err := ospfInterfaceOptions(output, id, name); err != nil {
+				if err := ospfInterfaceOptions(document, id, name); err != nil {
 					return exists, err
 				}
 				endpoint = path.Join(endpoint, "interface="+url.PathEscape(name))
@@ -205,11 +201,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 	})
 }
 
-func ospfInterfaceOptions(config, id, name string) error {
-	document, parseErr := nativeconfig.Parse(config)
-	if parseErr != nil {
-		return parseErr
-	}
+func ospfInterfaceOptions(document *nativeconfig.Document, id, name string) error {
 	inside, found := false, false
 	for _, command := range document.Commands {
 		line := command.Text

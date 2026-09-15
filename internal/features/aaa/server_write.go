@@ -57,11 +57,7 @@ type nativeAAAServer struct {
 
 // nativeAAA rejects settings the RESTCONF server payload cannot preserve. Secret
 // values stay local; errors never include the source configuration line.
-func nativeAAA(output string, desired server) (*nativeAAAServer, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+func nativeAAA(document *nativeconfig.Document, desired server) (*nativeAAAServer, []string, error) {
 	var current *nativeAAAServer
 	var neighbors []string
 	for _, command := range document.Commands {
@@ -169,11 +165,11 @@ func applyServer(ctx context.Context, d *fastiron.Device, desired server, secret
 		if err != nil {
 			return nil, err
 		}
-		output, err := d.RunningConfig(ctx)
+		document, err := d.RunningConfig(ctx)
 		if err != nil {
 			return nil, err
 		}
-		native, neighbors, err := nativeAAA(output, desired)
+		native, neighbors, err := nativeAAA(document, desired)
 		if err != nil {
 			return nil, err
 		}
@@ -232,11 +228,11 @@ func applyServer(ctx context.Context, d *fastiron.Device, desired server, secret
 					current = &s
 				}
 			}
-			output, nativeErr := d.RunningConfig(ctx)
+			document, nativeErr := d.RunningConfig(ctx)
 			if nativeErr != nil {
 				return current, errors.Join(writeErr, nativeErr)
 			}
-			native, after, parseErr := nativeAAA(output, desired)
+			native, after, parseErr := nativeAAA(document, desired)
 			if parseErr != nil {
 				return current, errors.Join(writeErr, parseErr)
 			}

@@ -28,15 +28,12 @@ func readIP(ctx context.Context, d *fastiron.Device, family ipFamily, name strin
 }
 
 func ipConfiguration(ctx context.Context, d *fastiron.Device, family ipFamily, name string) (*ipConfig, []string, error) {
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	output, err = fastiron.NormalizeConfiguration(output)
-	if err != nil {
-		return nil, nil, err
-	}
-	return nativeIP(output, family, name)
+
+	return nativeIP(document, family, name)
 }
 
 func applyIP(ctx context.Context, d *fastiron.Device, desired ipConfig) (*ipConfig, error) {

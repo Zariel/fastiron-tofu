@@ -80,18 +80,14 @@ func read(ctx context.Context, device *fastiron.Device, id int64) (nativeState, 
 	if err := checkRESTCONF(ctx, device); err != nil {
 		return nativeState{}, err
 	}
-	configuration, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nativeState{}, err
 	}
-	return parse(configuration, id)
+	return parse(document, id)
 }
 
-func parse(configuration string, id int64) (nativeState, error) {
-	document, err := config.Parse(configuration)
-	if err != nil {
-		return nativeState{}, err
-	}
+func parse(document *config.Document, id int64) (nativeState, error) {
 	vlans, err := document.VLANs()
 	if err != nil {
 		return nativeState{}, err
@@ -134,11 +130,11 @@ func apply(ctx context.Context, device *fastiron.Device, id int64, desired setti
 			} else {
 				writeErr = update.REST(method, endpoint, body)
 			}
-			configuration, readErr := device.RunningConfig(ctx)
+			document, readErr := device.RunningConfig(ctx)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}
-			observed, readErr := parse(configuration, id)
+			observed, readErr := parse(document, id)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}

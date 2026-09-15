@@ -3,6 +3,8 @@ package acl
 import (
 	"slices"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestAccessGroupOwnership(t *testing.T) {
@@ -19,7 +21,7 @@ interface lag 1
  ip access-group 90 out
  ipv6 access-group V6 in
 end`
-	view, err := nativeAccessGroup(nativeFixture(output), accessGroupKey{"lag 1", "ip", "in"})
+	view, err := nativeAccessGroup(configtest.Parse(t, nativeFixture(output)), accessGroupKey{"lag 1", "ip", "in"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +41,7 @@ func TestAccessGroupUnsupported(t *testing.T) {
 		"malformed": " ip access-group 90",
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := nativeAccessGroup(nativeFixture("ver 09.0.10kT213\ninterface ethernet 1/1/9\n"+lines+"\nend"), accessGroupKey{"ethernet 1/1/9", "ip", "in"})
+			_, err := nativeAccessGroup(configtest.Parse(t, nativeFixture("ver 09.0.10kT213\ninterface ethernet 1/1/9\n"+lines+"\nend")), accessGroupKey{"ethernet 1/1/9", "ip", "in"})
 			if err == nil {
 				t.Fatal("ambiguous or unrepresented binding accepted")
 			}
@@ -49,11 +51,11 @@ func TestAccessGroupUnsupported(t *testing.T) {
 
 func TestAccessGroupDefaultHeader(t *testing.T) {
 	k := accessGroupKey{"ethernet 1/1/9", "ip", "in"}
-	before, err := nativeAccessGroup(nativeFixture("ver 09.0.10kT213\nend"), k)
+	before, err := nativeAccessGroup(configtest.Parse(t, nativeFixture("ver 09.0.10kT213\nend")), k)
 	if err != nil {
 		t.Fatal(err)
 	}
-	after, err := nativeAccessGroup(nativeFixture("ver 09.0.10kT213\ninterface ethernet 1/1/9\n ip access-group 90 in\nend"), k)
+	after, err := nativeAccessGroup(configtest.Parse(t, nativeFixture("ver 09.0.10kT213\ninterface ethernet 1/1/9\n ip access-group 90 in\nend")), k)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ vlan 1000 name NEIGHBOR by port
 ip access-list standard 90
  sequence 10 permit any
 end`
-	view, err := nativeAccessGroup(nativeFixture(output), accessGroupKey{"vlan 100", "ip", "in"})
+	view, err := nativeAccessGroup(configtest.Parse(t, nativeFixture(output)), accessGroupKey{"vlan 100", "ip", "in"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +96,7 @@ end`
 
 func TestVLANBindingPortSubset(t *testing.T) {
 	output := "ver 09.0.10kT213\nvlan 100 by port\n ip access-group 90 in ethernet 1/1/9\nend"
-	if _, err := nativeAccessGroup(nativeFixture(output), accessGroupKey{"vlan 100", "ip", "in"}); err == nil {
+	if _, err := nativeAccessGroup(configtest.Parse(t, nativeFixture(output)), accessGroupKey{"vlan 100", "ip", "in"}); err == nil {
 		t.Fatal("port-specific VLAN binding was treated as an entire-VLAN binding")
 	}
 }

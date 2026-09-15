@@ -28,15 +28,12 @@ func readMAC(ctx context.Context, device *fastiron.Device, name string) (*macCon
 }
 
 func macConfiguration(ctx context.Context, device *fastiron.Device, name string) (*macConfig, []string, error) {
-	output, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	output, err = fastiron.NormalizeConfiguration(output)
-	if err != nil {
-		return nil, nil, err
-	}
-	return nativeMAC(output, name)
+
+	return nativeMAC(document, name)
 }
 
 func applyMAC(ctx context.Context, device *fastiron.Device, desired macConfig) (*macConfig, error) {

@@ -36,11 +36,7 @@ type nativeUser struct {
 	hasPassword bool
 }
 
-func userConfiguration(output, name string) (*nativeUser, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+func userConfiguration(document *nativeconfig.Document, name string) (*nativeUser, []string, error) {
 	var current *nativeUser
 	var neighbors []string
 	for _, command := range document.Commands {
@@ -113,11 +109,11 @@ func applyUser(ctx context.Context, d *fastiron.Device, u account, password stri
 		if err != nil {
 			return nil, err
 		}
-		output, err := d.RunningConfig(ctx)
+		document, err := d.RunningConfig(ctx)
 		if err != nil {
 			return nil, err
 		}
-		native, neighbors, err := userConfiguration(output, u.Username)
+		native, neighbors, err := userConfiguration(document, u.Username)
 		if err != nil {
 			return nil, err
 		}
@@ -131,10 +127,6 @@ func applyUser(ctx context.Context, d *fastiron.Device, u account, password stri
 			return current, errors.New("native and RESTCONF user configuration disagree; retry after synchronization")
 		}
 		if present || current != nil {
-			document, err := nativeconfig.Parse(output)
-			if err != nil {
-				return current, err
-			}
 			for _, command := range document.Commands {
 				if command.Parent == -1 && command.Text == "service local-user-protection" {
 					return current, errors.New("local-user protection requires an authenticated user-update operation not currently supported")
@@ -162,11 +154,11 @@ func applyUser(ctx context.Context, d *fastiron.Device, u account, password stri
 					current = &user
 				}
 			}
-			output, nativeErr := d.RunningConfig(ctx)
+			document, nativeErr := d.RunningConfig(ctx)
 			if nativeErr != nil {
 				return current, errors.Join(writeErr, nativeErr)
 			}
-			native, after, parseErr := userConfiguration(output, u.Username)
+			native, after, parseErr := userConfiguration(document, u.Username)
 			if parseErr != nil {
 				return current, errors.Join(writeErr, parseErr)
 			}

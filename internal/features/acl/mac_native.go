@@ -8,11 +8,7 @@ import (
 	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 )
 
-func nativeMAC(output, name string) (*macConfig, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+func nativeMAC(document *nativeconfig.Document, name string) (*macConfig, []string, error) {
 	var current *macConfig
 	var unowned []string
 	active := false

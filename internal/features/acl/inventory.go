@@ -13,11 +13,7 @@ type aclIdentity struct {
 	Name string `tfsdk:"name"`
 }
 
-func nativeInventory(configuration string) ([]aclIdentity, error) {
-	document, err := config.Parse(configuration)
-	if err != nil {
-		return nil, err
-	}
+func nativeInventory(document *config.Document) ([]aclIdentity, error) {
 	native, err := document.ACLs()
 	if err != nil {
 		return nil, err

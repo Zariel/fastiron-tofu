@@ -26,18 +26,14 @@ func readDefault(ctx context.Context, device *fastiron.Device) (defaultState, er
 	if _, err := device.Discover(ctx); err != nil {
 		return defaultState{}, err
 	}
-	configuration, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return defaultState{}, err
 	}
-	return nativeDefault(configuration)
+	return nativeDefault(document)
 }
 
-func nativeDefault(configuration string) (defaultState, error) {
-	document, err := config.Parse(configuration)
-	if err != nil {
-		return defaultState{}, err
-	}
+func nativeDefault(document *config.Document) (defaultState, error) {
 	id, err := document.DefaultVLAN()
 	if err != nil {
 		return defaultState{}, err

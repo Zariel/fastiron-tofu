@@ -236,11 +236,11 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 			if port.Access > 1 || len(port.Trunks) > 0 {
 				return errors.New("LAG has VLAN memberships; remove them before destroying it")
 			}
-			output, err := d.RunningConfig(ctx)
+			document, err := d.RunningConfig(ctx)
 			if err != nil {
 				return err
 			}
-			if err := lagChildren(output, current); err != nil {
+			if err := lagChildren(document, current); err != nil {
 				return err
 			}
 			writeErr := update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
@@ -254,12 +254,7 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 	})
 }
 
-func lagChildren(config string, lag config) error {
-	document, parseErr := nativeconfig.Parse(config)
-	if parseErr != nil {
-		return parseErr
-	}
-
+func lagChildren(document *nativeconfig.Document, lag config) error {
 	inside, virtual, found := false, false, false
 	for _, command := range document.Commands {
 		line := command.Text

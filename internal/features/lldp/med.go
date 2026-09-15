@@ -21,13 +21,10 @@ func readMEDNative(ctx context.Context, device *fastiron.Device) (map[string]map
 	if err != nil {
 		return nil, nil, err
 	}
-	raw, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	document, err := config.Parse(raw)
-	if err != nil {
-		return nil, nil, err
-	}
+
 	return document.MEDPolicies(slices.Sorted(maps.Keys(inventory)))
 }

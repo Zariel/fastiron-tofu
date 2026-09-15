@@ -31,11 +31,11 @@ func applyGlobal(ctx context.Context, device *fastiron.Device, desired settings)
 			} else {
 				writeErr = update.REST(method, endpoint, body)
 			}
-			configuration, readErr := device.RunningConfig(ctx)
+			document, readErr := device.RunningConfig(ctx)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}
-			observed, readErr := parseGlobal(configuration)
+			observed, readErr := parseGlobal(document)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}

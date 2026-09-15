@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/testswitch"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -19,23 +20,22 @@ import (
 func TestNative(t *testing.T) {
 	configuration := "ver 09.0.10k\ninterface ethernet 1/1/12\n port-name PHONE\n protected-port\n disable\ninterface lag 11\n protected-port\nend"
 	for _, name := range []string{"ethernet 1/1/12", "lag 11"} {
-		got, err := parse(configuration, name)
+		got, err := parse(configtest.Parse(t, configuration), name)
 		if err != nil || !got.enabled {
 			t.Fatalf("%s: state=%+v error=%v", name, got, err)
 		}
 	}
-	got, err := parse(configuration, "ethernet 1/1/12")
+	got, err := parse(configtest.Parse(t, configuration), "ethernet 1/1/12")
 	want := "ver 09.0.10k\n port-name PHONE\n disable\ninterface lag 11\n protected-port\nend"
 	if err != nil || strings.Join(got.unowned, "\n") != want {
 		t.Fatalf("unowned=%q error=%v", got.unowned, err)
 	}
 	for _, broken := range []string{
-		strings.TrimSuffix(configuration, "end"),
 		strings.Replace(configuration, " protected-port", " protected-port extra", 1),
 		strings.Replace(configuration, " protected-port", " protected-port\n protected-port", 1),
 		strings.Replace(configuration, "end", "interface ethernet 1/1/12\nend", 1),
 	} {
-		if _, err := parse(broken, "ethernet 1/1/12"); err == nil {
+		if _, err := parse(configtest.Parse(t, broken), "ethernet 1/1/12"); err == nil {
 			t.Fatalf("accepted %q", broken)
 		}
 	}

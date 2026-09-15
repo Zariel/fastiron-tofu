@@ -3,6 +3,8 @@ package authentication
 import (
 	"reflect"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestAuthenticationInterfaces(t *testing.T) {
@@ -19,7 +21,7 @@ authentication
  mac-authentication enable ethe 1/1/9
 !
 `
-	got, _, err := nativeAuthenticationInterfaces(nativeFixture(input))
+	got, _, err := nativeAuthenticationInterfaces(configtest.Parse(t, nativeFixture(input)))
 	want := map[string]interfaceConfig{
 		"ethernet 1/1/9":  {Dot1XEnabled: true, MACEnabled: true, PortControl: "force-authorized"},
 		"ethernet 1/1/10": {Dot1XEnabled: true, PortControl: "auto"},
@@ -30,7 +32,7 @@ authentication
 }
 
 func TestAuthenticationPortControl(t *testing.T) {
-	got, _, err := nativeAuthenticationInterfaces(nativeFixture("dot1x port-control force-unauthorized ethernet 2/1/3 2/1/5\n"))
+	got, _, err := nativeAuthenticationInterfaces(configtest.Parse(t, nativeFixture("dot1x port-control force-unauthorized ethernet 2/1/3 2/1/5\n")))
 	want := map[string]interfaceConfig{
 		"ethernet 2/1/3": {PortControl: "force-unauthorized"},
 		"ethernet 2/1/5": {PortControl: "force-unauthorized"},
@@ -50,7 +52,7 @@ func TestAuthenticationPortErrors(t *testing.T) {
 		"excessive range":   "dot1x port-control auto ethe 1/1/1 to 1/1/9999999",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := nativeAuthenticationInterfaces(nativeFixture(line)); err == nil {
+			if _, _, err := nativeAuthenticationInterfaces(configtest.Parse(t, nativeFixture(line))); err == nil {
 				t.Fatal("accepted malformed native authentication configuration")
 			}
 		})

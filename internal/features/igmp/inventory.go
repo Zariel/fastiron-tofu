@@ -15,18 +15,14 @@ func readInventory(ctx context.Context, device *fastiron.Device) (map[int64]sett
 	if err := checkRESTCONF(ctx, device); err != nil {
 		return nil, err
 	}
-	configuration, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return parseInventory(configuration)
+	return parseInventory(document)
 }
 
-func parseInventory(configuration string) (map[int64]settings, error) {
-	document, err := config.Parse(configuration)
-	if err != nil {
-		return nil, err
-	}
+func parseInventory(document *config.Document) (map[int64]settings, error) {
 	vlans, err := document.VLANs()
 	if err != nil {
 		return nil, err

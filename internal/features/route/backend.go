@@ -185,11 +185,11 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 			} else {
 				// Deleting the next hop also removes native options absent from this API.
 				// Refuse to erase those options until their owner has removed them.
-				output, err := d.RunningConfig(ctx)
+				document, err := d.RunningConfig(ctx)
 				if err != nil {
 					return current, err
 				}
-				if err := routeOptions(output, v); err != nil {
+				if err := routeOptions(document, v); err != nil {
 					return current, err
 				}
 				method = http.MethodDelete
@@ -222,11 +222,7 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 	})
 }
 
-func routeOptions(config string, v route) error {
-	document, parseErr := nativeconfig.Parse(config)
-	if parseErr != nil {
-		return parseErr
-	}
+func routeOptions(document *nativeconfig.Document, v route) error {
 	expected := fmt.Sprintf("ip route %s %s", v.Prefix, v.NextHop)
 	for _, command := range document.Commands {
 		line := command.Text

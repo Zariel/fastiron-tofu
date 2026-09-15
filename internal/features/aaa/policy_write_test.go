@@ -3,6 +3,8 @@ package aaa
 import (
 	"reflect"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestNativeAAAPolicy(t *testing.T) {
@@ -15,7 +17,7 @@ func TestNativeAAAPolicy(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := "aaa authentication web-server default local\n" + tc.input + "username operator password opaque"
-			got, neighbors, err := nativeAAAPolicy(nativeFixture(input))
+			got, neighbors, err := nativeAAAPolicy(configtest.Parse(t, nativeFixture(input)))
 			if err != nil || got == nil || !reflect.DeepEqual(*got, tc.want) {
 				t.Fatalf("policy=%v error=%v", got, err)
 			}
@@ -35,7 +37,7 @@ func TestNativeAAAPolicyOwnership(t *testing.T) {
 		"duplicate login":  "aaa authentication login default radius",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := nativeAAAPolicy(nativeFixture("aaa authentication login default local\n" + extra)); err == nil {
+			if _, _, err := nativeAAAPolicy(configtest.Parse(t, nativeFixture("aaa authentication login default local\n"+extra))); err == nil {
 				t.Fatal("accepted unsupported native ownership")
 			}
 		})

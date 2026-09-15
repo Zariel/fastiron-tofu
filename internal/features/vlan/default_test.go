@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/testswitch"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -27,10 +28,9 @@ func TestDefaultID(t *testing.T) {
 		"missing ID":       {"ver 09.0.10k\ndefault-vlan-id\nend", 0, true},
 		"duplicate":        {"ver 09.0.10k\ndefault-vlan-id 3962\ndefault-vlan-id 3963\nend", 0, true},
 		"out of range":     {"ver 09.0.10k\ndefault-vlan-id 4096\nend", 0, true},
-		"truncated":        {"ver 09.0.10k\ndefault-vlan-id 3962", 0, true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := defaultID(tc.config)
+			got, err := configtest.Parse(t, tc.config).DefaultVLAN()
 			if (err != nil) != tc.wantErr || (!tc.wantErr && got != tc.want) {
 				t.Fatalf("default ID=%d error=%v; want %d", got, err, tc.want)
 			}

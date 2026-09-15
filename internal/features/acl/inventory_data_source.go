@@ -48,17 +48,13 @@ func (d *inventoryDataSource) Read(ctx context.Context, _ datasource.ReadRequest
 		resp.Diagnostics.AddError("Cannot read ACL inventory", err.Error())
 		return
 	}
-	configuration, err := d.device.RunningConfig(ctx)
+	document, err := d.device.RunningConfig(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read ACL inventory", err.Error())
 		return
 	}
-	configuration, err = fastiron.NormalizeConfiguration(configuration)
-	if err != nil {
-		resp.Diagnostics.AddError("Cannot read ACL inventory", err.Error())
-		return
-	}
-	identities, err := nativeInventory(configuration)
+
+	identities, err := nativeInventory(document)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read ACL inventory", err.Error())
 		return

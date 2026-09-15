@@ -3,6 +3,8 @@ package lag
 import (
 	"strings"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestLAGName(t *testing.T) {
@@ -40,10 +42,9 @@ func TestLAGChildren(t *testing.T) {
 		{"unrelated interface", base + "!\ninterface lag 54\n ip address 192.0.2.2 255.255.255.0\n!\nend", false},
 		{"empty virtual interface", base + "!\ninterface lag 53\n!\nend", false},
 		{"missing aggregate", "ver 09.0.10k\ninterface lag 53\n!\nend", true},
-		{"truncated", base, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := lagChildren(tc.config, lag); (err != nil) != tc.blocked {
+			if err := lagChildren(configtest.Parse(t, tc.config), lag); (err != nil) != tc.blocked {
 				t.Fatalf("deletion guard: %v; want blocked=%v", err, tc.blocked)
 			}
 		})

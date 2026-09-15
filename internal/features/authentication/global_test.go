@@ -3,10 +3,12 @@ package authentication
 import (
 	"slices"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestGlobalConfiguration(t *testing.T) {
-	current, _, err := nativeGlobal(nativeFixture(`ver 09.0.10kT213
+	current, _, err := nativeGlobal(configtest.Parse(t, nativeFixture(`ver 09.0.10kT213
 !
 authentication
  auth-order mac-auth dot1x
@@ -32,7 +34,7 @@ interface ethernet 1/1/9
  max-sessions 3
 !
 end
-`))
+`)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +54,7 @@ func TestGlobalDefaults(t *testing.T) {
 		"ver 09.0.10kT213\ninterface ethernet 1/1/9\n max-sessions 15\nend\n",
 		"ver 09.0.10kT213\nauthentication\n dot1x enable ethe 1/1/10\n mac-authentication enable ethe 1/1/10\nend\n",
 	} {
-		current, _, err := nativeGlobal(nativeFixture(native))
+		current, _, err := nativeGlobal(configtest.Parse(t, nativeFixture(native)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,7 +67,7 @@ func TestGlobalDefaults(t *testing.T) {
 func TestNativeGlobalActions(t *testing.T) {
 	for _, action := range []string{"success", "failure", "critical-vlan", "critical-vlan voice voice-vlan"} {
 		t.Run(action, func(t *testing.T) {
-			current, _, err := nativeGlobal(nativeFixture("authentication\n auth-fail-action restricted-vlan voice voice-vlan\n auth-timeout-action " + action + "\nend\n"))
+			current, _, err := nativeGlobal(configtest.Parse(t, nativeFixture("authentication\n auth-fail-action restricted-vlan voice voice-vlan\n auth-timeout-action "+action+"\nend\n")))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,7 +90,7 @@ func TestInvalidGlobalConfiguration(t *testing.T) {
 		"incomplete": " dot1x\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := nativeGlobal(nativeFixture("authentication\n" + native + "end\n")); err == nil {
+			if _, _, err := nativeGlobal(configtest.Parse(t, nativeFixture("authentication\n"+native+"end\n"))); err == nil {
 				t.Fatal("invalid native configuration accepted")
 			}
 		})
@@ -96,7 +98,7 @@ func TestInvalidGlobalConfiguration(t *testing.T) {
 }
 
 func TestGlobalOwnership(t *testing.T) {
-	_, unowned, err := nativeGlobal(nativeFixture("ver 09.0.10kT213\nauthentication\n auth-default-vlan 3055\n dot1x enable\n dot1x guest-vlan 3058\n dot1x enable ethe 1/1/10\n reauth-period 120\ninterface ethernet 1/1/9\n port-name neighbor\nend"))
+	_, unowned, err := nativeGlobal(configtest.Parse(t, nativeFixture("ver 09.0.10kT213\nauthentication\n auth-default-vlan 3055\n dot1x enable\n dot1x guest-vlan 3058\n dot1x enable ethe 1/1/10\n reauth-period 120\ninterface ethernet 1/1/9\n port-name neighbor\nend")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +110,7 @@ func TestGlobalOwnership(t *testing.T) {
 
 func TestBannerAuthentication(t *testing.T) {
 	input := "ver 09.0.10k\nbanner motd $\nauthentication\n dot1x enable\n$\nend"
-	observed, _, err := nativeGlobal(input)
+	observed, _, err := nativeGlobal(configtest.Parse(t, input))
 	if err != nil || observed.Dot1XEnabled {
 		t.Fatalf("banner interpreted as authentication: %+v, %v", observed, err)
 	}

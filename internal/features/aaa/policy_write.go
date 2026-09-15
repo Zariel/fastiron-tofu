@@ -37,11 +37,7 @@ func validatePolicy(p policy) error {
 	return nil
 }
 
-func nativeAAAPolicy(output string) (*policy, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+func nativeAAAPolicy(document *nativeconfig.Document) (*policy, []string, error) {
 	p := &policy{}
 	var neighbors []string
 	seen := map[string]bool{}
@@ -111,11 +107,11 @@ func configuration(ctx context.Context, d *fastiron.Device) (*policy, []string, 
 	if err != nil {
 		return nil, nil, err
 	}
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	native, neighbors, err := nativeAAAPolicy(output)
+	native, neighbors, err := nativeAAAPolicy(document)
 	if err != nil {
 		return nil, nil, err
 	}

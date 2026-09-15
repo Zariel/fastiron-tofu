@@ -157,11 +157,11 @@ func (d *Device) save(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	running, err := NormalizeConfiguration(out[0])
+	running, err := normalizeConfiguration(out[0])
 	if err != nil {
 		return err
 	}
-	startup, err := NormalizeConfiguration(out[1])
+	startup, err := normalizeConfiguration(out[1])
 	if err != nil {
 		return err
 	}
@@ -171,8 +171,8 @@ func (d *Device) save(ctx context.Context) error {
 	return nil
 }
 
-// NormalizeConfiguration validates complete native output and removes display separators.
-func NormalizeConfiguration(output string) (string, error) {
+// normalizeConfiguration validates complete native output and removes display separators.
+func normalizeConfiguration(output string) (string, error) {
 	document, err := config.Parse(output)
 	if err != nil {
 		return "", err
@@ -199,19 +199,16 @@ func (d *Device) doREST(ctx context.Context, method, endpoint string, body, resp
 	return d.rest.Do(ctx, method, endpoint, body, response)
 }
 
-// RunningConfig reads a complete native configuration, preserving its formatting.
-func (d *Device) RunningConfig(ctx context.Context) (string, error) {
+// RunningConfig reads and parses a complete native configuration.
+func (d *Device) RunningConfig(ctx context.Context) (*config.Document, error) {
 	if d.cli == nil {
-		return "", errors.New("SSH is required to read native configuration")
+		return nil, errors.New("SSH is required to read native configuration")
 	}
 	output, err := d.cli.Run(ctx, true, "show running-config")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if _, err := NormalizeConfiguration(output[0]); err != nil {
-		return "", err
-	}
-	return output[0], nil
+	return config.Parse(output[0])
 }
 
 // RESTCONFTimeout bounds reconciliation of asynchronous RESTCONF state.

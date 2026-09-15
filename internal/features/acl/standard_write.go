@@ -46,15 +46,12 @@ func standardPayload(name string, rules map[int64]standardRule) map[string]any {
 }
 
 func standardConfiguration(ctx context.Context, d *fastiron.Device, name string) (*standardConfig, []string, error) {
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	output, err = fastiron.NormalizeConfiguration(output)
-	if err != nil {
-		return nil, nil, err
-	}
-	return nativeStandard(output, name)
+
+	return nativeStandard(document, name)
 }
 
 func applyStandard(ctx context.Context, d *fastiron.Device, desired standardConfig) (*standardConfig, error) {

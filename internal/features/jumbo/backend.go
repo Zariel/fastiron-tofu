@@ -7,7 +7,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
@@ -49,14 +48,11 @@ func read(ctx context.Context, device *fastiron.Device) (observation, error) {
 
 func readNative(ctx context.Context, device *fastiron.Device) (observation, error) {
 	// The configured RESTCONF flag can remain stale after native CLI changes.
-	output, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return observation{}, err
 	}
-	document, err := config.Parse(output)
-	if err != nil {
-		return observation{}, err
-	}
+
 	enabled, unowned, err := document.Jumbo()
 	return observation{enabled: enabled, unowned: unowned}, err
 }

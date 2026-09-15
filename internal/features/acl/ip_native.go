@@ -12,11 +12,7 @@ import (
 
 // Native options outside this model must stop reconciliation before a write:
 // otherwise importing or refreshing an ACL could silently discard its policy.
-func nativeIP(output string, family ipFamily, name string) (*ipConfig, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+func nativeIP(document *nativeconfig.Document, family ipFamily, name string) (*ipConfig, []string, error) {
 	var current *ipConfig
 	var unowned []string
 	active := false

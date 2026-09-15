@@ -84,11 +84,7 @@ func (k accessGroupKey) payload(name string) map[string]any {
 	return map[string]any{"interfaces": map[string]any{"interface": []any{entry}}}
 }
 
-func nativeAccessGroup(output string, k accessGroupKey) (accessGroupView, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return accessGroupView{}, err
-	}
+func nativeAccessGroup(document *nativeconfig.Document, k accessGroupKey) (accessGroupView, error) {
 	view := accessGroupView{Available: map[[2]string]bool{}}
 	active := false
 	vlan := k.isVLAN()
@@ -243,15 +239,12 @@ func restAccessGroup(ctx context.Context, d *fastiron.Device, k accessGroupKey) 
 }
 
 func accessGroupConfiguration(ctx context.Context, d *fastiron.Device, k accessGroupKey) (accessGroupView, error) {
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return accessGroupView{}, err
 	}
-	output, err = fastiron.NormalizeConfiguration(output)
-	if err != nil {
-		return accessGroupView{}, err
-	}
-	view, err := nativeAccessGroup(output, k)
+
+	view, err := nativeAccessGroup(document, k)
 	if err != nil {
 		return view, err
 	}

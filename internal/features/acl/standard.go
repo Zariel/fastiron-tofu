@@ -41,11 +41,7 @@ func readStandard(ctx context.Context, d *fastiron.Device, name string) (*standa
 
 // nativeStandard rejects unrepresented rule options rather than silently
 // dropping them during reconciliation. All other ACLs and bindings stay unowned.
-func nativeStandard(output, name string) (*standardConfig, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+func nativeStandard(document *nativeconfig.Document, name string) (*standardConfig, []string, error) {
 	var current *standardConfig
 	var unowned []string
 	active := false

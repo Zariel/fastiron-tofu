@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/vlan"
 )
@@ -92,23 +93,20 @@ func applyGlobal(ctx context.Context, d *fastiron.Device, desired globalConfig) 
 		return nil, errors.New("global authentication configuration requires RESTCONF")
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*globalConfig, error) {
-		read := func() (globalConfig, []string, string, error) {
-			output, err := d.RunningConfig(ctx)
+		read := func() (globalConfig, []string, *nativeconfig.Document, error) {
+			document, err := d.RunningConfig(ctx)
 			if err != nil {
-				return globalConfig{}, nil, "", err
+				return globalConfig{}, nil, nil, err
 			}
-			output, err = fastiron.NormalizeConfiguration(output)
-			if err != nil {
-				return globalConfig{}, nil, "", err
-			}
-			p, unowned, err := nativeGlobal(output)
-			return p, unowned, output, err
+
+			p, unowned, err := nativeGlobal(document)
+			return p, unowned, document, err
 		}
-		current, unowned, output, err := read()
+		current, unowned, document, err := read()
 		if err != nil {
 			return nil, err
 		}
-		interfaces, _, err := nativeAuthenticationInterfaces(output)
+		interfaces, _, err := nativeAuthenticationInterfaces(document)
 		if err != nil {
 			return &current, err
 		}

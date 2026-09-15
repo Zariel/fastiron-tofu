@@ -3,6 +3,8 @@ package igmp
 import (
 	"strings"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestGlobalNative(t *testing.T) {
@@ -16,16 +18,15 @@ func TestGlobalNative(t *testing.T) {
 		{"default version", "ver 09.0.10k\nip multicast passive\nend", settings{Mode: "passive", Version: 2}, false},
 		{"ambiguous mode", "ver 09.0.10k\nip multicast passive\nip multicast active\nend", settings{}, true},
 		{"invalid version", "ver 09.0.10k\nip multicast version 1\nend", settings{}, true},
-		{"truncated", "ver 09.0.10k\nip multicast active", settings{}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := parseGlobal(tc.configuration)
+			got, err := parseGlobal(configtest.Parse(t, tc.configuration))
 			if (err != nil) != tc.wantErr || (err == nil && got.settings != tc.want) {
 				t.Fatalf("settings=%+v error=%v", got.settings, err)
 			}
 		})
 	}
-	got, err := parseGlobal("ver 09.0.10k\nip multicast active\nip multicast query-interval 127\nip multicast version 3\nvlan 53 by port\n multicast passive\nend")
+	got, err := parseGlobal(configtest.Parse(t, "ver 09.0.10k\nip multicast active\nip multicast query-interval 127\nip multicast version 3\nvlan 53 by port\n multicast passive\nend"))
 	if err != nil {
 		t.Fatal(err)
 	}

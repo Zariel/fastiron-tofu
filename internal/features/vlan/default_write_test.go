@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/testswitch"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -144,7 +145,7 @@ func TestDefaultLifecycle(t *testing.T) {
 }
 
 func TestDefaultProperties(t *testing.T) {
-	before, err := nativeDefault("ver 09.0.10k\nvlan 1 name DEFAULT-VLAN by port\n spanning-tree\nvlan 53 name INFRA by port\n tagged ethe 1/1/1\nend")
+	before, err := nativeDefault(configtest.Parse(t, "ver 09.0.10k\nvlan 1 name DEFAULT-VLAN by port\n spanning-tree\nvlan 53 name INFRA by port\n tagged ethe 1/1/1\nend"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +159,7 @@ func TestDefaultProperties(t *testing.T) {
 		{"other VLAN changed", strings.Replace(moved, "1/1/1", "1/1/2", 1), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			after, err := nativeDefault(tc.configuration)
+			after, err := nativeDefault(configtest.Parse(t, tc.configuration))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -170,7 +171,7 @@ func TestDefaultProperties(t *testing.T) {
 }
 
 func TestDefaultRoutedProperties(t *testing.T) {
-	before, err := nativeDefault("ver 09.0.10k\nvlan 1 name DEFAULT-VLAN by port\nvlan 53 name INFRA by port\ninterface ve 1\n ip address 192.0.2.1 255.255.255.0\ninterface ve 53\n port-name INFRA\nend")
+	before, err := nativeDefault(configtest.Parse(t, "ver 09.0.10k\nvlan 1 name DEFAULT-VLAN by port\nvlan 53 name INFRA by port\ninterface ve 1\n ip address 192.0.2.1 255.255.255.0\ninterface ve 53\n port-name INFRA\nend"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +186,7 @@ func TestDefaultRoutedProperties(t *testing.T) {
 		{"VE removed", strings.Replace(moved, "interface ve 3966\n ip address 192.0.2.1 255.255.255.0\n", "", 1), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			after, err := nativeDefault(tc.configuration)
+			after, err := nativeDefault(configtest.Parse(t, tc.configuration))
 			if err != nil {
 				t.Fatal(err)
 			}

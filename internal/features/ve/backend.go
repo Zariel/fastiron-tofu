@@ -61,14 +61,11 @@ func read(ctx context.Context, d *fastiron.Device, id int64) (nativeconfig.VE, e
 }
 
 func readNative(ctx context.Context, d *fastiron.Device, id int64) (nativeconfig.VE, error) {
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nativeconfig.VE{}, err
 	}
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nativeconfig.VE{}, err
-	}
+
 	return document.VE(id)
 }
 

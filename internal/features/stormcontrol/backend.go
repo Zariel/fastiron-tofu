@@ -113,11 +113,11 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 		return nativeState{}, errors.New("RESTCONF storm-control response omitted its container")
 	}
 	// REST metadata can omit native settings or retain old rates after CLI changes.
-	configuration, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nativeState{}, err
 	}
-	return parse(configuration, name)
+	return parse(document, name)
 }
 
 func apply(ctx context.Context, device *fastiron.Device, name string, desired policy) (*policy, error) {
@@ -155,11 +155,11 @@ func apply(ctx context.Context, device *fastiron.Device, name string, desired po
 			} else {
 				writeErr = update.REST(method, target, body)
 			}
-			configuration, readErr := device.RunningConfig(ctx)
+			document, readErr := device.RunningConfig(ctx)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}
-			observed, readErr := parse(configuration, name)
+			observed, readErr := parse(document, name)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}

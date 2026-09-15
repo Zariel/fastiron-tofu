@@ -3,6 +3,8 @@ package igmp
 import (
 	"maps"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestInventory(t *testing.T) {
@@ -21,7 +23,7 @@ interface ethernet 1/1/1
 vlan 55 by port
  multicast version 3
 end`
-	got, err := parseInventory(configuration)
+	got, err := parseInventory(configtest.Parse(t, configuration))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,10 +46,9 @@ func TestInventoryInvalid(t *testing.T) {
 		"duplicate VLAN":    "ver 09.0.10k\nvlan 53 by port\nvlan 53 by port\nend",
 		"conflicting modes": "ver 09.0.10k\nvlan 53 by port\n multicast active\n multicast passive\nend",
 		"invalid version":   "ver 09.0.10k\nvlan 53 by port\n multicast version 1\nend",
-		"truncated":         "ver 09.0.10k\nvlan 53 by port\n multicast active",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := parseInventory(configuration); err == nil {
+			if _, err := parseInventory(configtest.Parse(t, configuration)); err == nil {
 				t.Fatal("accepted invalid inventory")
 			}
 		})

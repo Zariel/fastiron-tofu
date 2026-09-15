@@ -5,10 +5,12 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
 func TestNativeMAC(t *testing.T) {
-	config, unowned, err := nativeMAC(nativeFixture(`ver 09.0.10kT213
+	config, unowned, err := nativeMAC(configtest.Parse(t, nativeFixture(`ver 09.0.10kT213
 ip access-list extended EDGE
  sequence 10 permit ip any any
 mac access-list EDGE
@@ -16,7 +18,7 @@ mac access-list EDGE
  deny any any
 interface ethernet 1/1/9
  mac access-group EDGE in
-end`), "EDGE")
+end`)), "EDGE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +49,7 @@ func TestNativeMACUnsupported(t *testing.T) {
 		"permit 02:00:00:00:00:00:00:01 ffff.ffff.ffff any",
 	} {
 		t.Run(rule, func(t *testing.T) {
-			if _, _, err := nativeMAC(nativeFixture("mac access-list EDGE\n "+rule+"\nend"), "EDGE"); err == nil {
+			if _, _, err := nativeMAC(configtest.Parse(t, nativeFixture("mac access-list EDGE\n "+rule+"\nend")), "EDGE"); err == nil {
 				t.Fatal("unrepresented native setting accepted")
 			}
 		})

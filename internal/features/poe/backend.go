@@ -85,7 +85,7 @@ func readPort(ctx context.Context, d *fastiron.Device, name string) (port, error
 	if err != nil {
 		return port{}, err
 	}
-	document, err := readNative(ctx, d)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return port{}, err
 	}
@@ -138,7 +138,7 @@ func readPorts(ctx context.Context, d *fastiron.Device) ([]port, error) {
 	if len(ports) == 0 {
 		return ports, nil
 	}
-	document, err := readNative(ctx, d)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -150,14 +150,6 @@ func readPorts(ctx context.Context, d *fastiron.Device) ([]port, error) {
 		ports[i].PoEPolicy = policy
 	}
 	return ports, nil
-}
-
-func readNative(ctx context.Context, device *fastiron.Device) (*config.Document, error) {
-	output, err := device.RunningConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return config.Parse(output)
 }
 
 func validatePolicy(policy config.PoEPolicy) error {

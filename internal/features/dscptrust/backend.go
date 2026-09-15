@@ -83,11 +83,11 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	}
 	// REST configuration can disagree with native state after CLI changes.
 
-	configuration, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nativeState{}, err
 	}
-	return parse(configuration, name)
+	return parse(document, name)
 }
 
 func endpoint(name string) string {
@@ -118,11 +118,11 @@ func apply(ctx context.Context, device *fastiron.Device, name string, enabled bo
 		put := func(value bool) error {
 			body := map[string]any{"icx-openconfig-if-trust-dscp-aug:trust-dscp": map[string]any{"config": map[string]bool{"enabled": value}}}
 			writeErr := update.REST(http.MethodPut, endpoint(name), body)
-			configuration, readErr := device.RunningConfig(ctx)
+			document, readErr := device.RunningConfig(ctx)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}
-			observed, readErr := parse(configuration, name)
+			observed, readErr := parse(document, name)
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}

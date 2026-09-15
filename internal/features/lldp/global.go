@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
@@ -16,14 +15,11 @@ type globalState struct {
 }
 
 func readGlobalNative(ctx context.Context, device *fastiron.Device) (globalState, error) {
-	output, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return globalState{}, err
 	}
-	document, err := config.Parse(output)
-	if err != nil {
-		return globalState{}, err
-	}
+
 	enabled, unowned, err := document.LLDP()
 	return globalState{enabled: enabled, unowned: unowned}, err
 }

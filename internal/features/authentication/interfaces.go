@@ -26,19 +26,15 @@ func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfa
 	if _, err := d.Discover(ctx); err != nil {
 		return nil, err
 	}
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	interfaces, _, err := nativeAuthenticationInterfaces(output)
+	interfaces, _, err := nativeAuthenticationInterfaces(document)
 	return interfaces, err
 }
 
-func nativeAuthenticationInterfaces(output string) (map[string]interfaceConfig, []string, error) {
-	document, err := nativeconfig.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+func nativeAuthenticationInterfaces(document *nativeconfig.Document) (map[string]interfaceConfig, []string, error) {
 	var unowned []string
 	interfaces := map[string]interfaceConfig{}
 	controls := map[string]string{}

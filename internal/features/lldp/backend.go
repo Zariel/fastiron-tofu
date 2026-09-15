@@ -199,14 +199,11 @@ func readPortModes(ctx context.Context, device *fastiron.Device) (map[string]con
 	if err != nil {
 		return nil, nil, err
 	}
-	output, err := device.RunningConfig(ctx)
+	document, err := device.RunningConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	document, err := config.Parse(output)
-	if err != nil {
-		return nil, nil, err
-	}
+
 	names := make([]string, 0, len(inventory))
 	for name := range inventory {
 		names = append(names, name)

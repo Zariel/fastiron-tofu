@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/testswitch"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -18,7 +19,7 @@ import (
 
 func TestNative(t *testing.T) {
 	configuration := "ver 09.0.10k\nauthentication\n voice-vlan 10\ninterface ethernet 1/1/12\n port-name PHONE\n voice-vlan 3053\n disable\n no inline power\ninterface ethernet 1/1/13\n voice-vlan 3054\nend"
-	got, err := parse(configuration, "ethernet 1/1/12")
+	got, err := parse(configtest.Parse(t, configuration), "ethernet 1/1/12")
 	if err != nil || got.vlanID != 3053 {
 		t.Fatalf("state=%+v error=%v", got, err)
 	}
@@ -26,19 +27,18 @@ func TestNative(t *testing.T) {
 	if strings.Join(got.unowned, "\n") != want {
 		t.Fatalf("unowned configuration=%q", got.unowned)
 	}
-	got, err = parse(configuration, "ethernet 1/1/14")
+	got, err = parse(configtest.Parse(t, configuration), "ethernet 1/1/14")
 	if err != nil || got.vlanID != 0 || strings.Join(got.unowned, "\n") != configuration {
 		t.Fatalf("default port=%+v error=%v", got, err)
 	}
 
 	for _, malformed := range []string{
-		strings.TrimSuffix(configuration, "end"),
 		strings.Replace(configuration, " voice-vlan 3053", " voice-vlan 3053\n voice-vlan 3054", 1),
 		strings.Replace(configuration, " voice-vlan 3053", " voice-vlan 4096", 1),
 		strings.Replace(configuration, " voice-vlan 3053", " voice-vlan", 1),
 		strings.Replace(configuration, "end", "interface ethernet 1/1/12\nend", 1),
 	} {
-		if _, err := parse(malformed, "ethernet 1/1/12"); err == nil {
+		if _, err := parse(configtest.Parse(t, malformed), "ethernet 1/1/12"); err == nil {
 			t.Fatalf("accepted malformed configuration %q", malformed)
 		}
 	}

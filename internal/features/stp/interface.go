@@ -98,14 +98,11 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 }
 
 func readNativeInterface(ctx context.Context, d *fastiron.Device, name string) (interfaceConfig, []string, error) {
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return interfaceConfig{}, nil, err
 	}
-	document, err := config.Parse(output)
-	if err != nil {
-		return interfaceConfig{}, nil, err
-	}
+
 	return document.STPInterface(name)
 }
 
@@ -135,14 +132,11 @@ func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfa
 	if _, err := readRESTInterfaces(ctx, d); err != nil {
 		return nil, err
 	}
-	output, err := d.RunningConfig(ctx)
+	document, err := d.RunningConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	document, err := config.Parse(output)
-	if err != nil {
-		return nil, err
-	}
+
 	// Cache-only identities disappear across reboot without any native policy change.
 	return document.STPInterfaces()
 }

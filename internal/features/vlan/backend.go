@@ -159,11 +159,11 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 		}
 		if err == nil {
 			// Deleting a parent VLAN must not silently erase separately owned children.
-			out, err := d.RunningConfig(ctx)
+			document, err := d.RunningConfig(ctx)
 			if err != nil {
 				return err
 			}
-			if err := vlanChildren(out, id); err != nil {
+			if err := vlanChildren(document, id); err != nil {
 				return err
 			}
 			writeErr := update.REST(http.MethodDelete, path.Join(vlanPath, "vlan="+strconv.FormatInt(id, 10)), nil)
@@ -176,12 +176,8 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 	})
 }
 
-func vlanChildren(config string, id int64) error {
-	document, parseErr := nativeconfig.Parse(config)
-	if parseErr != nil {
-		return parseErr
-	}
-	defaultVLAN, err := defaultID(config)
+func vlanChildren(document *nativeconfig.Document, id int64) error {
+	defaultVLAN, err := document.DefaultVLAN()
 	if err != nil {
 		return errors.New("cannot verify VLAN children in running configuration")
 	}

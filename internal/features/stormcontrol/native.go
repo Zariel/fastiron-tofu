@@ -24,11 +24,7 @@ type nativeState struct {
 	unowned []string
 }
 
-func parse(configuration, name string) (nativeState, error) {
-	document, err := config.Parse(configuration)
-	if err != nil {
-		return nativeState{}, err
-	}
+func parse(document *config.Document, name string) (nativeState, error) {
 	observed, err := document.InterfacePolicy(name, config.StormControl)
 	if err != nil {
 		return nativeState{}, err

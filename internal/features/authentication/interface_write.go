@@ -62,19 +62,19 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 			return nil, err
 		}
 
-		read := func() (map[string]interfaceConfig, []string, error) {
-			output, err := d.RunningConfig(ctx)
+		read := func() (map[string]interfaceConfig, []string, *nativeconfig.Document, error) {
+			document, err := d.RunningConfig(ctx)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
-			interfaces, unowned, err := nativeAuthenticationInterfaces(output)
+			interfaces, unowned, err := nativeAuthenticationInterfaces(document)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			neighbors, err := authenticationNeighbors(unowned, name, desired.Dot1XEnabled || desired.MACEnabled)
-			return interfaces, neighbors, err
+			return interfaces, neighbors, document, err
 		}
-		interfaces, unowned, err := read()
+		interfaces, unowned, document, err := read()
 		if err != nil {
 			return nil, err
 		}
@@ -84,10 +84,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 		}
 		neighbors := maps.Clone(interfaces)
 		delete(neighbors, name)
-		document, err := nativeconfig.Parse(strings.Join(unowned, "\n"))
-		if err != nil {
-			return &current, err
-		}
+
 		dot1xEnabled, macEnabled := false, false
 		for _, command := range document.Commands {
 			if command.Parent < 0 || document.Commands[command.Parent].Text != "authentication" {
@@ -121,7 +118,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 			if writeErr != nil {
 				writeErr = fmt.Errorf("authentication %s %s: %w", method, endpoint, writeErr)
 			}
-			observed, after, readErr := read()
+			observed, after, _, readErr := read()
 			if readErr != nil {
 				return errors.Join(writeErr, readErr)
 			}

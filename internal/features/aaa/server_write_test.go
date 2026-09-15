@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
@@ -24,7 +25,7 @@ func TestNativeAAAServer(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input := "aaa authentication login default local\nno aaa accounting commands 0 default\nradius-server retransmit 4\n" + tc.line + "\ntacacs-server host 192.0.2.54\n"
-			got, neighbors, err := nativeAAA(nativeFixture(input), tc.desired)
+			got, neighbors, err := nativeAAA(configtest.Parse(t, nativeFixture(input)), tc.desired)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -45,7 +46,7 @@ func TestNativeAAAOwnership(t *testing.T) {
 		"ssl-auth-port 2083 profile secure", "auth-port 1812 dot1x", "auth-port 1812 key 2 opaque mac-auth", "auth-port 1812 no-login", "auth-port 1812 port-only", "auth-port 1812 web-auth", "auth-port 1812 auth-port 1912", "acct-port 0", "key", "authorization-only",
 	} {
 		t.Run(options, func(t *testing.T) {
-			_, _, err := nativeAAA(nativeFixture("radius-server host 192.0.2.53 "+options), desired)
+			_, _, err := nativeAAA(configtest.Parse(t, nativeFixture("radius-server host 192.0.2.53 "+options)), desired)
 			if err == nil {
 				t.Fatal("accepted configuration outside RESTCONF ownership")
 			}
@@ -90,11 +91,11 @@ func TestAAAKeyValidation(t *testing.T) {
 
 func TestNativeAAAOrder(t *testing.T) {
 	s := server{Kind: "radius", Address: "192.0.2.53"}
-	first, neighbors, err := nativeAAA(nativeFixture("radius-server host 192.0.2.53\nradius-server host 192.0.2.54"), s)
+	first, neighbors, err := nativeAAA(configtest.Parse(t, nativeFixture("radius-server host 192.0.2.53\nradius-server host 192.0.2.54")), s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved, after, err := nativeAAA(nativeFixture("radius-server host 192.0.2.54\nradius-server host 192.0.2.53"), s)
+	moved, after, err := nativeAAA(configtest.Parse(t, nativeFixture("radius-server host 192.0.2.54\nradius-server host 192.0.2.53")), s)
 	if err != nil {
 		t.Fatal(err)
 	}
