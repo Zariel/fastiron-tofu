@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/zariel/fastiron-tofu/internal/config"
@@ -15,7 +16,8 @@ import (
 )
 
 type port struct {
-	Name string
+	Name    string
+	unowned []string
 	config.PoEPolicy
 	PowerClass          *int64
 	PowerUsedMilliwatts *float64
@@ -77,11 +79,12 @@ func readPort(ctx context.Context, d *fastiron.Device, name string) (port, error
 	if err != nil {
 		return port{}, err
 	}
-	policy, _, err := document.PoE(name)
+	policy, remaining, err := document.PoE(name)
 	if err != nil {
 		return port{}, err
 	}
 	observed.PoEPolicy = policy
+	observed.unowned = remaining
 	return observed, nil
 }
 
@@ -147,32 +150,57 @@ func readNative(ctx context.Context, device *fastiron.Device) (*config.Document,
 	return config.Parse(output)
 }
 
-func applyPort(ctx context.Context, d *fastiron.Device, name string, enabled bool) (*port, error) {
+func validatePolicy(policy config.PoEPolicy) error {
+	switch {
+	case policy.Priority < 1 || policy.Priority > 3:
+		return errors.New("PoE priority must be between 1 and 3")
+	case policy.PowerByClass < 0 || policy.PowerByClass > 4:
+		return errors.New("PoE allocation class must be between 0 and 4")
+	case policy.PowerLimitMilliwatts != 0 && (policy.PowerLimitMilliwatts < 1000 || policy.PowerLimitMilliwatts > 95000):
+		return errors.New("PoE power limit must be zero or between 1000 and 95000 milliwatts; supported limits depend on port capabilities")
+	case policy.PowerByClass != 0 && policy.PowerLimitMilliwatts != 0:
+		return errors.New("PoE allocation class and an explicit power limit cannot both be configured")
+	case !policy.Enabled && (policy.Priority != 3 || policy.PowerByClass != 0 || policy.PowerLimitMilliwatts != 0):
+		return errors.New("disabled PoE requires default priority and allocation because FastIron clears these settings when disabling power")
+	default:
+		return nil
+	}
+}
+
+func applyPort(ctx context.Context, d *fastiron.Device, name string, desired config.PoEPolicy) (*port, error) {
+	if err := validatePolicy(desired); err != nil {
+		return nil, err
+	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*port, error) {
 		current, err := readPort(ctx, d, name)
 		if err != nil {
 			return nil, err
 		}
-		if current.Enabled != enabled {
-			// Native enable changes reset allocation and priority. Those settings
-			// are outside this resource's current ownership and must not be cleared.
-			if current.Priority != 3 || current.PowerByClass != 0 || current.PowerLimitMilliwatts != 0 {
-				return &current, errors.New("PoE enable changes require default priority and power allocation; explicit settings are not owned by this resource")
-			}
-			body := map[string]any{"poe": map[string]any{"config": map[string]any{"enabled": enabled}}}
-			writeErr := update.REST(http.MethodPatch, path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe"), body)
-			observed, readErr := readPort(ctx, d, name)
-			if readErr != nil {
-				return nil, errors.Join(writeErr, readErr)
-			}
-			if observed.Enabled != enabled {
-				return &observed, errors.Join(writeErr, errors.New("PoE configuration did not converge"))
-			}
-			if writeErr != nil {
-				return &observed, writeErr
-			}
-			current = observed
+		if current.PoEPolicy == desired {
+			return &current, nil
 		}
-		return &current, nil
+
+		values := map[string]any{"enabled": desired.Enabled, "priority": desired.Priority}
+		if desired.PowerLimitMilliwatts != 0 {
+			values["power-limit"] = desired.PowerLimitMilliwatts
+		} else {
+			values["power-by-class"] = desired.PowerByClass
+		}
+		// PUT reapplies every policy field even when RESTCONF caches the desired
+		// value. PATCH can skip those fields and clear native allocation settings.
+		endpoint := path.Join("/interfaces", "interface="+url.PathEscape(name), "ethernet/poe/config")
+		writeErr := update.REST(http.MethodPut, endpoint, map[string]any{"config": values})
+		observed, readErr := readPort(ctx, d, name)
+		if readErr != nil {
+			return nil, errors.Join(writeErr, readErr)
+		}
+		// Confirm independently owned commands survived before allowing a save.
+		if !slices.Equal(current.unowned, observed.unowned) {
+			return &observed, errors.Join(writeErr, errors.New("PoE mutation changed unrelated configuration"))
+		}
+		if observed.PoEPolicy != desired {
+			return &observed, errors.Join(writeErr, errors.New("PoE configuration did not converge"))
+		}
+		return &observed, writeErr
 	})
 }

@@ -32,7 +32,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | AAA policy | Ordered login methods, default dot1x authentication, CoA enable and ignored actions |
 | AAA servers | Individual RADIUS/TACACS server addresses, protocol ports, purposes and shared keys |
 | LLDP | [Global and Ethernet enable state, MED policies, and native queries](guides/lldp.md), with CLI drift repair, import, replacement, omission, deletion and reboot persistence verified |
-| PoE | Ethernet administrative enable state |
+| PoE | Ethernet administrative enable state, priority, allocation class and power limits |
 | Standard IPv4 ACLs | Numbered ACL existence and complete source-address rule sets |
 | Extended IPv4 ACLs | Named or numbered ACLs with ordered prefixes, protocols, TCP/UDP ports and DSCP/priority markings |
 | IPv6 ACLs | Named ACLs with prefixes, protocols, TCP/UDP ports, markings and syslog actions |
@@ -67,7 +67,7 @@ A failed configuration request remains an error even if readback shows that the 
 - Static routes currently support IPv4 gateways in the default VRF; see [route ownership and limits](guides/routes.md).
 - VE administrative enable state is not currently managed.
 - DNS IPv4 succeeded on the tested build; its endpoint rejected IPv6 DNS addresses.
-- PoE tests used a disconnected port. Reported power measurements under load have not been validated.
+- PoE enable, priority, allocation class and explicit limit workflows passed native and saved configuration checks, drift repair, import, defaults, replacement, deletion and reboot persistence. LAG-member RESTCONF writes remain unverified. Tests used disconnected ports; reported power measurements under load have not been validated.
 - Interface voice VLAN validation covered reboot persistence, a no-change plan after reload, and post-reboot update and deletion with unrelated configuration preserved. Phone connectivity and LLDP-MED negotiation were not tested.
 - Reboot persistence was verified for populated and empty standard IPv4, extended IPv4, IPv6 and MAC ACLs, and IPv4 VLAN, IPv6 Ethernet and MAC Ethernet/LAG bindings, including unchanged native configuration and a no-change OpenTofu plan after reload. MAC checks also covered post-reboot updates and bound name replacement. This does not constitute exhaustive reboot validation of every resource.
 

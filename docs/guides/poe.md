@@ -1,17 +1,29 @@
 # Power over Ethernet
 
-`fastiron_interface_poe` owns administrative PoE enable state on one Ethernet interface. Omission and destroy restore `enabled = true`. It does not own power priority, allocation class, limits, or Ethernet administrative state. Enable changes on ports with explicit allocation or priority settings are rejected because native enable changes can clear those settings.
+`fastiron_interface_poe` owns administrative PoE enable state, priority and power allocation on one Ethernet interface. Ethernet administrative state and VLAN membership remain separately owned.
+
+| Argument | Default | Accepted values |
+| --- | --- | --- |
+| `enabled` | `true` | Administrative power enable state. |
+| `priority` | `3` | 1 (highest) through 3 (lowest). |
+| `power_by_class` | `0` | Allocation class 0–4; must be zero with an explicit limit. |
+| `power_limit_milliwatts` | `0` | Zero for class-based allocation, or 1000–95000 subject to the port's capabilities. |
+
+Omission and destroy restore these defaults. Disabling PoE clears priority and allocation on FastIron, so `enabled = false` requires default values for the other arguments. Unsupported power limits are rejected by the switch. Power policy changes can affect connected devices.
 
 ```hcl
 resource "fastiron_interface_poe" "port" {
-  interface = "ethernet 1/1/12"
-  enabled   = false
+  interface             = "ethernet 1/1/12"
+  priority              = 1
+  power_limit_milliwatts = 18000
 }
 
 data "fastiron_poe_interfaces" "ports" {
   depends_on = [fastiron_interface_poe.port]
 }
 ```
+
+The provider writes the complete policy and verifies native configuration and preservation of unrelated commands before saving. Failed writes remain errors even if readback matches the requested policy; retrying a converged policy can finish persistence without repeating the power change.
 
 Import with `tofu import fastiron_interface_poe.port 'poe|ethernet 1/1/12'`.
 

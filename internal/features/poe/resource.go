@@ -8,15 +8,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
 type (
 	Resource struct{ device *fastiron.Device }
 	model    struct {
+		Priority           types.Int64  `tfsdk:"priority"`
+		PowerByClass       types.Int64  `tfsdk:"power_by_class"`
+		PowerLimit         types.Int64  `tfsdk:"power_limit_milliwatts"`
 		ID                 types.String `tfsdk:"id"`
 		Interface          types.String `tfsdk:"interface"`
 		Enabled            types.Bool   `tfsdk:"enabled"`
@@ -29,11 +34,14 @@ func (r *Resource) Metadata(_ context.Context, req resource.MetadataRequest, res
 }
 
 func (r *Resource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Owns PoE enable state on one Ethernet interface. Omission and destroy restore enabled=true. Power measurements are available from the PoE data source and do not cause configuration drift.", Attributes: map[string]schema.Attribute{
-		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical identity: poe|ethernet <stack>/<slot>/<port>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
-		"enabled":             schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true), Description: "Administrative enable state. Defaults to true."},
-		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
+	resp.Schema = schema.Schema{Description: "Owns PoE enable state, priority and allocation on one Ethernet interface. Omission and destroy restore enabled=true, priority=3 and class-based allocation with class=0. Power measurements are available from the PoE data source and do not cause configuration drift.", Attributes: map[string]schema.Attribute{
+		"id":                     schema.StringAttribute{Computed: true, Description: "Canonical identity: poe|ethernet <stack>/<slot>/<port>.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+		"interface":              schema.StringAttribute{Required: true, Description: "Canonical Ethernet interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+		"enabled":                schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true), Description: "Administrative enable state. Defaults to true."},
+		"priority":               schema.Int64Attribute{Optional: true, Computed: true, Default: int64default.StaticInt64(3), Description: "Power priority, 1 (highest) to 3 (lowest). Defaults to 3."},
+		"power_by_class":         schema.Int64Attribute{Optional: true, Computed: true, Default: int64default.StaticInt64(0), Description: "Allocation class, 0 through 4. Defaults to 0. Must be zero when an explicit power limit is configured."},
+		"power_limit_milliwatts": schema.Int64Attribute{Optional: true, Computed: true, Default: int64default.StaticInt64(0), Description: "Explicit allocation limit in milliwatts, 1000 through 95000 subject to port capabilities. Zero (default) selects class-based allocation."},
+		"persistence_pending":    schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
 }
 
@@ -51,12 +59,30 @@ func (r *Resource) Configure(_ context.Context, req resource.ConfigureRequest, r
 func (r *Resource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
 	var model model
 	resp.Diagnostics.Append(req.Config.Get(ctx, &model)...)
-	if resp.Diagnostics.HasError() || model.Interface.IsUnknown() || model.Interface.IsNull() {
+	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := validateInterface(model.Interface.ValueString()); err != nil {
+	if !model.Interface.IsUnknown() && !model.Interface.IsNull() {
+		if err := validateInterface(model.Interface.ValueString()); err != nil {
+			resp.Diagnostics.AddError("Invalid PoE configuration", err.Error())
+		}
+	}
+	if err := validatePolicy(model.policy()); err != nil {
 		resp.Diagnostics.AddError("Invalid PoE configuration", err.Error())
 	}
+}
+
+func (m model) policy() config.PoEPolicy {
+	policy := config.PoEPolicy{Enabled: true, Priority: 3}
+	if !m.Enabled.IsNull() && !m.Enabled.IsUnknown() {
+		policy.Enabled = m.Enabled.ValueBool()
+	}
+	if !m.Priority.IsNull() && !m.Priority.IsUnknown() {
+		policy.Priority = m.Priority.ValueInt64()
+	}
+	policy.PowerByClass = m.PowerByClass.ValueInt64()
+	policy.PowerLimitMilliwatts = m.PowerLimit.ValueInt64()
+	return policy
 }
 
 func (r *Resource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
@@ -80,7 +106,7 @@ func (r *Resource) Create(ctx context.Context, req resource.CreateRequest, resp 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := applyPort(ctx, r.device, plan.Interface.ValueString(), plan.Enabled.ValueBool())
+	observed, err := applyPort(ctx, r.device, plan.Interface.ValueString(), plan.policy())
 	if observed != nil {
 		state := resourceState(*observed)
 		state.PersistencePending = types.BoolValue(err != nil)
@@ -97,7 +123,7 @@ func (r *Resource) Update(ctx context.Context, req resource.UpdateRequest, resp 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := applyPort(ctx, r.device, plan.Interface.ValueString(), plan.Enabled.ValueBool())
+	observed, err := applyPort(ctx, r.device, plan.Interface.ValueString(), plan.policy())
 	if observed != nil {
 		state := resourceState(*observed)
 		state.PersistencePending = types.BoolValue(err != nil)
@@ -132,7 +158,7 @@ func (r *Resource) Delete(ctx context.Context, req resource.DeleteRequest, resp 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := applyPort(ctx, r.device, state.Interface.ValueString(), true)
+	_, err := applyPort(ctx, r.device, state.Interface.ValueString(), config.PoEPolicy{Enabled: true, Priority: 3})
 	if err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot reset PoE configuration", err.Error())
@@ -150,5 +176,5 @@ func (r *Resource) ImportState(ctx context.Context, req resource.ImportStateRequ
 }
 
 func resourceState(p port) model {
-	return model{ID: types.StringValue("poe|" + p.Name), Interface: types.StringValue(p.Name), Enabled: types.BoolValue(p.Enabled), PersistencePending: types.BoolValue(false)}
+	return model{Priority: types.Int64Value(p.Priority), PowerByClass: types.Int64Value(p.PowerByClass), PowerLimit: types.Int64Value(p.PowerLimitMilliwatts), ID: types.StringValue("poe|" + p.Name), Interface: types.StringValue(p.Name), Enabled: types.BoolValue(p.Enabled), PersistencePending: types.BoolValue(false)}
 }

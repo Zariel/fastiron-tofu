@@ -67,37 +67,3 @@ func TestEmptyInterfaceDatabase(t *testing.T) {
 		}
 	}
 }
-
-func TestAllocationOwnership(t *testing.T) {
-	for _, setting := range []string{"priority 1", "power-by-class 2", "power-limit 20000"} {
-		t.Run(setting, func(t *testing.T) {
-			server := testswitch.New(t, func(command string) string {
-				switch command {
-				case "skip-page-display":
-					return ""
-				case "show version":
-					return "SW: Version 09.0.10kT213"
-				case "show running-config":
-					return "ver 09.0.10k\ninterface ethernet 1/1/12\n inline power " + setting + "\nend"
-				default:
-					t.Errorf("unexpected command %q", command)
-					return "% Invalid input"
-				}
-			})
-			server.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet {
-					t.Errorf("mutated independently owned allocation: %s", r.Method)
-				}
-				fmt.Fprint(w, `{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":true}}}`)
-			})
-			device, err := fastiron.New(fastiron.Config{Host: server.SSHAddress, Transport: "restconf", Persistence: "after_each_write", RESTCONF: &restconf.Config{URL: server.REST.URL, InsecureSkipVerify: true, Timeout: time.Second}, SSH: &ssh.Config{Address: server.SSHAddress, Username: "test", Password: "test", KnownHosts: server.KnownHosts, Timeout: time.Second}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			observed, err := applyPort(context.Background(), device, "ethernet 1/1/12", false)
-			if err == nil || observed == nil || !observed.Enabled {
-				t.Fatalf("allocation guard: observed=%+v error=%v", observed, err)
-			}
-		})
-	}
-}

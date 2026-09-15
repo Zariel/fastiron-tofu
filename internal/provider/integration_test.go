@@ -333,7 +333,7 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 		s.veREST(w, r)
 		return
 	}
-	if strings.HasSuffix(r.URL.EscapedPath(), "/ethernet/poe") {
+	if strings.HasSuffix(r.URL.EscapedPath(), "/ethernet/poe") || strings.HasSuffix(r.URL.EscapedPath(), "/ethernet/poe/config") {
 		s.poeREST(w, r)
 		return
 	}

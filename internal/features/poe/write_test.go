@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/testswitch"
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
@@ -45,14 +46,14 @@ func TestPartialWrite(t *testing.T) {
 			return "% Invalid input"
 		}
 	})
-	server.HandleFunc("/interfaces/interface=ethernet%201%2F1%2F12/ethernet/poe", func(w http.ResponseWriter, r *http.Request) {
+	server.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 		if r.Method == http.MethodGet {
 			fmt.Fprintf(w, `{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":%t}}}`, enabled)
 			return
 		}
-		if r.Method != http.MethodPatch {
+		if r.Method != http.MethodPut {
 			t.Errorf("unexpected method %s", r.Method)
 			w.WriteHeader(405)
 			return
@@ -66,7 +67,7 @@ func TestPartialWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	observed, err := applyPort(context.Background(), device, "ethernet 1/1/12", false)
+	observed, err := applyPort(context.Background(), device, "ethernet 1/1/12", config.PoEPolicy{Priority: 3})
 	if err == nil || observed == nil || observed.Enabled {
 		t.Fatalf("partial error lost: observed=%+v error=%v", observed, err)
 	}
@@ -76,7 +77,7 @@ func TestPartialWrite(t *testing.T) {
 	}
 	mu.Unlock()
 
-	observed, err = applyPort(context.Background(), device, "ethernet 1/1/12", false)
+	observed, err = applyPort(context.Background(), device, "ethernet 1/1/12", config.PoEPolicy{Priority: 3})
 	if err != nil || observed == nil || observed.Enabled {
 		t.Fatalf("retry: observed=%+v error=%v", observed, err)
 	}
