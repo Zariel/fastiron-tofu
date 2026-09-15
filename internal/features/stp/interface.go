@@ -3,7 +3,6 @@ package stp
 import (
 	"context"
 	"errors"
-	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -133,8 +132,7 @@ func waitInterfaceCache(ctx context.Context, d *fastiron.Device, name string, cu
 }
 
 func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {
-	cached, err := readRESTInterfaces(ctx, d)
-	if err != nil {
+	if _, err := readRESTInterfaces(ctx, d); err != nil {
 		return nil, err
 	}
 	output, err := d.RunningConfig(ctx)
@@ -145,16 +143,8 @@ func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfa
 	if err != nil {
 		return nil, err
 	}
-	native, err := document.STPInterfaces()
-	if err != nil {
-		return nil, err
-	}
-	// Cached entries may outlive their native flags; retain their identities with defaults.
-	for name := range cached {
-		cached[name] = interfaceConfig{}
-	}
-	maps.Copy(cached, native)
-	return cached, nil
+	// Cache-only identities disappear across reboot without any native policy change.
+	return document.STPInterfaces()
 }
 
 func readRESTInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {

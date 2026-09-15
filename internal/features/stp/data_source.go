@@ -33,7 +33,7 @@ func (d *DataSource) Metadata(_ context.Context, req datasource.MetadataRequest,
 
 func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Reads configured VLAN and interface spanning-tree settings.", Attributes: map[string]schema.Attribute{
-		"interfaces": schema.MapNestedAttribute{Computed: true, Description: "Native interface flags keyed by interface name, including CLI-only settings. Cached interface identities without native flags report false defaults. Interfaces with no explicit settings may be omitted.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
+		"interfaces": schema.MapNestedAttribute{Computed: true, Description: "Native interface flags keyed by interface name, including CLI-only settings. Interfaces without explicit native flags are omitted; cached identities do not affect inventory.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"admin_edge": schema.BoolAttribute{Computed: true, Description: "Configured RSTP edge-port setting."},
 			"bpdu_guard": schema.BoolAttribute{Computed: true, Description: "Configured BPDU guard setting."},
 			"root_guard": schema.BoolAttribute{Computed: true, Description: "Configured root protection setting."},

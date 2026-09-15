@@ -20,6 +20,7 @@ type (
 		running, startup         map[int64]stpSetting
 		extra, failClassicDelete bool
 		hiddenReads              int
+		cachedInterface          string
 	}
 )
 
@@ -59,7 +60,11 @@ func stpConfiguration(base string, vlans map[int64]stpSetting, extra bool) strin
 
 func (s *stpSwitch) rest(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" && r.URL.Path == "/restconf/data/stp/interfaces" {
-		fmt.Fprint(w, `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12","bpdu-guard":true,"guard":"ROOT"}}]}}`)
+		entries := []any{map[string]any{"name": "ethernet 1/1/12", "config": map[string]any{"name": "ethernet 1/1/12", "bpdu-guard": true, "guard": "ROOT"}}}
+		if s.cachedInterface != "" {
+			entries = append(entries, map[string]any{"name": s.cachedInterface, "config": map[string]any{"name": s.cachedInterface}})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"openconfig-spanning-tree:interfaces": map[string]any{"interface": entries}})
 		return
 	}
 	if r.Method == "GET" && r.URL.Path == "/restconf/data/stp" {
@@ -225,5 +230,24 @@ output "interfaces" { value = data.fastiron_spanning_tree.test.interfaces }
 	s.mu.Unlock()
 	run(0, "apply", "-auto-approve", "-no-color")
 	check(map[int64]stpSetting{1: {mode: "stp", priority: 32768}})
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+}
+
+func TestOpenTofuSTPInventory(t *testing.T) {
+	s := newSwitch(t)
+	s.stp = &stpSwitch{running: map[int64]stpSetting{}, startup: map[int64]stpSetting{}, cachedInterface: "ethernet 1/1/3"}
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base+`data "fastiron_spanning_tree" "test" {}
+output "interfaces" { value = data.fastiron_spanning_tree.test.interfaces }
+`)
+	run(0, "init", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	if got := strings.TrimSpace(run(0, "output", "-json", "interfaces")); got != `{"ethernet 1/1/12":{"admin_edge":false,"bpdu_guard":true,"root_guard":true}}` {
+		t.Fatalf("native inventory=%s", got)
+	}
+
+	s.mu.Lock()
+	s.stp.cachedInterface = ""
+	s.mu.Unlock()
 	run(0, "plan", "-detailed-exitcode", "-no-color")
 }

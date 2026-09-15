@@ -22,7 +22,7 @@ tofu import fastiron_spanning_tree_vlan.servers 53
 
 The data source returns a `vlans` map keyed by VLAN ID, with native `mode` and `priority` for each enabled configuration, including the default VLAN. CLI-only settings are included and stale RESTCONF entries are excluded. Unsupported native spanning-tree settings produce a diagnostic instead of potentially incorrect defaults. Managing spanning-tree settings does not create or delete the VLAN itself.
 
-Its `interfaces` map reports configured `admin_edge`, `bpdu_guard` and `root_guard` options, keyed by canonical interface name (for example, `ethernet 1/1/12`). Interfaces with no explicit STP options may be absent; explicitly disabled entries can remain in RESTCONF. Flag values come from native configuration, including settings absent from RESTCONF. Cached interface entries with no native flags report false defaults. These values describe configuration, not operational protection or forwarding state. An ignored RESTCONF update returns an error and is not saved.
+Its `interfaces` map reports configured `admin_edge`, `bpdu_guard` and `root_guard` options, keyed by canonical interface name (for example, `ethernet 1/1/12`). Interfaces without explicit native STP flags are omitted. Flag values and interface identities come from native configuration, including settings absent from RESTCONF, so rebuilding the RESTCONF cache after a reboot does not change the reported configuration. These values describe configuration, not operational protection or forwarding state. An ignored RESTCONF update returns an error and is not saved.
 
 On the tested firmware, removing RSTP leaves classic STP enabled. Resource deletion waits for RESTCONF and native configuration to agree, then removes the remaining classic entry and verifies native absence. Other VLANs retain their settings. If deletion fails partway through, a subsequent apply resumes from the observed configuration.
 
@@ -51,4 +51,4 @@ Interface updates verify native configuration before saving, including preservat
 
 These flags do not enable spanning tree on a VLAN. Configure the corresponding VLAN's spanning-tree mode separately for the protection to operate. `admin_edge` configures the native RSTP edge-port option; `root_guard` configures root protection.
 
-Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`; reboot persistence has not yet been verified.
+Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`. Interface flags have been verified to survive reboot; VLAN spanning-tree persistence across reboot remains unverified.
