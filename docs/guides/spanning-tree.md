@@ -20,7 +20,7 @@ Priority changes update in place. Mode changes replace the resource, temporarily
 tofu import fastiron_spanning_tree_vlan.servers 53
 ```
 
-The data source returns a `vlans` map keyed by VLAN ID, with `mode` and `priority` for each enabled configuration. It includes the default VLAN. Managing spanning-tree settings does not create or delete the VLAN itself.
+The data source returns a `vlans` map keyed by VLAN ID, with native `mode` and `priority` for each enabled configuration, including the default VLAN. CLI-only settings are included and stale RESTCONF entries are excluded. Unsupported native spanning-tree settings produce a diagnostic instead of potentially incorrect defaults. Managing spanning-tree settings does not create or delete the VLAN itself.
 
 Its `interfaces` map reports configured `admin_edge`, `bpdu_guard` and `root_guard` options, keyed by canonical interface name (for example, `ethernet 1/1/12`). Interfaces with no explicit STP options may be absent; explicitly disabled entries can remain in RESTCONF. Flag values come from native configuration, including settings absent from RESTCONF. Cached interface entries with no native flags report false defaults. These values describe configuration, not operational protection or forwarding state. An ignored RESTCONF update returns an error and is not saved.
 

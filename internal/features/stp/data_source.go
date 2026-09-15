@@ -38,7 +38,7 @@ func (d *DataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp 
 			"bpdu_guard": schema.BoolAttribute{Computed: true, Description: "Configured BPDU guard setting."},
 			"root_guard": schema.BoolAttribute{Computed: true, Description: "Configured root protection setting."},
 		}}},
-		"vlans": schema.MapNestedAttribute{Computed: true, Description: "Enabled spanning-tree configurations keyed by VLAN ID.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
+		"vlans": schema.MapNestedAttribute{Computed: true, Description: "Native enabled spanning-tree configurations keyed by VLAN ID, including CLI-only settings and excluding stale RESTCONF entries. Unsupported native settings produce a diagnostic.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
 			"mode":     schema.StringAttribute{Computed: true, Description: "stp or rstp."},
 			"priority": schema.Int64Attribute{Computed: true, Description: "Configured bridge priority."},
 		}}},

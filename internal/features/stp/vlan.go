@@ -33,6 +33,22 @@ func stpVLANPath(mode string) string {
 }
 
 func readVLANs(ctx context.Context, d *fastiron.Device) ([]vlan, error) {
+	if _, err := readRESTVLANs(ctx, d); err != nil {
+		return nil, err
+	}
+	output, err := d.RunningConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	document, err := config.Parse(output)
+	if err != nil {
+		return nil, err
+	}
+	// Cached modes and priorities can outlive CLI changes or omit native policies.
+	return document.STPVLANs()
+}
+
+func readRESTVLANs(ctx context.Context, d *fastiron.Device) ([]vlan, error) {
 	if !d.RESTCONFEnabled() {
 		return nil, errors.New("spanning-tree configuration currently requires RESTCONF")
 	}

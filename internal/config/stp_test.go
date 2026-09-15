@@ -72,6 +72,11 @@ func TestSTPCaptures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			policies, err := document.STPVLANs()
+			wantPolicies := []STPVLAN{{VLANID: 1, Mode: "stp", Priority: 32768}, {VLANID: 100, Mode: "stp", Priority: 32768}, want}
+			if err != nil || !reflect.DeepEqual(policies, wantPolicies) {
+				t.Fatalf("policies=%v error=%v; want %v", policies, err, wantPolicies)
+			}
 			got, err := document.STPVLAN(want.VLANID)
 			if err != nil || got == nil || *got != want {
 				t.Fatalf("policy=%+v error=%v; want %+v", got, err, want)
@@ -159,5 +164,33 @@ func TestSTPInterfaceOwnership(t *testing.T) {
 	want := []string{"ver 09.0.10k", "vlan 53", " spanning-tree", "interface ethernet 1/1/11", " stp-bpdu-guard", " port-name phone", " spanning-tree 802-1w path-cost 100", " disable", "end"}
 	if !reflect.DeepEqual(remaining, want) {
 		t.Fatalf("unowned=%v; want %v", remaining, want)
+	}
+}
+
+func TestSTPVLANInventory(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		want       []STPVLAN
+		invalid    bool
+	}{
+		{name: "ordered policies", body: "vlan 100\n spanning-tree 802-1w\nvlan 1\n spanning-tree\nvlan 53\n tagged ethe 1/1/12", want: []STPVLAN{{1, "stp", 32768}, {100, "rstp", 32768}}},
+		{name: "other scopes", body: "router test\n vlan 53\n  spanning-tree\ninterface ethernet 1/1/12\n spanning-tree root-protect", want: []STPVLAN{}},
+		{name: "repeated empty VLAN", body: "vlan 53\nvlan 53", invalid: true},
+		{name: "invalid VLAN", body: "vlan 0\n spanning-tree", invalid: true},
+		{name: "unsupported settings", body: "vlan 53\n spanning-tree\n spanning-tree hello-time 3", invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			document, err := Parse("ver 09.0.10k\n" + tc.body + "\nend")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := document.STPVLANs()
+			if (err != nil) != tc.invalid {
+				t.Fatalf("policies=%v error=%v", got, err)
+			}
+			if !tc.invalid && !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("policies=%v; want %v", got, tc.want)
+			}
+		})
 	}
 }

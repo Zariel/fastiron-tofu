@@ -114,7 +114,7 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error)
 	defer cancel()
 
 	for {
-		vlans, err := readVLANs(ctx, d)
+		vlans, err := readRESTVLANs(ctx, d)
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +137,7 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error)
 			}
 		}
 		if current == nil && native == nil || current != nil && native != nil && *current == *native {
-			return vlans, nil
+			return document.STPVLANs()
 		}
 
 		// RSTP removal can briefly hide its classic fallback in RESTCONF. Only

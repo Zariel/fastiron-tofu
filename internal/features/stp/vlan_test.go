@@ -13,7 +13,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
-func TestSTPVLANs(t *testing.T) {
+func TestRESTVLANs(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
 		want       *vlan
@@ -37,7 +37,7 @@ func TestSTPVLANs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			vlans, err := readVLANs(context.Background(), d)
+			vlans, err := readRESTVLANs(context.Background(), d)
 			if (err != nil) != tc.failure {
 				t.Fatalf("vlans=%v error=%v", vlans, err)
 			}

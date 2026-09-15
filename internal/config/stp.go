@@ -1,6 +1,10 @@
 package config
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"slices"
+)
 
 // STPVLAN describes a VLAN's explicitly configured spanning-tree policy.
 type STPVLAN struct {
@@ -36,7 +40,7 @@ func (d *Document) STPVLAN(id int64) (*STPVLAN, error) {
 			continue
 		}
 		if !command.valid || command.kind != spanningTree {
-			return nil, errors.New("VLAN has malformed or additional spanning-tree settings; remove them before destroying its spanning-tree configuration")
+			return nil, errors.New("native VLAN has malformed or unsupported spanning-tree settings")
 		}
 		if command.number < 0 || command.number > 65535 {
 			return nil, errors.New("invalid native spanning-tree bridge priority")
@@ -61,6 +65,29 @@ func (d *Document) STPVLAN(id int64) (*STPVLAN, error) {
 		modeSeen = true
 	}
 	return policy, nil
+}
+
+// STPVLANs reports explicit native VLAN policies, ordered by VLAN ID.
+// Unsupported spanning-tree settings are rejected rather than reported as defaults.
+func (d *Document) STPVLANs() ([]STPVLAN, error) {
+	policies := []STPVLAN{}
+	for _, command := range d.Commands {
+		if command.Parent != -1 || command.kind != vlanHeader {
+			continue
+		}
+		if !command.valid {
+			return nil, errors.New("native configuration has an invalid VLAN header")
+		}
+		policy, err := d.STPVLAN(command.number)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read spanning-tree VLAN %d: %w", command.number, err)
+		}
+		if policy != nil {
+			policies = append(policies, *policy)
+		}
+	}
+	slices.SortFunc(policies, func(a, b STPVLAN) int { return int(a.VLANID - b.VLANID) })
+	return policies, nil
 }
 
 // STPInterface contains independently configured interface protection flags.
