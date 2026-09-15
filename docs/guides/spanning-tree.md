@@ -2,6 +2,8 @@
 
 `fastiron_spanning_tree_vlan` owns the spanning-tree mode and bridge priority on one existing VLAN. Creating the resource enables spanning tree; destroying it disables spanning tree on that VLAN.
 
+The VLAN ID may be 1–4095, including a relocated default VLAN. ID 4095 is reserved for the active default; this resource does not create the VLAN or change the default selection.
+
 ```hcl
 resource "fastiron_spanning_tree_vlan" "servers" {
   vlan_id  = fastiron_vlan.servers.vlan_id

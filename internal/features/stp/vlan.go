@@ -13,8 +13,8 @@ import (
 type vlan = config.STPVLAN
 
 func validateVLAN(v vlan) error {
-	if v.VLANID < 1 || v.VLANID > 4094 {
-		return errors.New("vlan_id must be between 1 and 4094")
+	if v.VLANID < 1 || v.VLANID > 4095 {
+		return errors.New("vlan_id must be between 1 and 4095")
 	}
 	if v.Mode != "stp" && v.Mode != "rstp" {
 		return errors.New("mode must be stp or rstp")

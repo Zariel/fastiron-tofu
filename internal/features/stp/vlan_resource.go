@@ -33,7 +33,7 @@ func (r *VLANResource) Metadata(_ context.Context, req resource.MetadataRequest,
 func (r *VLANResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{Description: "Owns spanning-tree mode and bridge priority on one VLAN. Creation enables spanning tree; destruction disables it.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"vlan_id":             schema.Int64Attribute{Required: true, PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
+		"vlan_id":             schema.Int64Attribute{Required: true, Description: "Existing VLAN ID, 1–4095. ID 4095 is reserved for the active default VLAN.", PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 		"mode":                schema.StringAttribute{Required: true, Description: "stp (802.1D) or rstp (802.1w). Mode changes replace this configuration.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"priority":            schema.Int64Attribute{Optional: true, Computed: true, Default: int64default.StaticInt64(32768), Description: "Bridge priority, 0–65535."},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
@@ -62,8 +62,8 @@ func (r *VLANResource) ValidateConfig(ctx context.Context, req resource.Validate
 		return
 	}
 	if !m.VLANID.IsUnknown() && !m.VLANID.IsNull() {
-		if m.VLANID.ValueInt64() < 1 || m.VLANID.ValueInt64() > 4094 {
-			resp.Diagnostics.AddError("Invalid VLAN", "vlan_id must be between 1 and 4094.")
+		if m.VLANID.ValueInt64() < 1 || m.VLANID.ValueInt64() > 4095 {
+			resp.Diagnostics.AddError("Invalid VLAN", "vlan_id must be between 1 and 4095.")
 		}
 	}
 	if !m.Mode.IsUnknown() && !m.Mode.IsNull() && m.Mode.ValueString() != "stp" && m.Mode.ValueString() != "rstp" {
@@ -164,7 +164,7 @@ func (r *VLANResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 
 func (r *VLANResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	id, err := strconv.ParseInt(req.ID, 10, 64)
-	if err != nil || strconv.FormatInt(id, 10) != req.ID || id < 1 || id > 4094 {
+	if err != nil || strconv.FormatInt(id, 10) != req.ID || id < 1 || id > 4095 {
 		resp.Diagnostics.AddError("Invalid spanning-tree VLAN identity", "Use the numeric VLAN ID.")
 		return
 	}
