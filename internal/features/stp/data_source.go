@@ -57,12 +57,27 @@ func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureReques
 }
 
 func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	vlans, err := readVLANs(ctx, d.device)
+	if _, err := readRESTVLANs(ctx, d.device); err != nil {
+		resp.Diagnostics.AddError("Cannot read spanning-tree configuration", err.Error())
+		return
+	}
+	if _, err := readRESTInterfaces(ctx, d.device); err != nil {
+		resp.Diagnostics.AddError("Cannot read spanning-tree interfaces", err.Error())
+		return
+	}
+
+	// One native snapshot prevents mixing VLAN and interface policies across CLI changes.
+	document, err := d.device.RunningConfig(ctx)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read spanning-tree configuration", err.Error())
 		return
 	}
-	interfaces, err := readInterfaces(ctx, d.device)
+	vlans, err := document.STPVLANs()
+	if err != nil {
+		resp.Diagnostics.AddError("Cannot read spanning-tree configuration", err.Error())
+		return
+	}
+	interfaces, err := document.STPInterfaces()
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read spanning-tree interfaces", err.Error())
 		return
