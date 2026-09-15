@@ -19,8 +19,9 @@ type port struct {
 	Name    string
 	unowned []string
 	config.PoEPolicy
-	PowerClass          *int64
-	PowerUsedMilliwatts *float64
+	PowerClass               *int64
+	PowerUsedMilliwatts      *float64
+	PowerAllocatedMilliwatts *float64
 }
 
 type entry struct {
@@ -28,8 +29,9 @@ type entry struct {
 		Enabled *bool `json:"enabled"`
 	} `json:"config"`
 	State struct {
-		PowerClass *int64       `json:"power-class"`
-		PowerUsed  *json.Number `json:"power-used"`
+		PowerClass     *int64       `json:"power-class"`
+		PowerUsed      *json.Number `json:"power-used"`
+		PowerAllocated *json.Number `json:"power-allocated"`
 	} `json:"state"`
 }
 
@@ -52,6 +54,14 @@ func (e entry) telemetry(name string) (port, error) {
 		}
 		p.PowerUsedMilliwatts = &power
 	}
+	if e.State.PowerAllocated != nil {
+		power, err := e.State.PowerAllocated.Float64()
+		if err != nil || power < 0 {
+			return port{}, errors.New("RESTCONF PoE allocated power measurement is invalid")
+		}
+		p.PowerAllocatedMilliwatts = &power
+	}
+
 	return p, nil
 }
 

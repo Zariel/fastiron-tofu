@@ -33,7 +33,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Spanning tree | Partial | Per-VLAN STP/RSTP mode and priority; Ethernet admin-edge, BPDU guard and root guard. Global STP and MST remain. |
 | DNS servers | Partial | IPv4 servers and discovery. The tested firmware rejected IPv6 DNS addresses. |
 | LLDP | Partial | [Global and Ethernet enable state, MED policies, and native queries](docs/guides/lldp.md), with lifecycle and reboot validation. Neighbor discovery remains. |
-| PoE | Partial | [Enable state, priority, allocation class and power limits](docs/guides/poe.md), with native queries, lifecycle and reboot validation. LAG-member writes and measurements under load remain unverified. |
+| PoE | Implemented RESTCONF scope | [Enable state, priority, allocation class and power limits](docs/guides/poe.md), including LAG members, native queries and reported power measurements. Lifecycle and reboot persistence verified; measurements under load remain unvalidated. |
 | Local users | Implemented | Usernames, privileges and passwords; privilege discovery. External password changes cannot currently be detected. |
 | RADIUS/TACACS servers | Partial | Addresses, protocol ports, purposes and shared keys. Keyless TACACS, additional options and remote secret drift detection remain. |
 | AAA policy | Partial | Ordered login methods, default dot1x authentication and CoA settings. Extended authentication services remain. |

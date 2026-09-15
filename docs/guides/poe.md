@@ -1,6 +1,6 @@
 # Power over Ethernet
 
-`fastiron_interface_poe` owns administrative PoE enable state, priority and power allocation on one Ethernet interface. Ethernet administrative state and VLAN membership remain separately owned.
+`fastiron_interface_poe` owns administrative PoE enable state, priority and power allocation on one Ethernet interface. Ethernet administrative state and VLAN membership remain separately owned. Use the member’s canonical Ethernet name for a LAG member; native global port policies are supported.
 
 | Argument | Default | Accepted values |
 | --- | --- | --- |
@@ -36,6 +36,7 @@ The data source's `interfaces` map includes only interfaces that expose PoE. Eac
 | `power_by_class` | Configured allocation class, 0–4; zero when an explicit power limit is configured. |
 | `power_limit_milliwatts` | Configured limit; zero means class-based allocation. |
 | `power_class` | Reported class of the connected powered device; null when unavailable. |
+| `power_allocated_milliwatts` | Reported allocated power; null when unavailable. May lag configuration changes. |
 | `power_used_milliwatts` | Reported consumption; null when unavailable. |
 
 Configured policy comes from native configuration, including global port commands used for LAG members; cached RESTCONF configuration values can be stale. Unsupported or ambiguous native port settings produce an error instead of an inferred default. Missing operational measurements are null. Measurements do not participate in resource reconciliation.

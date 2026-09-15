@@ -26,6 +26,8 @@ func TestPoEConfiguration(t *testing.T) {
 		{"stale cache enabled", `{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":true},"state":{"enabled":true}}}`, " no inline power\n", false, false},
 		{"stale cache disabled", `{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":false},"state":{"enabled":false}}}`, " inline power priority 1\n", true, false},
 		{"unsupported", `{}`, "", false, true},
+		{"negative allocation", `{"icx-openconfig-if-poe-aug:poe":{"config":{},"state":{"power-allocated":"-1.0"}}}`, "", false, true},
+		{"malformed allocation", `{"icx-openconfig-if-poe-aug:poe":{"config":{},"state":{"power-allocated":"invalid"}}}`, "", false, true},
 		{"missing configuration", `{"icx-openconfig-if-poe-aug:poe":{"state":{"enabled":true}}}`, "", false, true},
 		{"malformed native", `{"icx-openconfig-if-poe-aug:poe":{"config":{}}}`, " inline power priority\n", false, true},
 	} {

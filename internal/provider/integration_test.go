@@ -877,7 +877,7 @@ data "fastiron_poe_interfaces" "test" { depends_on = [fastiron_interface_poe.tes
 output "poe" { value = data.fastiron_poe_interfaces.test.interfaces }
 `)
 	run(0, "apply", "-auto-approve", "-no-color")
-	if got := strings.TrimSpace(run(0, "output", "-json", "poe")); got != `{"ethernet 1/1/2":{"enabled":false,"power_by_class":0,"power_class":4,"power_limit_milliwatts":0,"power_used_milliwatts":7000,"priority":3}}` {
+	if got := strings.TrimSpace(run(0, "output", "-json", "poe")); got != `{"ethernet 1/1/2":{"enabled":false,"power_allocated_milliwatts":null,"power_by_class":0,"power_class":4,"power_limit_milliwatts":0,"power_used_milliwatts":7000,"priority":3}}` {
 		t.Fatalf("PoE collection: %s", got)
 	}
 	run(0, "plan", "-detailed-exitcode", "-no-color")

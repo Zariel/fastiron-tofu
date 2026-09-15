@@ -34,8 +34,8 @@ func TestInventory(t *testing.T) {
 			t.Errorf("unexpected method %s", r.Method)
 		}
 		fmt.Fprint(w, `{"openconfig-interfaces:interfaces":{"interface":[
-   {"name":"ethernet 1/1/11","openconfig-if-ethernet:ethernet":{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":true}}}},
-   {"name":"ethernet 1/1/12","openconfig-if-ethernet:ethernet":{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":false},"state":{"power-class":4,"power-used":"7000.0"}}}},
+   {"name":"ethernet 1/1/11","openconfig-if-ethernet:ethernet":{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":true},"state":{"power-allocated":"0.0"}}}},
+   {"name":"ethernet 1/1/12","openconfig-if-ethernet:ethernet":{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":false},"state":{"power-class":4,"power-used":"7000.0","power-allocated":"18000.5"}}}},
    {"name":"ethernet 1/1/13","openconfig-if-ethernet:ethernet":{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":false,"priority":3,"power-by-class":4,"power-limit":12000}}}}
   ]}}`)
 	})
@@ -58,9 +58,9 @@ func TestInventory(t *testing.T) {
 	}
 
 	expected := map[string]poeStatusModel{
-		"ethernet 1/1/11": {Enabled: types.BoolValue(false), Priority: types.Int64Value(3), PowerByClass: types.Int64Value(0), PowerLimit: types.Int64Value(0), PowerClass: types.Int64Null(), PowerUsed: types.Float64Null()},
-		"ethernet 1/1/12": {Enabled: types.BoolValue(true), Priority: types.Int64Value(3), PowerByClass: types.Int64Value(2), PowerLimit: types.Int64Value(0), PowerClass: types.Int64Value(4), PowerUsed: types.Float64Value(7000)},
-		"ethernet 1/1/13": {Enabled: types.BoolValue(true), Priority: types.Int64Value(1), PowerByClass: types.Int64Value(0), PowerLimit: types.Int64Value(18000), PowerClass: types.Int64Null(), PowerUsed: types.Float64Null()},
+		"ethernet 1/1/11": {PowerAllocated: types.Float64Value(0), Enabled: types.BoolValue(false), Priority: types.Int64Value(3), PowerByClass: types.Int64Value(0), PowerLimit: types.Int64Value(0), PowerClass: types.Int64Null(), PowerUsed: types.Float64Null()},
+		"ethernet 1/1/12": {PowerAllocated: types.Float64Value(18000.5), Enabled: types.BoolValue(true), Priority: types.Int64Value(3), PowerByClass: types.Int64Value(2), PowerLimit: types.Int64Value(0), PowerClass: types.Int64Value(4), PowerUsed: types.Float64Value(7000)},
+		"ethernet 1/1/13": {PowerAllocated: types.Float64Null(), Enabled: types.BoolValue(true), Priority: types.Int64Value(1), PowerByClass: types.Int64Value(0), PowerLimit: types.Int64Value(18000), PowerClass: types.Int64Null(), PowerUsed: types.Float64Null()},
 	}
 	if !reflect.DeepEqual(observed.Interfaces, expected) {
 		t.Fatalf("inventory = %#v; want %#v", observed.Interfaces, expected)
