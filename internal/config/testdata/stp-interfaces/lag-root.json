@@ -1,0 +1,7 @@
+{
+  "lag 11": {
+    "AdminEdge": false,
+    "BPDUGuard": false,
+    "RootGuard": true
+  }
+}
