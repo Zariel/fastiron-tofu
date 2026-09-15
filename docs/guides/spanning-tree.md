@@ -51,4 +51,6 @@ Interface updates verify native configuration before saving, including preservat
 
 These flags do not enable spanning tree on a VLAN. Configure the corresponding VLAN's spanning-tree mode separately for the protection to operate. `admin_edge` configures the native RSTP edge-port option; `root_guard` configures root protection.
 
-Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`. Interface flags have been verified to survive reboot; VLAN spanning-tree persistence across reboot remains unverified.
+Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`. Interface flags have been verified through creation, individual updates, omitted defaults, CLI drift repair, import, replacement, deletion and reboot.
+
+VLAN priority recovery after CLI drift remains incomplete: RESTCONF can report the desired priority without applying it natively. The provider detects that mismatch and returns an error without saving. VLAN spanning-tree persistence across reboot remains unverified.
