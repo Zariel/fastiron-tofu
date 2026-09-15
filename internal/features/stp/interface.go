@@ -35,12 +35,20 @@ func readInterface(ctx context.Context, d *fastiron.Device, name string) (interf
 	return interfaces[name], err
 }
 
-func applyInterface(ctx context.Context, d *fastiron.Device, name string, desired interfaceConfig) (*interfaceConfig, error) {
+func applyInterface(ctx context.Context, d *fastiron.Device, name string, desired interfaceConfig, present bool) (*interfaceConfig, error) {
 	if err := validateInterface(name); err != nil {
 		return nil, err
 	}
+	if !present {
+		desired = interfaceConfig{}
+	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*interfaceConfig, error) {
-		if err := d.CheckL2Owner(ctx, name); err != nil {
+		err := d.CheckL2Owner(ctx, name)
+		if errors.Is(err, fastiron.ErrNotFound) && !present {
+			// A missing parent needs no policy write, but a failed save must still be retried.
+			return &desired, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 		cached, err := readRESTInterfaces(ctx, d)

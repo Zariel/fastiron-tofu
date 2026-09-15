@@ -56,7 +56,7 @@ func TestMember(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "LAG member") {
 				t.Fatalf("read should reject membership: %v", err)
 			}
-			_, err = applyInterface(context.Background(), device, name, interfaceConfig{BPDUGuard: true})
+			_, err = applyInterface(context.Background(), device, name, interfaceConfig{BPDUGuard: true}, true)
 			if err == nil || !strings.Contains(err.Error(), "LAG member") {
 				t.Fatalf("write should reject membership: %v", err)
 			}

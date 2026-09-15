@@ -57,6 +57,8 @@ For a LAG, set `interface = fastiron_lag.uplink.id` or use a canonical name such
 
 Interface updates verify native configuration before saving, including preservation of unrelated commands. After CLI changes, the provider may first synchronize RESTCONF with the current native flags before applying the desired flags. If synchronization times out or a write fails, the operation reports an error without saving; a later apply can resume reconciliation.
 
+If a parent LAG is deleted externally, refresh removes its STP resource from state. Restore the parent before recreating its policy. A failed deletion remains in state while `persistence_pending` is true so a later apply can retry saving, even if the parent has disappeared. Neither cleanup nor retry clears STP settings transferred to detached Ethernet ports.
+
 These flags do not enable spanning tree on a VLAN. Configure the corresponding VLAN's spanning-tree mode separately for the protection to operate. `admin_edge` configures the native RSTP edge-port option; `root_guard` configures root protection.
 
 Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`. Ethernet interface flags have been verified through creation, individual updates, omitted defaults, CLI drift repair, import, replacement, deletion and reboot.
@@ -67,4 +69,4 @@ VLAN updates wait for RESTCONF and native configuration to agree before writing:
 
 On non-default VLANs, validation covers creation, default and boundary priorities, classic STP and RSTP priority drift repair, import, mode replacement, recreation after external deletion, replacement onto another VLAN and deletion. RSTP configuration survived reboot with unchanged running and saved configuration and an empty plan afterward. Relocated default VLAN 4095 has also passed import, priority updates and default reset, replacement from classic STP to RSTP, deletion and a fresh query after deletion; unrelated configuration was preserved.
 
-LAG interface flags have passed creation, import, individual updates, omitted defaults, CLI drift repair, member rejection and deletion, with native and saved configuration checked independently. LAG-specific reboot and recovery after external parent deletion are not yet validated.
+LAG interface flags have passed creation, import, individual updates, omitted defaults, CLI drift repair, member rejection and deletion, with native and saved configuration checked independently. Cleanup after external parent deletion has also passed, preserving the detached ports’ flags without saving during refresh or query. LAG-specific reboot remains unvalidated.

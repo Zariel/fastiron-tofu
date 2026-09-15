@@ -183,7 +183,7 @@ func TestInterfaceWrite(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			observed, err := applyInterface(context.Background(), device, target, desired)
+			observed, err := applyInterface(context.Background(), device, target, desired, true)
 			failure := tc.fail || tc.corrupt || tc.ignore || tc.stuck
 			if tc.stuck && !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("expected cache deadline, got %v", err)
@@ -210,7 +210,7 @@ func TestInterfaceWrite(t *testing.T) {
 				return
 			}
 
-			if _, err := applyInterface(context.Background(), device, target, desired); err != nil {
+			if _, err := applyInterface(context.Background(), device, target, desired, true); err != nil {
 				t.Fatal(err)
 			}
 			mu.Lock()

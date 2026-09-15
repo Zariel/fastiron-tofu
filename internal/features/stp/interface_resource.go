@@ -2,6 +2,7 @@ package stp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -83,7 +84,7 @@ func (r *InterfaceResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := applyInterface(ctx, r.device, plan.Interface.ValueString(), plan.desired())
+	observed, err := applyInterface(ctx, r.device, plan.Interface.ValueString(), plan.desired(), true)
 	if observed != nil {
 		state := stpInterfaceState(plan.Interface.ValueString(), *observed)
 		state.PersistencePending = types.BoolValue(err != nil)
@@ -100,7 +101,7 @@ func (r *InterfaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	observed, err := applyInterface(ctx, r.device, plan.Interface.ValueString(), plan.desired())
+	observed, err := applyInterface(ctx, r.device, plan.Interface.ValueString(), plan.desired(), true)
 	if observed != nil {
 		state := stpInterfaceState(plan.Interface.ValueString(), *observed)
 		state.PersistencePending = types.BoolValue(err != nil)
@@ -118,6 +119,14 @@ func (r *InterfaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 	observed, err := readInterface(ctx, r.device, state.Interface.ValueString())
+	if errors.Is(err, fastiron.ErrNotFound) {
+		if !state.PersistencePending.ValueBool() {
+			resp.State.RemoveResource(ctx)
+			return
+		}
+		// Retain failed deletion state until Delete can complete persistence.
+		observed, err = interfaceConfig{}, nil
+	}
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read spanning-tree interface configuration", err.Error())
 		return
@@ -135,7 +144,7 @@ func (r *InterfaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	_, err := applyInterface(ctx, r.device, state.Interface.ValueString(), interfaceConfig{})
+	_, err := applyInterface(ctx, r.device, state.Interface.ValueString(), interfaceConfig{}, false)
 	if err != nil {
 		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("persistence_pending"), true)...)
 		resp.Diagnostics.AddError("Cannot reset spanning-tree interface configuration", err.Error())
