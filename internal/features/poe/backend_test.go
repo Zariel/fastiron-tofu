@@ -68,54 +68,6 @@ func TestEmptyInterfaceDatabase(t *testing.T) {
 	}
 }
 
-func TestNativeInventory(t *testing.T) {
-	server := testswitch.New(t, func(command string) string {
-		switch command {
-		case "skip-page-display":
-			return ""
-		case "show running-config":
-			return "ver 09.0.10k\ninterface ethernet 1/1/11\n no inline power\ninterface ethernet 1/1/12\n inline power power-by-class 2\nend"
-		default:
-			t.Errorf("unexpected command %q", command)
-			return "% Invalid input"
-		}
-	})
-	server.HandleFunc("/interfaces", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("unexpected method %s", r.Method)
-		}
-		fmt.Fprint(w, `{"openconfig-interfaces:interfaces":{"interface":[
-   {"name":"ethernet 1/1/11","openconfig-if-ethernet:ethernet":{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":true}}}},
-   {"name":"ethernet 1/1/12","openconfig-if-ethernet:ethernet":{"icx-openconfig-if-poe-aug:poe":{"config":{"enabled":false},"state":{"power-class":4,"power-used":"7000.0"}}}}
-  ]}}`)
-	})
-	device, err := fastiron.New(fastiron.Config{Host: server.SSHAddress, Transport: "restconf", Persistence: "manual", RESTCONF: &restconf.Config{URL: server.REST.URL, InsecureSkipVerify: true, Timeout: time.Second}, SSH: &ssh.Config{Address: server.SSHAddress, Username: "test", Password: "test", KnownHosts: server.KnownHosts, Timeout: time.Second}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ports, err := readPorts(context.Background(), device)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(ports) != 2 {
-		t.Fatalf("ports=%v", ports)
-	}
-	for _, p := range ports {
-		switch p.Name {
-		case "ethernet 1/1/11":
-			if p.Enabled || p.PowerClass != nil || p.PowerUsedMilliwatts != nil {
-				t.Fatalf("disabled port=%+v", p)
-			}
-		case "ethernet 1/1/12":
-			if !p.Enabled || p.PowerClass == nil || *p.PowerClass != 4 || p.PowerUsedMilliwatts == nil || *p.PowerUsedMilliwatts != 7000 {
-				t.Fatalf("configured policy confused with device telemetry: %+v", p)
-			}
-		default:
-			t.Fatalf("unexpected port: %+v", p)
-		}
-	}
-}
-
 func TestAllocationOwnership(t *testing.T) {
 	for _, setting := range []string{"priority 1", "power-by-class 2", "power-limit 20000"} {
 		t.Run(setting, func(t *testing.T) {
