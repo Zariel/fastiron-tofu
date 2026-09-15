@@ -57,4 +57,4 @@ Global spanning-tree mode, MST, timers, path costs and port priorities are not y
 
 On that firmware, the `/stp/global`, `/stp/rstp` and `/stp/mstp` RESTCONF containers return “unknown resource”. Per-VLAN RSTP is available through `/stp/rapid-pvst`.
 
-VLAN priority recovery after CLI drift remains incomplete: RESTCONF can report the desired priority without applying it natively. The provider detects that mismatch and returns an error without saving. VLAN spanning-tree persistence across reboot remains unverified.
+VLAN updates wait for RESTCONF and native configuration to agree before writing: a priority update matching stale RESTCONF state can otherwise be ignored, and stale presence can reject recreation. Classic STP and RSTP priority drift recovery have been verified. Synchronization is bounded by the configured RESTCONF timeout; a timeout or ignored update returns an error without saving, and a later apply can retry. VLAN spanning-tree persistence across reboot remains unverified.
