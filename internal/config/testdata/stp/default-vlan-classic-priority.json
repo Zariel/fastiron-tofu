@@ -1,24 +1,19 @@
 {
   "Policy": {
-    "VLANID": 3053,
+    "VLANID": 4095,
     "Mode": "stp",
-    "Priority": 0
+    "Priority": 12345
   },
   "Inventory": [
-    {
-      "VLANID": 1,
-      "Mode": "stp",
-      "Priority": 32768
-    },
     {
       "VLANID": 100,
       "Mode": "stp",
       "Priority": 32768
     },
     {
-      "VLANID": 3053,
+      "VLANID": 4095,
       "Mode": "stp",
-      "Priority": 0
+      "Priority": 12345
     }
   ]
 }

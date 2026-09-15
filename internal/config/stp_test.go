@@ -64,7 +64,10 @@ func TestSTPCaptures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var want STPVLAN
+			var want struct {
+				Policy    STPVLAN
+				Inventory []STPVLAN
+			}
 			if err := json.Unmarshal(data, &want); err != nil {
 				t.Fatal(err)
 			}
@@ -73,13 +76,12 @@ func TestSTPCaptures(t *testing.T) {
 				t.Fatal(err)
 			}
 			policies, err := document.STPVLANs()
-			wantPolicies := []STPVLAN{{VLANID: 1, Mode: "stp", Priority: 32768}, {VLANID: 100, Mode: "stp", Priority: 32768}, want}
-			if err != nil || !reflect.DeepEqual(policies, wantPolicies) {
-				t.Fatalf("policies=%v error=%v; want %v", policies, err, wantPolicies)
+			if err != nil || !reflect.DeepEqual(policies, want.Inventory) {
+				t.Fatalf("policies=%v error=%v; want %v", policies, err, want.Inventory)
 			}
-			got, _, err := document.STPVLAN(want.VLANID)
-			if err != nil || got == nil || *got != want {
-				t.Fatalf("policy=%+v error=%v; want %+v", got, err, want)
+			got, _, err := document.STPVLAN(want.Policy.VLANID)
+			if err != nil || got == nil || *got != want.Policy {
+				t.Fatalf("policy=%+v error=%v; want %+v", got, err, want.Policy)
 			}
 		})
 	}
