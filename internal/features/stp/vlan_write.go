@@ -33,6 +33,19 @@ func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*
 		if err != nil {
 			return current, err
 		}
+		if present && (current == nil || *current != v) {
+			// A PATCH matching stale cache can be ignored; stale presence can reject POST.
+			observed, remaining, err := waitVLAN(ctx, d, v.VLANID)
+			if remaining != nil {
+				current = observed
+			}
+			if err != nil {
+				return current, err
+			}
+			if !slices.Equal(unowned, remaining) {
+				return current, errors.New("native configuration changed while waiting for spanning-tree synchronization")
+			}
+		}
 		if present {
 			if _, err := vlanfeature.Read(ctx, d, v.VLANID); err != nil {
 				return nil, err
