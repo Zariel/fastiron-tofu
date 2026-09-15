@@ -5,7 +5,9 @@ import (
 	"errors"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
@@ -43,41 +45,91 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 		if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
 			return nil, err
 		}
-		interfaces, err := readInterfaces(ctx, d)
+		cached, err := readRESTInterfaces(ctx, d)
 		if err != nil {
 			return nil, err
 		}
-		current := interfaces[name]
-		if current != desired {
+		current, unowned, err := readNativeInterface(ctx, d, name)
+		if err != nil {
+			return nil, err
+		}
+		if current == desired {
+			return &current, nil
+		}
+		targets := []interfaceConfig{desired}
+		if cached[name] != current {
+			// Reapply current flags to align a stale cache without changing native policy.
+			targets = []interfaceConfig{current, desired}
+		}
+		for i, target := range targets {
 			edge, guard := "EDGE_DISABLE", "NONE"
-			if desired.AdminEdge {
+			if target.AdminEdge {
 				edge = "EDGE_ENABLE"
 			}
-			if desired.RootGuard {
+			if target.RootGuard {
 				guard = "ROOT"
 			}
-			// Patch only owned leaves; deleting the interface container would erase
-			// unrelated STP options and is not the native default-reset operation.
+			// Collection PUT can erase neighboring interfaces. PATCH only owned leaves.
 			body := map[string]any{"interfaces": map[string]any{"interface": []any{map[string]any{"name": name, "config": map[string]any{
-				"name": name, "edge-port": "openconfig-spanning-tree-types:" + edge, "guard": guard, "bpdu-guard": desired.BPDUGuard,
+				"name": name, "edge-port": "openconfig-spanning-tree-types:" + edge, "guard": guard, "bpdu-guard": target.BPDUGuard,
 			}}}}}
 			writeErr := update.REST(http.MethodPatch, "/stp/interfaces", body)
-			observed, readErr := readInterfaces(ctx, d)
+			observed, remaining, readErr := readNativeInterface(ctx, d, name)
 			if readErr != nil {
 				return &current, errors.Join(writeErr, readErr)
 			}
-			current = observed[name]
-			delete(interfaces, name)
-			delete(observed, name)
-			if !maps.Equal(interfaces, observed) {
-				return &current, errors.Join(writeErr, errors.New("spanning-tree mutation changed neighboring interfaces"))
+			current = observed
+			if !slices.Equal(unowned, remaining) {
+				return &current, errors.Join(writeErr, errors.New("spanning-tree mutation changed unrelated configuration"))
 			}
-			if current != desired {
+			if current != target {
 				return &current, errors.Join(writeErr, errors.New("spanning-tree interface configuration did not converge"))
+			}
+			if writeErr != nil {
+				return &current, writeErr
+			}
+			if i+1 < len(targets) {
+				if err := waitInterfaceCache(ctx, d, name, current); err != nil {
+					return &current, err
+				}
 			}
 		}
 		return &current, nil
 	})
+}
+
+func readNativeInterface(ctx context.Context, d *fastiron.Device, name string) (interfaceConfig, []string, error) {
+	output, err := d.RunningConfig(ctx)
+	if err != nil {
+		return interfaceConfig{}, nil, err
+	}
+	document, err := config.Parse(output)
+	if err != nil {
+		return interfaceConfig{}, nil, err
+	}
+	return document.STPInterface(name)
+}
+
+func waitInterfaceCache(ctx context.Context, d *fastiron.Device, name string, current interfaceConfig) error {
+	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+	defer cancel()
+	for {
+		cached, err := readRESTInterfaces(ctx, d)
+		if err != nil {
+			return err
+		}
+		if cached[name] == current {
+			return nil
+		}
+		// RESTCONF can lag native changes; a following PATCH must see the aligned values.
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.Join(errors.New("RESTCONF spanning-tree cache did not synchronize with native flags"), ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {

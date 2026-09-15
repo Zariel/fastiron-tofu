@@ -121,3 +121,26 @@ func (d *Document) STPInterfaces() (map[string]STPInterface, error) {
 	}
 	return policies, nil
 }
+
+// STPInterface selects one interface's flags and preserves every unowned command.
+func (d *Document) STPInterface(name string) (STPInterface, []string, error) {
+	policies, err := d.STPInterfaces()
+	if err != nil {
+		return STPInterface{}, nil, err
+	}
+	header, err := d.interfaceHeader(name)
+	if err != nil {
+		return STPInterface{}, nil, err
+	}
+	var remaining []string
+	for i, command := range d.Commands {
+		if i == header {
+			continue
+		}
+		owned := header >= 0 && command.Parent == header && (command.kind == stpEdge || command.kind == stpRoot || command.kind == stpBPDU)
+		if !owned {
+			remaining = append(remaining, command.Text)
+		}
+	}
+	return policies[name], remaining, nil
+}

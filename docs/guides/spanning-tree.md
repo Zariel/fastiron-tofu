@@ -45,6 +45,8 @@ All three options default to false. Omitting an option resets it to false; destr
 tofu import fastiron_spanning_tree_interface.server 'ethernet 1/1/12'
 ```
 
+Interface updates verify native configuration before saving, including preservation of unrelated commands. After CLI changes, the provider may first synchronize RESTCONF with the current native flags before applying the desired flags. If synchronization times out or a write fails, the operation reports an error without saving; a later apply can resume reconciliation.
+
 These flags do not enable spanning tree on a VLAN. Configure the corresponding VLAN's spanning-tree mode separately for the protection to operate. `admin_edge` configures the native RSTP edge-port option; `root_guard` configures root protection.
 
 Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`; reboot persistence has not yet been verified.

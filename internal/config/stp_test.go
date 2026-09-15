@@ -143,3 +143,21 @@ func TestSTPInterfaceCaptures(t *testing.T) {
 		})
 	}
 }
+
+func TestSTPInterfaceOwnership(t *testing.T) {
+	d, err := Parse("ver 09.0.10k\nvlan 53\n spanning-tree\ninterface ethernet 1/1/11\n stp-bpdu-guard\ninterface ethernet 1/1/12\n port-name phone\n spanning-tree 802-1w admin-edge-port\n spanning-tree 802-1w path-cost 100\n disable\nend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, remaining, err := d.STPInterface("ethernet 1/1/12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy != (STPInterface{AdminEdge: true}) {
+		t.Fatalf("flags=%+v", policy)
+	}
+	want := []string{"ver 09.0.10k", "vlan 53", " spanning-tree", "interface ethernet 1/1/11", " stp-bpdu-guard", " port-name phone", " spanning-tree 802-1w path-cost 100", " disable", "end"}
+	if !reflect.DeepEqual(remaining, want) {
+		t.Fatalf("unowned=%v; want %v", remaining, want)
+	}
+}
