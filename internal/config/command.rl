@@ -13,6 +13,7 @@ import (
  tail = (h (any - '\n')*)?;
  poe_port = ('no' h+)? 'inline' h+ 'power' h+ ('ethernet' | 'ethe') tail;
  main := (
+  (('no' h+)? 'spanning-tree' tail) @{ kind = spanningTree } |
   poe_port @{ kind = inlinePowerPort } |
   ((('no' h+)? 'inline' h+ 'power' tail) - poe_port) @{ kind = inlinePower } |
   ('trust' h+ 'dscp' tail) @{ kind = trustDSCP } |
@@ -145,7 +146,9 @@ func commandFields(data string) (fields []string) {
  };
  poe = ('no' h+ 'inline' h+ 'power' %{ parsed.poe.Enabled = false } (h+ poe_target)?) |
        ('inline' h+ 'power' (h+ poe_target)? (h+ (poe_priority | poe_class | poe_limit))*);
- main := (poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
+ stp = 'spanning-tree' (h+ '802-1w' %{ parsed.family = "rstp" })?
+       (h+ 'priority' h+ number >mark %value %options)?;
+ main := (stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%
@@ -153,6 +156,7 @@ func commandFields(data string) (fields []string) {
 
 func parseCommand(data string) (parsed parsedCommand) {
  parsed.kind = commandKind(data)
+ if parsed.kind == spanningTree { parsed.family = "stp"; parsed.number = 32768 }
  if parsed.kind == inlinePower || parsed.kind == inlinePowerPort { parsed.poe = PoEPolicy{Enabled: true, Priority: 3} }
  if parsed.kind == unknown { return parsed }
  data += "\n"

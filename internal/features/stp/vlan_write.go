@@ -122,7 +122,11 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error)
 		if err != nil {
 			return vlans, err
 		}
-		native, err := nativeSTPVLAN(output, id)
+		document, err := nativeconfig.Parse(output)
+		if err != nil {
+			return vlans, err
+		}
+		native, err := document.STPVLAN(id)
 		if err != nil {
 			return vlans, err
 		}
@@ -146,51 +150,4 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) ([]vlan, error)
 		case <-timer.C:
 		}
 	}
-}
-
-func nativeSTPVLAN(config string, id int64) (*vlan, error) {
-	document, err := nativeconfig.Parse(config)
-	if err != nil {
-		return nil, err
-	}
-	inside := false
-	var current *vlan
-
-	for _, command := range document.Commands {
-		fields := command.Fields
-		if command.Parent == -1 && len(fields) > 1 && fields[0] == "vlan" {
-			inside = fields[1] == strconv.FormatInt(id, 10)
-			continue
-		}
-		if command.Parent == -1 {
-			inside = false
-		}
-		if !inside || len(fields) == 0 || fields[0] != "spanning-tree" {
-			continue
-		}
-
-		fields = fields[1:]
-		mode := "stp"
-		if len(fields) > 0 && fields[0] == "802-1w" {
-			mode = "rstp"
-			fields = fields[1:]
-		}
-		if current == nil {
-			current = &vlan{VLANID: id, Mode: mode, Priority: 32768}
-		} else if current.Mode != mode {
-			return nil, errors.New("native VLAN contains conflicting spanning-tree modes")
-		}
-		if len(fields) == 0 {
-			continue
-		}
-		if len(fields) != 2 || fields[0] != "priority" {
-			return nil, errors.New("VLAN has additional spanning-tree settings; remove them before destroying its spanning-tree configuration")
-		}
-		priority, err := strconv.ParseInt(fields[1], 10, 64)
-		if err != nil || priority < 0 || priority > 65535 {
-			return nil, errors.New("invalid native spanning-tree bridge priority")
-		}
-		current.Priority = priority
-	}
-	return current, nil
 }

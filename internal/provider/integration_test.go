@@ -183,7 +183,7 @@ func (s *testSwitch) command(command string) (output string) {
 			text = stpPortConfiguration(text, s.stpPorts.running)
 		}
 		if s.stp != nil {
-			text = strings.TrimSuffix(text, "end") + stpConfiguration(s.stp.running, s.stp.extra) + "end"
+			text = stpConfiguration(text, s.stp.running, s.stp.extra)
 		}
 		if s.ospf != nil {
 			text = strings.TrimSuffix(text, "end") + ospfConfiguration(s.ospf.areas, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"
@@ -212,7 +212,7 @@ func (s *testSwitch) command(command string) (output string) {
 			return stpPortConfiguration(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), s.stpPorts.startup)
 		}
 		if s.stp != nil {
-			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + stpConfiguration(s.stp.startup, s.stp.extra) + "end"
+			return stpConfiguration(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), s.stp.startup, s.stp.extra)
 		}
 		if s.ospf != nil {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + ospfConfiguration(s.ospf.startup, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"

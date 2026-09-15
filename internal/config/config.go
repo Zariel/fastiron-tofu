@@ -32,6 +32,7 @@ const (
 	lldpMED
 	inlinePower
 	inlinePowerPort
+	spanningTree
 )
 
 type portRange struct{ first, last [3]uint64 }

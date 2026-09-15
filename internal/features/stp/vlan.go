@@ -6,14 +6,11 @@ import (
 	"path"
 	"slices"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
-type vlan struct {
-	VLANID   int64
-	Mode     string
-	Priority int64
-}
+type vlan = config.STPVLAN
 
 func validateVLAN(v vlan) error {
 	if v.VLANID < 1 || v.VLANID > 4094 {

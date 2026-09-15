@@ -23,11 +23,10 @@ type (
 	}
 )
 
-func stpConfiguration(vlans map[int64]stpSetting, extra bool) string {
-	var b strings.Builder
+func stpConfiguration(base string, vlans map[int64]stpSetting, extra bool) string {
 	for _, id := range slices.Sorted(maps.Keys(vlans)) {
 		v := vlans[id]
-		fmt.Fprintf(&b, "vlan %d by port\n", id)
+		var b strings.Builder
 		if v.mode == "rstp" {
 			b.WriteString(" spanning-tree 802-1w\n")
 			if v.priority != 32768 {
@@ -41,9 +40,21 @@ func stpConfiguration(vlans map[int64]stpSetting, extra bool) string {
 		if id == 53 && extra {
 			b.WriteString(" spanning-tree 802-1w hello-time 3\n")
 		}
-		b.WriteString("!\n")
+		prefix := "vlan " + strconv.FormatInt(id, 10)
+		header := ""
+		for _, line := range strings.Split(base, "\n") {
+			if line == prefix || strings.HasPrefix(line, prefix+" ") {
+				header = line + "\n"
+				break
+			}
+		}
+		if header != "" {
+			base = strings.Replace(base, header, header+b.String(), 1)
+		} else {
+			base = strings.TrimSuffix(base, "end") + prefix + " by port\n" + b.String() + "!\nend"
+		}
 	}
-	return b.String()
+	return base
 }
 
 func (s *stpSwitch) rest(w http.ResponseWriter, r *http.Request) {
