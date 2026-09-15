@@ -18,12 +18,15 @@ import (
 )
 
 func TestInterfaceWrite(t *testing.T) {
-	desired := interfaceConfig{AdminEdge: true, RootGuard: true}
+	desired := interfaceConfig{AdminEdge: true, BPDUGuard: true, RootGuard: true}
 	for _, tc := range []struct {
-		name                                         string
-		stale, delayed, stuck, fail, corrupt, ignore bool
+		name, target                                          string
+		stale, partial, delayed, stuck, fail, corrupt, ignore bool
 	}{
 		{name: "normal"},
+		{name: "LAG", target: "lag 11"},
+		{name: "LAG cached desired", target: "lag 11", stale: true},
+		{name: "LAG stale BPDU", target: "lag 11", partial: true},
 		{name: "cached desired", stale: true},
 		{name: "lagging cache", stale: true, delayed: true},
 		{name: "cache timeout", stale: true, stuck: true},
@@ -33,10 +36,17 @@ func TestInterfaceWrite(t *testing.T) {
 		{name: "ignored mutation", ignore: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			target := tc.target
+			if target == "" {
+				target = "ethernet 1/1/12"
+			}
 			var mu sync.Mutex
 			current, saved, cached := interfaceConfig{}, interfaceConfig{}, interfaceConfig{}
 			if tc.stale {
 				cached = desired
+			}
+			if tc.partial {
+				cached.BPDUGuard = true
 			}
 			writes, saves, lag := 0, 0, 0
 			var pending *interfaceConfig
@@ -45,7 +55,11 @@ func TestInterfaceWrite(t *testing.T) {
 				if tc.corrupt && writes > 0 {
 					neighbor = "changed"
 				}
-				lines := "ver 09.0.10k\ninterface ethernet 1/1/11\n port-name " + neighbor + "\n stp-bpdu-guard\ninterface ethernet 1/1/12\n port-name phone\n"
+				parent := ""
+				if target == "lag 11" {
+					parent = "lag test static id 11\n ports ethe 1/1/9 to 1/1/10\n"
+				}
+				lines := "ver 09.0.10k\n" + parent + "interface ethernet 1/1/11\n port-name " + neighbor + "\n stp-bpdu-guard\ninterface " + target + "\n port-name phone\n"
 				if flags.AdminEdge {
 					lines += " spanning-tree 802-1w admin-edge-port\n"
 				}
@@ -79,7 +93,7 @@ func TestInterfaceWrite(t *testing.T) {
 				}
 			})
 			server.HandleFunc("/interfaces", func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprint(w, `{"openconfig-interfaces:interfaces":{"interface":[{"name":"ethernet 1/1/12","config":{"name":"ethernet 1/1/12"}}]}}`)
+				fmt.Fprintf(w, `{"openconfig-interfaces:interfaces":{"interface":[{"name":%q,"config":{"name":%q}}]}}`, target, target)
 			})
 			server.HandleFunc("/stp/interfaces", func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
@@ -99,7 +113,7 @@ func TestInterfaceWrite(t *testing.T) {
 					if cached.RootGuard {
 						guard = "ROOT"
 					}
-					entries := []any{map[string]any{"name": "ethernet 1/1/12", "config": map[string]any{"name": "ethernet 1/1/12", "edge-port": edge, "guard": guard, "bpdu-guard": cached.BPDUGuard}}}
+					entries := []any{map[string]any{"name": target, "config": map[string]any{"name": target, "edge-port": edge, "guard": guard, "bpdu-guard": cached.BPDUGuard}}}
 					// A new default-only cache identity is not a native neighbor mutation.
 					if writes > 0 {
 						entries = append(entries, map[string]any{"name": "ethernet 1/1/14", "config": map[string]any{"name": "ethernet 1/1/14"}})
@@ -129,7 +143,7 @@ func TestInterfaceWrite(t *testing.T) {
 					w.WriteHeader(400)
 					return
 				}
-				if len(body.Interfaces.Interface) != 1 || body.Interfaces.Interface[0].Name != "ethernet 1/1/12" {
+				if len(body.Interfaces.Interface) != 1 || body.Interfaces.Interface[0].Name != target {
 					t.Error("wrong target")
 					w.WriteHeader(400)
 					return
@@ -137,8 +151,16 @@ func TestInterfaceWrite(t *testing.T) {
 				c := body.Interfaces.Interface[0].Config
 				value := interfaceConfig{AdminEdge: strings.HasSuffix(c.Edge, "EDGE_ENABLE"), RootGuard: c.Guard == "ROOT", BPDUGuard: c.BPDU}
 				writes++
-				if value != cached && !tc.ignore {
-					current = value
+				if !tc.ignore {
+					if value.AdminEdge != cached.AdminEdge {
+						current.AdminEdge = value.AdminEdge
+					}
+					if value.BPDUGuard != cached.BPDUGuard {
+						current.BPDUGuard = value.BPDUGuard
+					}
+					if value.RootGuard != cached.RootGuard {
+						current.RootGuard = value.RootGuard
+					}
 				}
 				if tc.delayed && value == (interfaceConfig{}) {
 					pending = &value
@@ -161,7 +183,7 @@ func TestInterfaceWrite(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			observed, err := applyInterface(context.Background(), device, "ethernet 1/1/12", desired)
+			observed, err := applyInterface(context.Background(), device, target, desired)
 			failure := tc.fail || tc.corrupt || tc.ignore || tc.stuck
 			if tc.stuck && !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("expected cache deadline, got %v", err)
@@ -188,7 +210,7 @@ func TestInterfaceWrite(t *testing.T) {
 				return
 			}
 
-			if _, err := applyInterface(context.Background(), device, "ethernet 1/1/12", desired); err != nil {
+			if _, err := applyInterface(context.Background(), device, target, desired); err != nil {
 				t.Fatal(err)
 			}
 			mu.Lock()

@@ -36,7 +36,7 @@ Before saving, VLAN writes verify native policy and check that unrelated configu
 
 Deletion refuses to erase additional native spanning-tree settings, such as timers or per-VLAN port costs. Remove those settings before destroying or replacing this resource.
 
-`fastiron_spanning_tree_interface` owns three options on an existing Ethernet interface:
+`fastiron_spanning_tree_interface` owns three options on an existing Ethernet or LAG interface:
 
 ```hcl
 resource "fastiron_spanning_tree_interface" "server" {
@@ -53,11 +53,13 @@ All three options default to false. Omitting an option resets it to false; destr
 tofu import fastiron_spanning_tree_interface.server 'ethernet 1/1/12'
 ```
 
+For a LAG, set `interface = fastiron_lag.uplink.id` or use a canonical name such as `lag 11`. Configure these options on the aggregate: both primary and secondary Ethernet members are rejected because RESTCONF can acknowledge member writes without changing native STP policy. The data source reports the LAG's explicit native flags and excludes cache-only member entries.
+
 Interface updates verify native configuration before saving, including preservation of unrelated commands. After CLI changes, the provider may first synchronize RESTCONF with the current native flags before applying the desired flags. If synchronization times out or a write fails, the operation reports an error without saving; a later apply can resume reconciliation.
 
 These flags do not enable spanning tree on a VLAN. Configure the corresponding VLAN's spanning-tree mode separately for the protection to operate. `admin_edge` configures the native RSTP edge-port option; `root_guard` configures root protection.
 
-Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`. Interface flags have been verified through creation, individual updates, omitted defaults, CLI drift repair, import, replacement, deletion and reboot.
+Global spanning-tree mode, MST, timers, path costs and port priorities are not yet managed by these resources. Hardware validation uses FastIron `09.0.10kT213`. Ethernet interface flags have been verified through creation, individual updates, omitted defaults, CLI drift repair, import, replacement, deletion and reboot.
 
 On that firmware, the `/stp/global`, `/stp/rstp` and `/stp/mstp` RESTCONF containers return “unknown resource”. Per-VLAN RSTP is available through `/stp/rapid-pvst`.
 

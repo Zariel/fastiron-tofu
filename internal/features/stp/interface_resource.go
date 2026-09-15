@@ -30,9 +30,9 @@ func (r *InterfaceResource) Metadata(_ context.Context, req resource.MetadataReq
 }
 
 func (r *InterfaceResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Owns admin-edge, BPDU guard and root guard on one Ethernet interface. Omission and destroy reset these options to false; other interface settings are preserved.", Attributes: map[string]schema.Attribute{
-		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical Ethernet interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
-		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+	resp.Schema = schema.Schema{Description: "Owns admin-edge, BPDU guard and root guard on one Ethernet or LAG interface. LAG members must be managed through their aggregate. Omission and destroy reset these options to false; other interface settings are preserved.", Attributes: map[string]schema.Attribute{
+		"id":                  schema.StringAttribute{Computed: true, Description: "Canonical Ethernet or LAG interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
+		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet or LAG interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"admin_edge":          schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), Description: "Configure the interface as an RSTP edge port. Defaults to false."},
 		"bpdu_guard":          schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), Description: "Enable BPDU guard. Defaults to false."},
 		"root_guard":          schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), Description: "Enable root protection. Defaults to false."},
@@ -144,7 +144,7 @@ func (r *InterfaceResource) Delete(ctx context.Context, req resource.DeleteReque
 
 func (r *InterfaceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	if validateInterface(req.ID) != nil {
-		resp.Diagnostics.AddError("Invalid spanning-tree interface identity", "Use ethernet <stack>/<slot>/<port>.")
+		resp.Diagnostics.AddError("Invalid spanning-tree interface identity", "Use ethernet <stack>/<slot>/<port> or lag <id>.")
 		return
 	}
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)

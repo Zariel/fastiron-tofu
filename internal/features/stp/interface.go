@@ -10,7 +10,6 @@ import (
 
 	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
-	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
 )
@@ -18,10 +17,10 @@ import (
 type interfaceConfig = config.STPInterface
 
 func validateInterface(name string) error {
-	if !strings.HasPrefix(name, "ethernet ") || !interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
-		return errors.New("interface must be a canonical Ethernet name: ethernet <stack>/<slot>/<port>")
+	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
+		return nil
 	}
-	return nil
+	return errors.New("interface must be a canonical Ethernet or LAG name")
 }
 
 func readInterface(ctx context.Context, d *fastiron.Device, name string) (interfaceConfig, error) {
@@ -29,7 +28,7 @@ func readInterface(ctx context.Context, d *fastiron.Device, name string) (interf
 		return interfaceConfig{}, err
 	}
 	// An omitted STP entry denotes defaults only for an existing interface.
-	if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
+	if err := d.CheckL2Owner(ctx, name); err != nil {
 		return interfaceConfig{}, err
 	}
 	interfaces, err := readInterfaces(ctx, d)
@@ -41,7 +40,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 		return nil, err
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*interfaceConfig, error) {
-		if err := ethernet.CheckPort(ctx, d, strings.TrimPrefix(name, "ethernet ")); err != nil {
+		if err := d.CheckL2Owner(ctx, name); err != nil {
 			return nil, err
 		}
 		cached, err := readRESTInterfaces(ctx, d)
