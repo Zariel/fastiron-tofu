@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"path"
@@ -22,18 +21,6 @@ type nativeState struct {
 	unowned []string
 }
 
-type interfaceEntry struct {
-	Name   string `json:"name"`
-	Config *struct {
-		Name string `json:"name"`
-	} `json:"config"`
-	Ethernet *struct {
-		Config *struct {
-			Aggregate string `json:"openconfig-if-aggregate:aggregate-id"`
-		} `json:"config"`
-	} `json:"openconfig-if-ethernet:ethernet"`
-}
-
 func validateInterface(name string) error {
 	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) {
 		return nil
@@ -49,32 +36,8 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 		return nativeState{}, err
 	}
 	// Protection defaults are meaningful only after confirming the parent exists.
-	var interfaces struct {
-		Collection *struct {
-			Entries []interfaceEntry `json:"interface"`
-		} `json:"openconfig-interfaces:interfaces"`
-	}
-	if err := device.ReadREST(ctx, "/interfaces", &interfaces); err != nil {
+	if err := device.CheckL2Owner(ctx, name); err != nil {
 		return nativeState{}, err
-	}
-	if interfaces.Collection == nil || len(interfaces.Collection.Entries) == 0 {
-		return nativeState{}, errors.New("RESTCONF interface collection is missing or empty")
-	}
-	found := false
-	for _, entry := range interfaces.Collection.Entries {
-		if entry.Name != name {
-			continue
-		}
-		if found || entry.Config == nil || entry.Config.Name != name {
-			return nativeState{}, errors.New("RESTCONF protected-port parent identity is inconsistent")
-		}
-		if entry.Ethernet != nil && entry.Ethernet.Config != nil && entry.Ethernet.Config.Aggregate != "" {
-			return nativeState{}, fmt.Errorf("%s is a LAG member; manage or query protected-port configuration on %s", name, entry.Ethernet.Config.Aggregate)
-		}
-		found = true
-	}
-	if !found {
-		return nativeState{}, fastiron.ErrNotFound
 	}
 	var response struct {
 		Protected json.RawMessage `json:"icx-openconfig-pp:protectedport"`
