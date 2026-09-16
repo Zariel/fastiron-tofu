@@ -13,6 +13,8 @@ resource "fastiron_lag" "storage" {
 
 Use `dynamic` for LACP or `static` for a static aggregate. Changing `mode` or `lag_id` requires replacement; renaming updates the existing aggregate. An explicit empty `members` set creates an empty aggregate. Import with `tofu import fastiron_lag.storage 'lag 5'`.
 
+Aggregate rename drift recovery has been verified through OpenTofu on FastIron `09.0.10kT213`. After an external CLI rename, apply restored the desired name while preserving membership and unrelated configuration. Independent serial checks confirmed running and saved configuration, the query returned the desired name, and the subsequent plan was empty.
+
 The LAG name above identifies the aggregate; it is not an interface description.
 
 The [complete LAG example](../../examples/lag/main.tf) includes provider configuration, aggregate membership, interface policy and both queries.
