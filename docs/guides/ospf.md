@@ -38,6 +38,8 @@ Area deletion requires all interface bindings and additional native area options
 
 Area and binding writes also verify that unrelated native commands remain unchanged, including interface options and non-OSPF settings. If this check fails, the provider reports an error without saving or automatically rolling back the change. Inspect and repair the unexpected configuration before retrying; a partially created resource remains in state with `persistence_pending = true`.
 
+On FastIron `09.0.10kT213`, RESTCONF accepted interface cost, priority, passive mode, and network type in tests on VE and loopback bindings, but changed only its cached values. Native configuration remained unchanged for both binding creation and subsequent updates. The tested interface timer paths were rejected. These fields are therefore not exposed as managed settings; a value returned by the RESTCONF cache does not prove that the routing process uses it.
+
 Import existing configuration:
 
 ```sh
