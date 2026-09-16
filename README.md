@@ -26,7 +26,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Jumbo frames | Implemented | [Global configuration and native query](docs/guides/jumbo.md). Changes require saving and reloading; active mode and reload requirements are reported. Per-interface MTUs remain separate. |
 | DSCP trust | Implemented | [Native trust configuration and query](docs/guides/dscp-trust.md), with ownership separate from QoS mappings and flow control. Ethernet lifecycle and reboot persistence verified; the tested LAG RESTCONF path is unavailable. |
 | Routed VLAN interfaces (VE) | Implemented RESTCONF scope | [Existence, VLAN binding, port name and native query](docs/guides/ve.md); lifecycle and reboot persistence verified. Administrative state is readable; RESTCONF administrative writes had no native effect on tested firmware. |
-| Other interface configuration | Not yet | Dedicated management/LAG interface resources, loopbacks, group-VE and tunnels remain. |
+| Other interface configuration | Not yet | Dedicated management interfaces, loopbacks, group-VE and tunnels remain. LAG interface description and administrative state are covered above. |
 | Interface IP addresses | Implemented | Individual IPv4/IPv6 addresses on VE and management interfaces. |
 | Static routes | Partial | IPv4 prefix/gateway routes in the default VRF. Other route types remain. |
 | OSPF | Partial | Default-VRF areas and interface bindings. Additional routing options remain. |
