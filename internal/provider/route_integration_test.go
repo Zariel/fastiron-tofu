@@ -16,6 +16,7 @@ type routeSwitch struct {
 	running, startup map[string]int64
 	cached           map[string]int64
 	ignoreWrites     bool
+	mutations        int
 	extra            string
 }
 
@@ -62,6 +63,7 @@ func (s *routeSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"openconfig-network-instance:static-routes": map[string]any{"static": entries}})
 		return
 	}
+	s.mutations++
 	if s.ignoreWrites {
 		w.WriteHeader(http.StatusNoContent)
 		return

@@ -116,6 +116,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return lag.NewSingleDataSource() },
 		func() datasource.DataSource { return lag.NewInterfaceDataSource() },
 		func() datasource.DataSource { return &route.DataSource{} },
+		func() datasource.DataSource { return route.NewSingleDataSource() },
 		func() datasource.DataSource { return &ospf.DataSource{} },
 		func() datasource.DataSource { return &stp.DataSource{} },
 		func() datasource.DataSource { return &aaa.ServersDataSource{} },
