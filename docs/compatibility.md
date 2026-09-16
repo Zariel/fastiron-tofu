@@ -13,7 +13,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | VLAN | Existence and name |
 | VLAN membership | One tagged or untagged Ethernet or LAG relationship |
 | IGMP snooping | Global mode/version and independent VLAN mode/version overrides; see [IGMP policy and inheritance](guides/igmp-snooping.md) |
-| LAG | Existence, name, dynamic/static mode, and Ethernet membership |
+| LAG | [Existence, name, dynamic/static mode, Ethernet membership, and separate interface description and administrative state](guides/lags.md) |
 | Ethernet | [Port name and administrative enable state](guides/ethernet.md), with drift recovery, import, replacement, deletion and reboot persistence verified |
 | Protected ports | [Protected-port configuration and native query](guides/protected-ports.md) on Ethernet and populated LAG interfaces, with lifecycle and reboot persistence verified |
 | Storm control | [Broadcast, multicast and unknown-unicast rate policies](guides/storm-control.md) on Ethernet and populated LAG interfaces; Ethernet and LAG lifecycles and reboot persistence verified |
@@ -22,7 +22,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Interface voice VLAN | [Local Ethernet IP voice VLAN policy](guides/voice-vlan.md), with native discovery, drift reconciliation, import, replacement and saved deletion |
 | Routed VLAN interface | [VE existence, VLAN binding, port name and native configuration query](guides/ve.md); lifecycle, child guards and reboot persistence verified |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
-| Spanning tree | Per-VLAN STP/RSTP mode and bridge priority; Ethernet admin-edge, BPDU guard and root guard |
+| Spanning tree | Per-VLAN STP/RSTP mode and bridge priority; Ethernet and LAG admin-edge, BPDU guard and root guard |
 | OSPF | Default-VRF area existence and interface bindings |
 | Static routing | One IPv4 prefix and gateway relationship in the default VRF |
 | DNS | Individual server addresses |
@@ -62,7 +62,7 @@ A failed configuration request remains an error even if readback shows that the 
 - Global FlexAuth guest-VLAN writes, voice action variants and additional timers are not yet supported; see [authentication ownership and limits](guides/authentication.md).
 - Ethernet speed, duplex and clock settings are not yet managed. On the tested `09.0.10kT213` build, RESTCONF auto-negotiation updates and individual leaf deletions did not restore native automatic speed. Deleting the Ethernet container restored speed but also changed an unrelated DHCP-client setting, so it is unsuitable for narrowly owned resource cleanup.
 - Management-VLAN selection is not exposed. On the tested router image, the documented RESTCONF management-VLAN paths returned HTTP 400 with `unknown resource`, and the native `management-vlan` command was rejected. The command reference limits this feature to switch images.
-- Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).
+- Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet and LAG admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).
 - OSPF currently manages area existence and interface bindings; see [OSPF ownership and limits](guides/ospf.md).
 - Static routes currently support IPv4 gateways in the default VRF; see [route ownership and limits](guides/routes.md).
 - VE administrative enable state is not currently managed.
