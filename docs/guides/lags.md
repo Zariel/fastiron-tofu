@@ -48,9 +48,11 @@ Immediately after an external LAG change, RESTCONF may briefly report a member r
 
 On tested FastIron `09.0.10kT213`, a deleted aggregate can also remain in RESTCONF without any member references. Recreating that identity through POST returns 409; PATCH may acknowledge the request without creating the native LAG, and DELETE may return 404 without clearing the cache. The provider reports this condition before attempting creation. Restore the parent through CLI before retrying.
 
-A CLI-restored LAG with disabled members and separately managed STP flags has passed reboot persistence checks: running and saved configuration remained identical, queries matched and OpenTofu reported an empty plan. Subsequent LAG deletion returned RESTCONF 404. Separate checks reproduced this refusal for a CLI-created LAG even after a successful RESTCONF rename, while deleting a REST-created LAG succeeded. When DELETE reports absence but the native LAG remains, the provider reports the limitation without saving. Remove the LAG through CLI, then retry apply to finish persistence and state cleanup. RESTCONF deletion of such native aggregates remains unsupported on this tested firmware.
+A CLI-restored LAG with disabled members and separately managed STP flags has passed reboot persistence checks: running and saved configuration remained identical, queries matched and OpenTofu reported an empty plan.
 
-Creation through RESTCONF does not guarantee later deletion will succeed: a mode-replacement workflow also encountered this refusal after removing the aggregate's STP policy. The interaction remains under investigation; replacement can stop after deleting child policy while leaving the original LAG in place.
+STP interface entries still reference their parent when all protection flags are false. Leaving such an entry behind can make LAG deletion return RESTCONF 404. STP resource deletion resets its flags and removes that entry, verifying native configuration and RESTCONF absence. Direct checks confirmed that entry cleanup permits parent deletion without changing native configuration; fresh CLI-created and REST-created aggregates were both deletable.
+
+If DELETE reports absence while a native LAG remains, the provider reports the failure without saving. Remove dependent policy first. CLI removal followed by another apply can finish persistence and state cleanup when RESTCONF deletion remains unavailable.
 
 ## VLAN membership
 

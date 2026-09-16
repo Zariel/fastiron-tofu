@@ -16,6 +16,7 @@ func TestOpenTofuSTPParent(t *testing.T) {
 		t.Run(fmt.Sprintf("pending=%t", pending), func(t *testing.T) {
 			var mu sync.Mutex
 			parent, guard, failSave := true, true, false
+			cached := true
 			detached := false
 			patches := 0
 			native := func() string {
@@ -67,6 +68,10 @@ func TestOpenTofuSTPParent(t *testing.T) {
 				mu.Lock()
 				defer mu.Unlock()
 				if r.Method == http.MethodGet {
+					if !cached {
+						fmt.Fprint(w, `{"openconfig-spanning-tree:interfaces":{}}`)
+						return
+					}
 					fmt.Fprintf(w, `{"openconfig-spanning-tree:interfaces":{"interface":[{"name":"lag 11","config":{"name":"lag 11","bpdu-guard":%t}}]}}`, guard)
 					return
 				}
@@ -91,6 +96,12 @@ func TestOpenTofuSTPParent(t *testing.T) {
 				}
 				guard = body.Interfaces.Interface[0].Config.Guard
 				patches++
+				w.WriteHeader(http.StatusNoContent)
+			})
+			server.HandleFunc("DELETE /restconf/data/stp/interfaces/interface=lag 11", func(w http.ResponseWriter, _ *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				cached = false
 				w.WriteHeader(http.StatusNoContent)
 			})
 			s := &testSwitch{server: server.REST, sshAddress: server.SSHAddress, knownHosts: server.KnownHosts}

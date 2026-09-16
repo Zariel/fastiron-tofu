@@ -304,7 +304,7 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, s.aaaServers)
 		return
 	}
-	if s.stpPorts != nil && r.URL.Path == "/restconf/data/stp/interfaces" {
+	if s.stpPorts != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/stp/interfaces") {
 		s.stpPorts.rest(w, r)
 		return
 	}

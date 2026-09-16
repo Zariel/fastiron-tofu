@@ -15,6 +15,7 @@ type (
 	stpPortSwitch  struct {
 		running, startup       map[string]stpPortOptions
 		failPatch, ignorePatch bool
+		ignoreDelete           bool
 	}
 )
 
@@ -42,6 +43,14 @@ func stpPortConfiguration(base string, ports map[string]stpPortOptions) string {
 }
 
 func (s *stpPortSwitch) rest(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "DELETE" {
+		name := strings.TrimPrefix(r.URL.Path, "/restconf/data/stp/interfaces/interface=")
+		if !s.ignoreDelete {
+			delete(s.running, name)
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.Method == "GET" {
 		entries := []any{}
 		for name, p := range s.running {
@@ -179,4 +188,36 @@ func TestOpenTofuSTPInterface(t *testing.T) {
 	run(0, "apply", "-auto-approve", "-no-color")
 	check("ethernet 1/1/3", stpPortOptions{})
 	run(0, "plan", "-detailed-exitcode", "-no-color")
+}
+
+func TestOpenTofuSTPDefaultEntry(t *testing.T) {
+	s := newSwitch(t)
+	name := "ethernet 1/1/2"
+	s.stpPorts = &stpPortSwitch{running: map[string]stpPortOptions{name: {}}, startup: map[string]stpPortOptions{name: {}}, ignoreDelete: true}
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base+`resource "fastiron_spanning_tree_interface" "test" { interface = "ethernet 1/1/2" }`)
+	run(0, "init", "-no-color")
+	run(0, "import", "-no-color", "fastiron_spanning_tree_interface.test", name)
+	write("main.tf", base)
+
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "retained the spanning-tree interface entry") {
+		t.Fatalf("missing retained-entry diagnostic: %s", out)
+	}
+	if out := run(0, "state", "show", "-no-color", "fastiron_spanning_tree_interface.test"); !strings.Contains(out, "persistence_pending = true") {
+		t.Fatalf("failed entry deletion did not retain state: %s", out)
+	}
+	s.mu.Lock()
+	s.stpPorts.ignoreDelete = false
+	s.mu.Unlock()
+
+	run(0, "apply", "-auto-approve", "-no-color")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.stpPorts.running[name]; exists {
+		t.Fatal("default STP entry still references interface")
+	}
+	if _, exists := s.stpPorts.startup[name]; exists {
+		t.Fatal("entry deletion was not persisted")
+	}
 }

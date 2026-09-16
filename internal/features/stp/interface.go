@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -63,11 +65,14 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 		if err != nil {
 			return nil, err
 		}
-		if current == desired {
+		if current == desired && present {
 			return &current, nil
 		}
-		targets := []interfaceConfig{desired}
-		if cached[name] != current {
+		var targets []interfaceConfig
+		if current != desired {
+			targets = []interfaceConfig{desired}
+		}
+		if current != desired && cached[name] != current {
 			// Reapply current flags to align a stale cache without changing native policy.
 			targets = []interfaceConfig{current, desired}
 		}
@@ -102,6 +107,26 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 				if err := waitInterfaceCache(ctx, d, name, current); err != nil {
 					return &current, err
 				}
+			}
+		}
+		if !present {
+			// Default-valued STP entries still reference the interface and can
+			// prevent FastIron from deleting its parent LAG.
+			writeErr := update.DeleteIfPresent(path.Join("/stp/interfaces", "interface="+url.PathEscape(name)))
+			observed, remaining, readErr := readNativeInterface(ctx, d, name)
+			if readErr != nil {
+				return &current, errors.Join(writeErr, readErr)
+			}
+			current = observed
+			if current != desired || !slices.Equal(unowned, remaining) {
+				return &current, errors.New("spanning-tree entry deletion changed native configuration")
+			}
+			entries, err := readRESTInterfaces(ctx, d)
+			if err != nil {
+				return &current, err
+			}
+			if _, exists := entries[name]; exists {
+				return &current, errors.New("RESTCONF retained the spanning-tree interface entry after deletion")
 			}
 		}
 		return &current, nil

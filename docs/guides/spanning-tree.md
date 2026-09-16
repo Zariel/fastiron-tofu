@@ -47,7 +47,7 @@ resource "fastiron_spanning_tree_interface" "server" {
 }
 ```
 
-All three options default to false. Omitting an option resets it to false; destroying the resource resets all three. Port names, administrative enable state, VLAN membership and other STP options remain separately managed. Changing `interface` replaces the resource, resetting the old port before configuring the new one. Import uses the canonical interface name:
+All three options default to false. Omitting an option resets it to false; destroying the resource resets all three and removes its RESTCONF interface entry so the reference cannot block parent LAG deletion. Port names, administrative enable state, VLAN membership and other STP options remain separately managed. Changing `interface` replaces the resource, resetting the old port before configuring the new one. Import uses the canonical interface name:
 
 ```sh
 tofu import fastiron_spanning_tree_interface.server 'ethernet 1/1/12'
