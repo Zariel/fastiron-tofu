@@ -21,6 +21,10 @@ Members must satisfy FastIron's LAG formation rules, including matching speeds a
 
 Removing a member or deleting a LAG disables its detached Ethernet ports, following FastIron's native behavior. This also applies during LAG replacement. The provider does not restore prior port settings. A separately managed Ethernet resource can re-enable a port on a subsequent apply; do not assume this happens within the same apply that detaches it.
 
+On tested FastIron `09.0.10kT213`, removing a member through CLI can leave its old aggregate reference in RESTCONF. Refresh detects the native removal, but RESTCONF may acknowledge reattachment without changing native membership. The provider reports failed convergence and does not save; repeated applies can encounter the same limit. Restore the intended membership through CLI, then retry apply to reconcile and persist it. Reattaching a disabled port does not restore its previous administrative state.
+
+Direct hardware checks confirmed that both PUT and PATCH of the cached aggregate reference could return success without attaching the port. Clearing the cached reference with an empty value returned an error. The provider does not use that failing write as a repair step.
+
 Deleting a LAG through CLI on tested FastIron `09.0.10kT213` copies its STP protection flags onto the detached Ethernet ports. Those settings become independent port policy; removing the former LAG policy must not clear them. RESTCONF can retain the deleted aggregate entry, so interface policy resources check native LAG existence.
 
 If saving fails, `persistence_pending` remains true so a subsequent apply can finish saving the observed configuration.

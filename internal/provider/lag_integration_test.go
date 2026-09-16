@@ -18,6 +18,7 @@ type lagPort struct {
 type lagSwitch struct {
 	names, modes                      map[string]string
 	cachedNames                       map[string]string
+	cachedMembers                     map[string]string
 	ports                             map[string]lagPort
 	child                             bool
 	deleteMissing                     bool
@@ -72,8 +73,12 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		entries := []any{}
 		for name, port := range s.ports {
 			config := map[string]any{}
-			if port.aggregate != "" {
-				config["openconfig-if-aggregate:aggregate-id"] = port.aggregate
+			aggregate := port.aggregate
+			if s.cachedMembers != nil {
+				aggregate = s.cachedMembers[name]
+			}
+			if aggregate != "" {
+				config["openconfig-if-aggregate:aggregate-id"] = aggregate
 			}
 			entries = append(entries, map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:ethernetCsmacd", "description": "preserved", "enabled": port.enabled}, "openconfig-if-ethernet:ethernet": map[string]any{"config": config}})
 		}
@@ -157,16 +162,24 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			target := body.Config["openconfig-if-aggregate:aggregate-id"]
+			if s.cachedMembers != nil && s.cachedMembers[name] == target {
+				w.WriteHeader(204)
+				return
+			}
 			if s.names[target] == "" || port.aggregate != "" {
 				w.WriteHeader(400)
 				return
 			}
 			port.aggregate = target
 			s.ports[name] = port
+			if s.cachedMembers != nil {
+				s.cachedMembers[name] = target
+			}
 			w.WriteHeader(204)
 			return
 		}
 		if path == base+"/aggregate-id" && r.Method == "DELETE" {
+			delete(s.cachedMembers, name)
 			port.aggregate = ""
 			port.enabled = false
 			s.ports[name] = port
@@ -185,6 +198,7 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		delete(s.modes, name)
 		for key, port := range s.ports {
 			if port.aggregate == name {
+				delete(s.cachedMembers, key)
 				port.aggregate = ""
 				port.enabled = false
 				s.ports[key] = port
@@ -304,6 +318,69 @@ func TestOpenTofuLAG(t *testing.T) {
 	write("main.tf", base)
 	run(0, "apply", "-auto-approve", "-no-color")
 	check(false, false)
+}
+
+func TestOpenTofuLAGMemberDrift(t *testing.T) {
+	s := newSwitch(t)
+	s.lags = &lagSwitch{
+		names: map[string]string{"lag 53": "storage", "lag 54": "neighbor"},
+		modes: map[string]string{"lag 53": "STATIC", "lag 54": "STATIC"},
+		ports: map[string]lagPort{
+			"ethernet 1/1/7": {enabled: true, aggregate: "lag 53"},
+			"ethernet 1/1/8": {enabled: true, aggregate: "lag 53"},
+			"ethernet 1/1/9": {enabled: true, aggregate: "lag 54"},
+		},
+		cachedMembers: map[string]string{"ethernet 1/1/7": "lag 53", "ethernet 1/1/8": "lag 53", "ethernet 1/1/9": "lag 54"},
+	}
+	s.startupLAG = s.lags.configuration()
+	saved := s.startupLAG
+	write, run, base := tofuFixture(t, s)
+	base = strings.Replace(base, `provider "fastiron" {`, "provider \"fastiron\" {\n operation_timeout = \"2s\"", 1)
+	write("main.tf", base+`resource "fastiron_lag" "test" {
+ lag_id = 53
+ name = "storage"
+ mode = "static"
+ members = ["ethernet 1/1/7", "ethernet 1/1/8"]
+}
+`)
+	run(0, "init", "-no-color")
+	run(0, "import", "-no-color", "fastiron_lag.test", "lag 53")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+
+	// CLI removal disables the port but can leave the RESTCONF reference cached.
+	s.mu.Lock()
+	s.lags.ports["ethernet 1/1/8"] = lagPort{}
+	drifted := s.lags.configuration()
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	for range 2 {
+		out := run(1, "apply", "-auto-approve", "-no-color")
+		if !strings.Contains(out, "restore membership through CLI") {
+			t.Fatalf("missing membership recovery diagnostic: %s", out)
+		}
+		s.mu.Lock()
+		unchanged := s.lags.configuration() == drifted && s.startupLAG == saved
+		s.mu.Unlock()
+		if !unchanged {
+			t.Fatal("failed membership repair changed native or saved configuration")
+		}
+	}
+	if out := run(0, "state", "show", "fastiron_lag.test"); !strings.Contains(out, "persistence_pending = true") {
+		t.Fatalf("failed repair lost pending state: %s", out)
+	}
+
+	// Restoring native membership permits a retry without enabling the port.
+	s.mu.Lock()
+	s.lags.ports["ethernet 1/1/8"] = lagPort{aggregate: "lag 53"}
+	restored := s.lags.configuration()
+	s.mu.Unlock()
+	run(0, "apply", "-auto-approve", "-no-color")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lags.configuration() != restored || s.startupLAG != restored {
+		t.Fatal("retry did not persist restored membership and preserve native port state")
+	}
 }
 
 func TestOpenTofuLAGDeleteMissing(t *testing.T) {

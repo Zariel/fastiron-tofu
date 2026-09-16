@@ -203,6 +203,9 @@ func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error
 			body := map[string]any{"config": map[string]any{"openconfig-if-aggregate:aggregate-id": "lag " + strconv.FormatInt(v.ID, 10)}}
 			writeErr := update.REST(http.MethodPatch, endpoint, body)
 			observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && slices.Contains(lag.Members, name) })
+			if writeErr == nil && observed != nil && errors.Is(readErr, context.DeadlineExceeded) {
+				readErr = fmt.Errorf("%s remains absent from native lag %d after RESTCONF accepted the attachment; if removed externally, restore membership through CLI, then retry apply: %w", name, v.ID, readErr)
+			}
 			if readErr != nil {
 				return observed, errors.Join(writeErr, readErr)
 			}
