@@ -2,6 +2,8 @@
 
 `fastiron_ip_route` owns one destination prefix and IPv4 gateway in the default VRF. Multiple resources can manage different gateways for the same prefix.
 
+The [complete static-route example](../../examples/static-route/main.tf) includes provider configuration, a managed route and both native queries.
+
 ```hcl
 resource "fastiron_ip_route" "network" {
   prefix   = "198.51.100.0/24"
