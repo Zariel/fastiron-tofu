@@ -158,9 +158,10 @@ func commandFields(data string) (fields []string) {
  lag = 'lag' h+ ((any - space) (any - '\n')*) >{ lagStart = p }
        h+ ('static' | 'dynamic') >mark %{ parsed.family = data[start:p]; parsed.name = strings.TrimRight(data[lagStart:start], " \t") } h+ 'id' h+ digit+ >mark %value;
  lag_ports = 'ports' h+ port_range (h+ port_range)*;
+ member_disable = 'disable' h+ port_range (h+ port_range)*;
  stp_flag = ('no' h+ %{ parsed.negated = true })?
             ('spanning-tree' h+ ('802-1w' h+ 'admin-edge-port' | 'root-protect') | 'stp-bpdu-guard');
- main := (lag_ports | lag | stp_flag | stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
+ main := (member_disable | lag_ports | lag | stp_flag | stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%
@@ -204,4 +205,24 @@ func parseEthernetPort(data string) (id [3]uint64, valid bool) {
  %% write init;
  %% write exec;
  return id, valid && cs >= ethernet_port_first_final
+}
+
+%%{
+ machine member_name;
+ alphtype byte;
+ h = [ \t];
+ port_id = [1-9] digit* '/' [1-9] digit* '/' [1-9] digit*;
+ main := h* 'port-name' h+ (any - space) (any - '\n')* h+ 'ethernet' h+
+         port_id >{ start = p } %{ port = "ethernet " + data[start:p] } '\n';
+}%%
+%% write data;
+
+func lagNamedPort(data string) (port string) {
+ data += "\n"
+ p, pe := 0, len(data)
+ cs, start := 0, 0
+ %% write init;
+ %% write exec;
+ if cs < member_name_first_final { return "" }
+ return port
 }

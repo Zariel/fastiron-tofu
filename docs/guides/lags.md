@@ -21,7 +21,7 @@ Deleting a LAG through CLI on tested FastIron `09.0.10kT213` copies its STP prot
 
 If saving fails, `persistence_pending` remains true so a subsequent apply can finish saving the observed configuration.
 
-Remove VLAN relationships and independent interface or protocol settings before destroying the LAG. Deletion rejects remaining child configuration.
+Remove VLAN relationships and independent interface or protocol settings before destroying the LAG. Deletion rejects remaining independent child configuration. Member-name and member-disable clauses do not block removal: names survive detach and detached members remain disabled.
 
 ## Discovery
 

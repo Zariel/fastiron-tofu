@@ -42,7 +42,7 @@ func (d *Document) VE(id int64) (VE, error) {
 			state.HasChildren = true
 		}
 		if inside && command.Parent == header && command.kind == adminDisable {
-			if !state.Enabled || !command.valid {
+			if !state.Enabled || !command.valid || len(command.portRanges) != 0 {
 				return VE{}, errors.New("native VE administrative setting is malformed or repeated")
 			}
 			state.Enabled = false

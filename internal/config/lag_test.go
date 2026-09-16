@@ -107,3 +107,54 @@ func TestLAGs(t *testing.T) {
 		})
 	}
 }
+
+func TestLAGRemoval(t *testing.T) {
+	lag := LAG{ID: 53, Name: "test", Mode: "dynamic", Members: []string{"ethernet 1/1/7", "ethernet 1/1/8"}}
+	base := "ver 09.0.10k\nlag test dynamic id 53\n ports ethe 1/1/7 to 1/1/8\n"
+	for _, tc := range []struct {
+		name, config string
+		blocked      bool
+	}{
+		{"membership", base + "!\nend", false},
+		{"member settings", base + " disable ethe 1/1/7\n port-name member ethernet 1/1/7\n!\nend", false},
+		{"disabled range", base + " disable ethe 1/1/7 to 1/1/8\nend", false},
+		{"disabled nonmember", base + " disable ethe 1/1/7 to 1/1/9\nend", true},
+		{"reversed disable", base + " disable ethe 1/1/8 to 1/1/7\nend", true},
+		{"malformed disable", base + " disable ethe 1/1/7 to\nend", true},
+		{"aggregate disable", base + " disable\nend", true},
+		{"multiword member name", base + " port-name floor east ethernet 1/1/8\nend", false},
+		{"named nonmember", base + " port-name stranger ethernet 1/1/9\nend", true},
+		{"malformed member name", base + " port-name floor ethernet 1/1/8 extra\nend", true},
+		{"overlapping membership", "ver 09.0.10k\nlag test dynamic id 53\n ports ethe 1/1/7 to 1/1/8 ethe 1/1/7\nend", true},
+		{"repeated membership", base + " ports ethe 1/1/7\nend", true},
+		{"aggregate setting", base + " trunk-threshold 1\n!\nend", true},
+		{"virtual interface", base + "!\nvlan 53 by port\n!\ninterface lag 53\n ip address 192.0.2.1 255.255.255.0\n!\nend", true},
+		{"unrelated interface", base + "!\ninterface lag 54\n ip address 192.0.2.2 255.255.255.0\n!\nend", false},
+		{"empty virtual interface", base + "!\ninterface lag 53\n!\nend", false},
+		{"missing aggregate", "ver 09.0.10k\ninterface lag 53\n!\nend", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			document, err := Parse(tc.config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := document.CheckLAGRemoval(lag.ID, lag.Members); (err != nil) != tc.blocked {
+				t.Fatalf("deletion guard: %v; want blocked=%v", err, tc.blocked)
+			}
+		})
+	}
+}
+
+func TestLAGRemovalCapture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "lag", "removal-disabled.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := Parse(string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := document.CheckLAGRemoval(11, []string{"ethernet 1/1/9", "ethernet 1/1/10"}); err != nil {
+		t.Fatal(err)
+	}
+}

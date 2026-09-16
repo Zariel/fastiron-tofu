@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -93,4 +94,78 @@ func (d *Document) LAGs(names []string) ([]LAG, error) {
 	}
 	slices.SortFunc(lags, func(a, b LAG) int { return cmp.Compare(a.ID, b.ID) })
 	return lags, nil
+}
+
+// CheckLAGRemoval rejects settings that aggregate deletion would erase. Native
+// detach preserves member names and leaves disabled members disabled.
+func (d *Document) CheckLAGRemoval(id int64, members []string) error {
+	exists, err := d.HasLAG(id)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.New("cannot confirm the LAG configuration block before deletion")
+	}
+	header := -1
+	for i, command := range d.Commands {
+		if command.Parent == -1 && command.kind == lagHeader && command.number == id {
+			header = i
+			break
+		}
+	}
+	virtual, err := d.interfaceHeader("lag " + strconv.FormatInt(id, 10))
+	if err != nil {
+		return err
+	}
+	inventory := map[string][3]uint64{}
+	for _, name := range members {
+		raw, canonical := strings.CutPrefix(name, "ethernet ")
+		port, valid := parseEthernetPort(raw)
+		if !canonical || !valid {
+			return errors.New("invalid LAG member identity")
+		}
+		inventory[name] = port
+	}
+	actual := map[string][3]uint64{}
+	seen := false
+	for _, command := range d.Commands {
+		if command.Parent != header || command.kind != lagPorts {
+			continue
+		}
+		if seen || !command.valid {
+			return errors.New("native LAG members are malformed or repeated")
+		}
+		seen = true
+		names, err := command.resolvePorts(inventory)
+		if err != nil {
+			return err
+		}
+		for _, name := range names {
+			if _, duplicate := actual[name]; duplicate {
+				return errors.New("native LAG member is assigned more than once")
+			}
+			actual[name] = inventory[name]
+		}
+	}
+	for _, command := range d.Commands {
+		if virtual >= 0 && command.Parent == virtual {
+			return errors.New("LAG has independent interface configuration; remove it before destroying the LAG")
+		}
+		if command.Parent != header || command.kind == lagPorts {
+			continue
+		}
+		if command.kind == adminDisable && command.valid && len(command.portRanges) > 0 {
+			if _, err := command.resolvePorts(actual); err != nil {
+				return err
+			}
+			continue
+		}
+		if command.kind == portName {
+			if _, member := actual[lagNamedPort(command.Text)]; member {
+				continue
+			}
+		}
+		return errors.New("LAG has independent interface or protocol configuration; remove it before destroying the LAG")
+	}
+	return nil
 }

@@ -18,6 +18,7 @@ func TestVE(t *testing.T) {
 		{name: "banner", body: "banner motd #\ninterface ve 53\n port-name FAKE\n#\n", remaining: "banner motd #\ninterface ve 53\n port-name FAKE\n#"},
 		{name: "nested disable", body: "interface ve 53\n protocol future\n  disable\n", remaining: " protocol future\n  disable", exists: true, children: true},
 		{name: "duplicate disable", body: "interface ve 53\n disable\n disable\n", invalid: true},
+		{name: "member disable", body: "interface ve 53\n disable ethe 1/1/7\n", invalid: true},
 		{name: "invalid disable", body: "interface ve 53\n disable extra\n", invalid: true},
 		{name: "duplicate interface", body: "interface ve 53\ninterface ve 53\n disable\n", invalid: true},
 		{name: "duplicate name", body: "interface ve 53\n port-name ONE\n port-name TWO\n", invalid: true},

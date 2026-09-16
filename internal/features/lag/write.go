@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
-
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/features/vlan"
@@ -251,7 +249,7 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 			if err != nil {
 				return err
 			}
-			if err := lagChildren(document, current); err != nil {
+			if err := document.CheckLAGRemoval(id, current.Members); err != nil {
 				return err
 			}
 			writeErr := update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
@@ -263,54 +261,4 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 
 		return nil
 	})
-}
-
-func lagChildren(document *nativeconfig.Document, lag config) error {
-	inside, virtual, found := false, false, false
-	for _, command := range document.Commands {
-		line := command.Text
-		line = strings.TrimRight(line, " \r\t")
-		if strings.HasPrefix(line, "lag ") && strings.HasSuffix(line, " id "+strconv.FormatInt(lag.ID, 10)) {
-			inside, virtual, found = true, false, true
-			continue
-		}
-		if line == "interface lag "+strconv.FormatInt(lag.ID, 10) {
-			inside, virtual = true, true
-			continue
-		}
-		if !inside {
-			continue
-		}
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || trimmed == "!" {
-			continue
-		}
-		if command.Parent == -1 {
-			inside = false
-			continue
-		}
-		// The virtual interface is a separate native block and owns independent
-		// settings that deleting the aggregate would remove.
-		if virtual {
-			return errors.New("LAG has independent interface configuration; remove it before destroying the LAG")
-		}
-		if strings.HasPrefix(trimmed, "ports ") {
-			continue
-		}
-		preserved := false
-		for _, member := range lag.Members {
-			if trimmed == "disable ethe "+strings.TrimPrefix(member, "ethernet ") || (strings.HasPrefix(trimmed, "port-name ") && strings.HasSuffix(trimmed, " "+member)) {
-				preserved = true
-				break
-			}
-		}
-		if preserved {
-			continue
-		}
-		return errors.New("LAG has independent interface or protocol configuration; remove it before destroying the LAG")
-	}
-	if !found {
-		return errors.New("cannot confirm the LAG configuration block before deletion")
-	}
-	return nil
 }
