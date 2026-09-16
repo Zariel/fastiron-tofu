@@ -1,19 +1,25 @@
 # DNS servers
 
-Each `fastiron_ip_dns_server` owns one address and preserves other servers. Changing its address replaces that relationship. Destroy removes only that address.
+`fastiron_ip_dns_server` owns one configured DNS server address. Other addresses remain independently managed. Changing the address replaces the resource.
 
 ```hcl
-resource "fastiron_ip_dns_server" "resolver" {
-  address = "10.1.2.53"
+resource "fastiron_ip_dns_server" "primary" {
+  address = "192.0.2.53"
 }
 
 data "fastiron_ip_dns_servers" "configured" {
-  depends_on = [fastiron_ip_dns_server.resolver]
+  depends_on = [fastiron_ip_dns_server.primary]
 }
 ```
 
-Import an existing server with `tofu import fastiron_ip_dns_server.resolver 'ip dns server-address 10.1.2.53'`.
+Reads, imports, drift detection, and write verification use native running configuration. RESTCONF must expose its DNS endpoint, but its cached server list does not establish whether an address is configured. A successful RESTCONF response without the requested native change fails reconciliation and is not saved.
 
-Use a canonical IP address. The tested 09.0.10kT213 build accepted IPv4 and rejected an IPv6 DNS server with an application error. The provider reports endpoint failures without requiring a firmware version or restricting device models.
+The query returns an `addresses` set containing configured IPv4 and IPv6 servers. DHCP-learned entries marked as dynamic in native configuration are excluded. On tested FastIron `09.0.10kT213`, RESTCONF omitted a configured IPv6 server; the native query correctly returned it alongside the IPv4 servers, without changing running or saved configuration.
 
-The collection data source returns the configured `addresses` set without taking ownership of entries.
+IPv4 server writes have succeeded on the tested firmware. Its RESTCONF endpoint rejected IPv6 server writes, so IPv6 discovery does not imply IPv6 configuration support. Domain search lists and server ordering are not managed by this resource. The query reports configuration, not DNS reachability or successful name resolution.
+
+Import an existing server:
+
+```sh
+tofu import fastiron_ip_dns_server.primary 'ip dns server-address 192.0.2.53'
+```

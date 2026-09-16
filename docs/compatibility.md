@@ -25,7 +25,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Spanning tree | Per-VLAN STP/RSTP mode and bridge priority; Ethernet and LAG admin-edge, BPDU guard and root guard |
 | OSPF | Default-VRF areas and VE, routed Ethernet, static LAG and loopback bindings; creation, saved configuration and deletion verified; VE drift repair, replacement and reboot persistence verified |
 | Static routing | One IPv4 prefix and gateway relationship in the default VRF |
-| DNS | Individual server addresses |
+| DNS | [Individual server addresses and native IPv4/IPv6 discovery](guides/dns.md); tested RESTCONF writes accept IPv4 |
 | Local users | Individual usernames, privileges and passwords |
 | Global authentication | Authentication VLANs, global enablement, order, basic actions, MAC options, session limit and reauthentication |
 | Interface authentication | Dot1x/MAC enablement and port-control on one Ethernet interface; global initialization is separate |

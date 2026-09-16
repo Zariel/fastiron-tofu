@@ -21,6 +21,25 @@ func validateAddress(address string) error {
 }
 
 func readServers(ctx context.Context, d *fastiron.Device) ([]string, error) {
+	if _, err := cachedServers(ctx, d); err != nil {
+		return nil, err
+	}
+	document, err := d.RunningConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	addresses, err := document.DNSServers()
+	if err != nil {
+		return nil, err
+	}
+	servers := make([]string, len(addresses))
+	for i, address := range addresses {
+		servers[i] = address.String()
+	}
+	return servers, nil
+}
+
+func cachedServers(ctx context.Context, d *fastiron.Device) ([]string, error) {
 	if !d.RESTCONFEnabled() {
 		return nil, errors.New("DNS configuration currently requires RESTCONF")
 	}

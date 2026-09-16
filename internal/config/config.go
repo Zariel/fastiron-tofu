@@ -45,6 +45,7 @@ const (
 	ospfBinding
 	ospfOption
 	interfaceVRF
+	dnsServers
 )
 
 type portRange struct{ first, last [3]uint64 }
@@ -63,6 +64,7 @@ type parsedCommand struct {
 	poe                PoEPolicy
 	poeFields          uint8
 	route              routeSyntax
+	dns                []dnsAddress
 }
 
 // Command retains the original command text and its indentation scope. Unknown

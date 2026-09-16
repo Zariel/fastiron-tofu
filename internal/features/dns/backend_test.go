@@ -42,7 +42,7 @@ func TestServers(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := readServers(context.Background(), device)
+			got, err := cachedServers(context.Background(), device)
 			if (err != nil) != tc.failure || !slices.Equal(got, tc.want) {
 				t.Fatalf("servers=%v error=%v", got, err)
 			}

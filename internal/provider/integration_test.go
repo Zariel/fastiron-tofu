@@ -63,6 +63,8 @@ type testSwitch struct {
 	server                          *httptest.Server
 	sshAddress, knownHosts          string
 	dns                             map[string]bool
+	startupDNS, cachedDNS           map[string]bool
+	ignoreDNSWrites                 bool
 	startupLLDP, startupLLDPPort    bool
 	lldp, lldpPort                  bool
 	poe, startupPoE                 bool
@@ -92,13 +94,13 @@ func (s *testSwitch) command(command string) (output string) {
 			if !s.poe {
 				output = strings.Replace(output, "interface ethernet 1/1/2\n", "interface ethernet 1/1/2\n no inline power\n", 1)
 			}
-			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.lldp, s.lldpPort) + "end"
+			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.lldp, s.lldpPort) + dnsConfiguration(s.dns) + "end"
 		}
 		if command == "show configuration" {
 			if !s.startupPoE {
 				output = strings.Replace(output, "interface ethernet 1/1/2\n", "interface ethernet 1/1/2\n no inline power\n", 1)
 			}
-			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.startupLLDP, s.startupLLDPPort) + "end"
+			output = strings.TrimSuffix(output, "end") + lldpConfiguration(s.startupLLDP, s.startupLLDPPort) + dnsConfiguration(s.startupDNS) + "end"
 		}
 	}()
 	switch command {
@@ -124,6 +126,8 @@ func (s *testSwitch) command(command string) (output string) {
 			s.aaa.startup = maps.Clone(s.aaa.running)
 		}
 		unchanged := s.poe == s.startupPoE && s.lldp == s.startupLLDP && s.lldpPort == s.startupLLDPPort && policyUnchanged && usersUnchanged && aaaUnchanged && maps.Equal(s.running, s.startup) && maps.Equal(s.ethernet, s.startupEthernet) && maps.Equal(s.memberships, s.startupMemberships) && maps.Equal(s.managementAddresses, s.startupManagementAddresses)
+		unchanged = unchanged && maps.Equal(s.dns, s.startupDNS)
+		s.startupDNS = maps.Clone(s.dns)
 		if s.lags != nil {
 			lagConfig := s.lags.configuration()
 			unchanged = unchanged && lagConfig == s.startupLAG
