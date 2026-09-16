@@ -55,6 +55,17 @@ tofu import fastiron_spanning_tree_interface.server 'ethernet 1/1/12'
 
 For a LAG, set `interface = fastiron_lag.uplink.id` or use a canonical name such as `lag 11`. Configure these options on the aggregate: both primary and secondary Ethernet members are rejected because RESTCONF can acknowledge member writes without changing native STP policy. The data source reports the LAG's explicit native flags and excludes cache-only member entries.
 
+When OpenTofu also manages the LAG, reference its resource ID:
+
+```hcl
+resource "fastiron_spanning_tree_interface" "uplink" {
+  interface  = fastiron_lag.uplink.id
+  root_guard = true
+}
+```
+
+This reference lets OpenTofu replace the policy with its parent, including a LAG mode change that keeps the same numeric ID. A literal interface name does not establish that relationship: remove its policy before replacing or destroying the LAG, otherwise the LAG's independent-configuration guard refuses deletion.
+
 Interface updates verify native configuration before saving, including preservation of unrelated commands. After CLI changes, the provider may first synchronize RESTCONF with the current native flags before applying the desired flags. If synchronization times out or a write fails, the operation reports an error without saving; a later apply can resume reconciliation.
 
 If a parent LAG is deleted externally, refresh removes its STP resource from state. Restore the parent before recreating its policy. A failed deletion remains in state while `persistence_pending` is true so a later apply can retry saving, even if the parent has disappeared. Neither cleanup nor retry clears STP settings transferred to detached Ethernet ports.
