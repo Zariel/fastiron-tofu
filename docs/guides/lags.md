@@ -50,6 +50,8 @@ On tested FastIron `09.0.10kT213`, a deleted aggregate can also remain in RESTCO
 
 A CLI-restored LAG with disabled members and separately managed STP flags has passed reboot persistence checks: running and saved configuration remained identical, queries matched and OpenTofu reported an empty plan.
 
+Replacement from static to dynamic mode with a separately managed STP policy has also passed through OpenTofu using RESTCONF. The policy referenced the LAG resource ID; both resources were replaced, protection flags were reapplied and detached members remained disabled. Native and saved configuration, both queries and an empty plan were verified after replacement. Subsequent destruction removed both resources successfully.
+
 STP interface entries still reference their parent when all protection flags are false. Leaving such an entry behind can make LAG deletion return RESTCONF 404. STP resource deletion resets its flags and removes that entry, verifying native configuration and RESTCONF absence. FastIron can rebuild the reference afterward, so LAG deletion also clears it immediately before deleting the parent, after confirming that no independent native interface configuration remains. Direct checks verified back-to-back reference and parent deletion using the provider’s request headers.
 
 If DELETE reports absence while a native LAG remains, the provider reports the failure without saving. Remove dependent policy first. CLI removal followed by another apply can finish persistence and state cleanup when RESTCONF deletion remains unavailable.

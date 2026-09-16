@@ -64,7 +64,7 @@ resource "fastiron_spanning_tree_interface" "uplink" {
 }
 ```
 
-This reference lets OpenTofu replace the policy with its parent, including a LAG mode change that keeps the same numeric ID. A literal interface name does not establish that relationship: remove its policy before replacing or destroying the LAG, otherwise the LAG's independent-configuration guard refuses deletion.
+This reference lets OpenTofu replace the policy with its parent, including a LAG mode change that keeps the same numeric ID. Static-to-dynamic replacement and subsequent destruction have been verified through RESTCONF, including reapplied protection flags, native and saved configuration, queries and an empty plan. A literal interface name does not establish that relationship: remove its policy before replacing or destroying the LAG, otherwise the LAG's independent-configuration guard refuses deletion.
 
 Interface updates verify native configuration before saving, including preservation of unrelated commands. After CLI changes, the provider may first synchronize RESTCONF with the current native flags before applying the desired flags. If synchronization times out or a write fails, the operation reports an error without saving; a later apply can resume reconciliation.
 
