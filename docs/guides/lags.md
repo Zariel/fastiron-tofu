@@ -52,6 +52,8 @@ On tested FastIron `09.0.10kT213`, a deleted aggregate can also remain in RESTCO
 
 Deleting a cached parent after external CLI removal and STP reference cleanup has also timed out, leaving RESTCONF synchronization in progress and blocking CLI interface configuration. The provider does not attempt this cache-deletion workaround for an absent native LAG.
 
+Recovery from that synchronization stall was verified by reloading from startup configuration over the serial console. This discards unsaved running changes; verify the saved configuration before using it for recovery. The RESTCONF reboot request also timed out during the stall.
+
 A CLI-restored LAG with disabled members and separately managed STP flags has passed reboot persistence checks: running and saved configuration remained identical, queries matched and OpenTofu reported an empty plan.
 
 Replacement from static to dynamic mode with a separately managed STP policy has also passed through OpenTofu using RESTCONF. The policy referenced the LAG resource ID; both resources were replaced, protection flags were reapplied and detached members remained disabled. Native and saved configuration, both queries and an empty plan were verified after replacement. Subsequent destruction removed both resources successfully.
