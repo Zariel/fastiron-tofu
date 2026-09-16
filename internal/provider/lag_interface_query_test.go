@@ -14,6 +14,7 @@ func TestOpenTofuLAGInterfaceQuery(t *testing.T) {
 	var mu sync.Mutex
 	native := "ver 09.0.10kT213\nlag TEST static id 53\n ports ethe 1/1/9 to 1/1/10\n disable ethe 1/1/9 to 1/1/10\ninterface lag 53\n port-name NATIVE NAME\n disable\nend"
 	cached, malformed := true, false
+	status := `{"name":"lag 53","ifindex":3116,"admin-status":"UP","oper-status":"DOWN","counters":{"in-octets":"18446744073709551615","out-octets":"9007199254740993","in-errors":0}}`
 	configReads := 0
 	server := testswitch.New(t, func(command string) string {
 		mu.Lock()
@@ -37,9 +38,18 @@ func TestOpenTofuLAGInterfaceQuery(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		configReads++
-		if r.Method != http.MethodGet || r.URL.Path != "/restconf/data/interfaces" {
+		if r.Method != http.MethodGet {
 			t.Errorf("query issued %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(405)
+			return
+		}
+		if r.URL.Path == "/restconf/data/interfaces/interface=lag 53" {
+			fmt.Fprintf(w, `{"openconfig-interfaces:interface":[{"name":"lag 53","config":{"name":"lag 53","type":"iana-if-type:ieee8023adLag"},"state":%s}]}`, status)
+			return
+		}
+		if r.URL.Path != "/restconf/data/interfaces" {
+			t.Errorf("query issued unexpected GET %s", r.URL.Path)
+			w.WriteHeader(404)
 			return
 		}
 		if malformed {
@@ -60,7 +70,7 @@ func TestOpenTofuLAGInterfaceQuery(t *testing.T) {
 	choose(53)
 	run(0, "init", "-no-color")
 	run(0, "apply", "-auto-approve", "-no-color")
-	if got := strings.TrimSpace(run(0, "output", "-json", "lag")); got != `{"enabled":false,"lag_id":53,"name":"lag 53","port_name":"NATIVE NAME"}` {
+	if got := strings.TrimSpace(run(0, "output", "-json", "lag")); got != `{"admin_status":"UP","counters":{"in-errors":0,"in-octets":18446744073709551615,"out-octets":9007199254740993},"enabled":false,"ifindex":3116,"lag_id":53,"name":"lag 53","oper_status":"DOWN","port_name":"NATIVE NAME"}` {
 		t.Fatalf("LAG interface query=%s", got)
 	}
 	run(0, "plan", "-detailed-exitcode", "-no-color")
@@ -68,9 +78,10 @@ func TestOpenTofuLAGInterfaceQuery(t *testing.T) {
 	mu.Lock()
 	native = "ver 09.0.10kT213\nlag TEST static id 53\n ports ethe 1/1/9 to 1/1/10\n disable ethe 1/1/9\n port-name MEMBER ethernet 1/1/9\nend"
 	cached = true
+	status = `null`
 	mu.Unlock()
 	run(0, "apply", "-auto-approve", "-no-color")
-	if got := strings.TrimSpace(run(0, "output", "-json", "lag")); got != `{"enabled":true,"lag_id":53,"name":"lag 53","port_name":""}` {
+	if got := strings.TrimSpace(run(0, "output", "-json", "lag")); got != `{"admin_status":null,"counters":null,"enabled":true,"ifindex":null,"lag_id":53,"name":"lag 53","oper_status":null,"port_name":""}` {
 		t.Fatalf("default LAG interface=%s", got)
 	}
 	run(0, "plan", "-detailed-exitcode", "-no-color")
