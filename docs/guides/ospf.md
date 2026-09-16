@@ -30,6 +30,8 @@ Reads, imports, drift detection, and write verification use native running confi
 
 Create the interface and its IP configuration before binding it to OSPF. Interface names use native forms such as `ve 53`, `ethernet 1/1/3`, or `lag 5`; availability depends on the firmware and interface configuration. Changing an area ID or binding replaces that resource. An interface already bound to another area must be unbound first.
 
+For routed Ethernet or LAG interfaces, ensure the physical ports are not members of a VLAN with a VE before enabling `route-only` and assigning IP addresses. FastIron can reject `route-only` while a port belongs to a VE; IP address configuration may then be unavailable. OSPF resources do not manage these routing prerequisites.
+
 Area deletion requires all interface bindings and additional native area options to be removed first. Binding deletion also refuses to erase additional OSPF interface options, such as a configured network type. Other areas and their bindings remain independently managed. Removing the last managed area does not remove the OSPF process.
 
 Area and binding writes also verify that unrelated native commands remain unchanged, including interface options and non-OSPF settings. If this check fails, the provider reports an error without saving or automatically rolling back the change. Inspect and repair the unexpected configuration before retrying; a partially created resource remains in state with `persistence_pending = true`.

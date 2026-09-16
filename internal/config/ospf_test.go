@@ -149,6 +149,7 @@ func TestCapturedOSPFAreas(t *testing.T) {
 		{"binding-created", "0.0.0.53", []string{"ve 3053"}},
 		{"binding-deleted", "0.0.0.53", []string{}},
 		{"cli-area", "0.0.0.56", []string{}},
+		{"routed-interfaces", "0.0.0.58", []string{"ethernet 1/1/9", "lag 58"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join("testdata", "ospf", tc.name+".conf"))
