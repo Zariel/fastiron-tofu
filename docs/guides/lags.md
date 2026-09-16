@@ -48,6 +48,8 @@ Immediately after an external LAG change, RESTCONF may briefly report a member r
 
 On tested FastIron `09.0.10kT213`, a deleted aggregate can also remain in RESTCONF without any member references. Recreating that identity through POST returns 409; PATCH may acknowledge the request without creating the native LAG, and DELETE may return 404 without clearing the cache. The provider reports this condition before attempting creation. Restore the parent through CLI before retrying.
 
+A CLI-restored LAG with disabled members and separately managed STP flags has passed reboot persistence checks: running and saved configuration remained identical, queries matched and OpenTofu reported an empty plan. Subsequent LAG deletion returned RESTCONF 404 and timed out on repeated attempts, requiring CLI cleanup. Deletion after this recovery and reboot sequence remains unresolved.
+
 ## VLAN membership
 
 Use `fastiron_vlan_membership` to manage individual tagged or untagged relationships on an existing LAG:
