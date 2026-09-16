@@ -9,6 +9,7 @@ import (
 	"path"
 	"slices"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
 
@@ -24,19 +25,24 @@ func readServers(ctx context.Context, d *fastiron.Device) ([]string, error) {
 	if _, err := cachedServers(ctx, d); err != nil {
 		return nil, err
 	}
+	servers, _, err := nativeServers(ctx, d)
+	return servers, err
+}
+
+func nativeServers(ctx context.Context, d *fastiron.Device) ([]string, *config.Document, error) {
 	document, err := d.RunningConfig(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	addresses, err := document.DNSServers()
 	if err != nil {
-		return nil, err
+		return nil, document, err
 	}
 	servers := make([]string, len(addresses))
 	for i, address := range addresses {
 		servers[i] = address.String()
 	}
-	return servers, nil
+	return servers, document, nil
 }
 
 func cachedServers(ctx context.Context, d *fastiron.Device) ([]string, error) {
@@ -80,7 +86,10 @@ func applyServer(ctx context.Context, d *fastiron.Device, address string, presen
 		return false, err
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (bool, error) {
-		servers, err := readServers(ctx, d)
+		if _, err := cachedServers(ctx, d); err != nil {
+			return false, err
+		}
+		servers, before, err := nativeServers(ctx, d)
 		if err != nil {
 			return false, err
 		}
@@ -95,7 +104,7 @@ func applyServer(ctx context.Context, d *fastiron.Device, address string, presen
 				body = map[string]any{"server": []any{map[string]any{"address": address, "config": map[string]any{"address": address}}}}
 			}
 			writeErr := update.REST(method, endpoint, body)
-			observed, readErr := readServers(ctx, d)
+			observed, after, readErr := nativeServers(ctx, d)
 			if readErr != nil {
 				return exists, errors.Join(writeErr, readErr)
 			}
@@ -103,10 +112,8 @@ func applyServer(ctx context.Context, d *fastiron.Device, address string, presen
 			if exists != present {
 				return exists, errors.Join(writeErr, errors.New("DNS server configuration did not converge"))
 			}
-			for _, neighbor := range servers {
-				if neighbor != address && !slices.Contains(observed, neighbor) {
-					return exists, errors.New("DNS operation removed an unrelated server")
-				}
+			if err := after.CheckDNSServerUpdate(before, netip.MustParseAddr(address)); err != nil {
+				return exists, err
 			}
 		}
 		return exists, nil

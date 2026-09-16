@@ -53,6 +53,9 @@ func (s *testSwitch) dnsREST(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.dns[body.Servers[0].Address] = true
+		if s.corruptDNS {
+			s.ethernet["description"] = "unexpected DNS side effect"
+		}
 		s.writes++
 		w.WriteHeader(201)
 		return
@@ -64,6 +67,41 @@ func (s *testSwitch) dnsREST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(404)
+}
+
+func TestOpenTofuDNSPreservation(t *testing.T) {
+	s := newSwitch(t)
+	s.corruptDNS = true
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base+`resource "fastiron_ip_dns_server" "test" { address = "192.0.2.53" }`)
+	run(0, "init", "-no-color")
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "DNS server operation changed unrelated native configuration") {
+		t.Fatalf("missing preservation error: %s", out)
+	}
+	if out := run(0, "state", "show", "fastiron_ip_dns_server.test"); !strings.Contains(out, "persistence_pending = true") {
+		t.Fatalf("partial creation is not addressable for retry: %s", out)
+	}
+	s.mu.Lock()
+	running, saved := s.dns["192.0.2.53"], s.startupDNS["192.0.2.53"]
+	savedName := s.startupEthernet["description"]
+	s.mu.Unlock()
+	if !running || saved || savedName != "manual port" {
+		t.Fatalf("unexpected persistence: running=%v saved=%v saved port name=%v", running, saved, savedName)
+	}
+
+	// Repair the independently owned interface before retrying persistence.
+	s.mu.Lock()
+	s.corruptDNS = false
+	s.ethernet["description"] = "manual port"
+	s.mu.Unlock()
+	run(0, "apply", "-auto-approve", "-no-color")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	persisted := s.startupDNS["192.0.2.53"]
+	s.mu.Unlock()
+	if !persisted {
+		t.Fatal("repaired DNS configuration was not persisted")
+	}
 }
 
 func TestOpenTofuDNSCache(t *testing.T) {

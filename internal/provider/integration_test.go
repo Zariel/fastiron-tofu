@@ -65,6 +65,7 @@ type testSwitch struct {
 	dns                             map[string]bool
 	startupDNS, cachedDNS           map[string]bool
 	ignoreDNSWrites                 bool
+	corruptDNS                      bool
 	startupLLDP, startupLLDPPort    bool
 	lldp, lldpPort                  bool
 	poe, startupPoE                 bool
