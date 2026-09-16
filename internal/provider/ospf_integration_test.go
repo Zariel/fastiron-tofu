@@ -18,6 +18,7 @@ type ospfSwitch struct {
 	missingProtocol                              bool
 	corruptBinding                               bool
 	corruptArea                                  bool
+	mutations                                    int
 	numeric                                      bool
 	areaOptions, interfaceOptions, hiddenBinding bool
 }
@@ -50,6 +51,9 @@ func ospfConfiguration(areas map[string][]string, areaOptions, interfaceOptions,
 }
 
 func (s *ospfSwitch) rest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		s.mutations++
+	}
 	const protocols = "/restconf/data/network-instances/network-instance=default-vrf/protocols"
 	const collection = protocols + "/protocol=OSPF,icx-ospf/ospfv2/areas"
 	endpoint := r.URL.EscapedPath()

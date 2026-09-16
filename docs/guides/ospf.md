@@ -12,7 +12,14 @@ resource "fastiron_router_ospf_interface" "transit" {
   interface = "ve 53"
 }
 
-data "fastiron_ospf_areas" "configured" {}
+data "fastiron_ospf_areas" "configured" {
+  depends_on = [fastiron_router_ospf_interface.transit]
+}
+
+data "fastiron_ospf_area" "transit" {
+  area_id    = fastiron_router_ospf_area.transit.area_id
+  depends_on = [fastiron_router_ospf_interface.transit]
+}
 ```
 
 Use dotted area identifiers, including `0.0.0.0` for the backbone. The provider normalizes decimal area identifiers returned by FastIron, so changing how the switch represents an identifier does not create drift.
@@ -34,6 +41,6 @@ tofu import fastiron_router_ospf_interface.transit '0.0.0.53|ve 53'
 
 After importing, run `tofu apply` with the area reference retained so OpenTofu records the dependency before removing the configuration. If an area deletion encounters a remaining binding, remove the binding and apply again.
 
-The data source returns an `areas` map keyed by dotted area ID. Each entry contains an `interfaces` set. It reports configuration, not neighbor adjacencies or learned routes.
+`fastiron_ospf_areas` returns an `areas` map keyed by dotted area ID. Each entry contains an `interfaces` set. `fastiron_ospf_area` reads one required `area_id`, returning its canonical `id` and native `interfaces` set; an absent native area is an error. Neither query writes or saves configuration. They report configuration, not neighbor adjacencies or learned routes.
 
 The current RESTCONF implementation manages area existence and interface bindings. Process settings, stub/NSSA options, redistribution, interface timers, authentication, and network type are not yet managed. Hardware tests on FastIron `09.0.10kT213` use a VE interface; Ethernet and LAG binding compatibility has not yet been tested.
