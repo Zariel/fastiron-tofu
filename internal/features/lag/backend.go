@@ -135,6 +135,9 @@ func readCollection(ctx context.Context, d *fastiron.Device) (collection, error)
 			members[aggregate] = append(members[aggregate], entry.Name)
 		}
 	}
+	if len(ports) == 0 {
+		return collection{}, errors.New("RESTCONF physical-interface inventory is empty; cannot confirm LAG state")
+	}
 	for name, ports := range members {
 		lag, exists := lags[name]
 		if !exists {
