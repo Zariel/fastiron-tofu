@@ -91,6 +91,8 @@ data "fastiron_lag" "storage" {
 
 It returns `lag_id`, canonical `id`, configured aggregate `name`, `mode` and the complete `members` set. An empty aggregate has an empty member set; a missing native aggregate is an error, even if RESTCONF retains its entry. Both aggregate queries use native configuration and validate membership against the physical-interface inventory without writing or saving.
 
+The single-aggregate query has been verified against an existing dynamic LAG on FastIron `09.0.10kT213`, including exact member names and an empty plan. Independent serial snapshots confirmed that running and saved configuration remained unchanged.
+
 Use `fastiron_interface_lag` to read a single aggregate's native interface description and administrative state:
 
 ```hcl
