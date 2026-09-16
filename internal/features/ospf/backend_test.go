@@ -27,6 +27,9 @@ func TestOSPFAreas(t *testing.T) {
 		{"conflicting identity", `{"openconfig-network-instance:areas":{"area":[{"identifier":0,"config":{"identifier":53},"interfaces":{}}]}}`, "", true},
 		{"duplicate normalized identity", `{"openconfig-network-instance:areas":{"area":[{"identifier":0,"config":{"identifier":0},"interfaces":{}},{"identifier":"0.0.0.0","config":{"identifier":"0.0.0.0"},"interfaces":{}}]}}`, "", true},
 		{"binding identity mismatch", `{"openconfig-network-instance:areas":{"area":[{"identifier":0,"config":{"identifier":0},"interfaces":{"interface":[{"id":"ve 5","config":{"id":"ve 53"}}]}}]}}`, "", true},
+		{"loopback binding", `{"openconfig-network-instance:areas":{"area":[{"identifier":0,"config":{"identifier":0},"interfaces":{"interface":[{"id":"loopback 32","config":{"id":"loopback 32"}}]}}]}}`, "0.0.0.0", false},
+		{"noncanonical loopback", `{"openconfig-network-instance:areas":{"area":[{"identifier":0,"config":{"identifier":0},"interfaces":{"interface":[{"id":"loopback 032","config":{"id":"loopback 032"}}]}}]}}`, "", true},
+		{"zero loopback", `{"openconfig-network-instance:areas":{"area":[{"identifier":0,"config":{"identifier":0},"interfaces":{"interface":[{"id":"loopback 0","config":{"id":"loopback 0"}}]}}]}}`, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, tc.body) }))

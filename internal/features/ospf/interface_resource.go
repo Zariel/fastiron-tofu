@@ -32,7 +32,7 @@ func (r *InterfaceResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	resp.Schema = schema.Schema{Description: "Owns one interface binding to an OSPF area in the default VRF. Additional interface settings remain independently managed.", Attributes: map[string]schema.Attribute{
 		"id":                  schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"area_id":             schema.StringAttribute{Required: true, Description: "Canonical dotted area identifier, such as 0.0.0.0.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
-		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet, LAG, or VE interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
+		"interface":           schema.StringAttribute{Required: true, Description: "Canonical Ethernet, LAG, VE, or loopback interface name.", PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}},
 		"persistence_pending": schema.BoolAttribute{Computed: true, Description: "True when a failed operation still requires reconciliation or persistence."},
 	}}
 }

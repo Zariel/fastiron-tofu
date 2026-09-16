@@ -150,6 +150,7 @@ func TestCapturedOSPFAreas(t *testing.T) {
 		{"binding-deleted", "0.0.0.53", []string{}},
 		{"cli-area", "0.0.0.56", []string{}},
 		{"routed-interfaces", "0.0.0.58", []string{"ethernet 1/1/9", "lag 58"}},
+		{"loopback", "0.0.0.0", []string{"loopback 32", "ve 5"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join("testdata", "ospf", tc.name+".conf"))
@@ -157,7 +158,8 @@ func TestCapturedOSPFAreas(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, err := configtest.Parse(t, string(raw)).OSPFAreas()
-			want := map[netip.Addr][]string{netip.MustParseAddr("0.0.0.0"): {"ve 5"}, netip.MustParseAddr(tc.id): tc.interfaces}
+			want := map[netip.Addr][]string{netip.MustParseAddr("0.0.0.0"): {"ve 5"}}
+			want[netip.MustParseAddr(tc.id)] = tc.interfaces
 			if err != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("areas=%v error=%v; want=%v", got, err, want)
 			}

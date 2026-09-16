@@ -40,7 +40,13 @@ func validateInterface(name string) error {
 	if interfaceid.LAG(name) || strings.HasPrefix(name, "ethernet ") && interfaceid.EthernetPort(strings.TrimPrefix(name, "ethernet ")) || strings.HasPrefix(name, "ve ") && address.ValidateInterface(name) == nil {
 		return nil
 	}
-	return errors.New("OSPF bindings require a canonical Ethernet, LAG, or VE interface name")
+	if id, ok := strings.CutPrefix(name, "loopback "); ok {
+		n, err := strconv.ParseUint(id, 10, 64)
+		if err == nil && n > 0 && strconv.FormatUint(n, 10) == id {
+			return nil
+		}
+	}
+	return errors.New("OSPF bindings require a canonical Ethernet, LAG, VE, or loopback interface name")
 }
 
 func normalizeAreaID(value string) (string, error) {
