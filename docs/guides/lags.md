@@ -15,6 +15,8 @@ Use `dynamic` for LACP or `static` for a static aggregate. Changing `mode` or `l
 
 The LAG name above identifies the aggregate; it is not an interface description.
 
+The [complete LAG example](../../examples/lag/main.tf) includes provider configuration, aggregate membership, interface policy and both queries.
+
 Members must satisfy FastIron's LAG formation rules, including matching speeds and compatible port attributes. Remove independent VLAN memberships and routed configuration before adding a port. The provider rejects members already belonging to another LAG.
 
 Removing a member or deleting a LAG disables its detached Ethernet ports, following FastIron's native behavior. This also applies during LAG replacement. The provider does not restore prior port settings. A separately managed Ethernet resource can re-enable a port on a subsequent apply; do not assume this happens within the same apply that detaches it.
