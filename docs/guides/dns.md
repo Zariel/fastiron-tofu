@@ -22,6 +22,8 @@ The query returns an `addresses` set containing configured IPv4 and IPv6 servers
 
 IPv4 server writes have succeeded on the tested firmware. Its RESTCONF endpoint rejected IPv6 server writes, so IPv6 discovery does not imply IPv6 configuration support. Domain search lists and server ordering are not managed by this resource. The query reports configuration, not DNS reachability or successful name resolution.
 
+Hardware validation on FastIron `09.0.10kT213` covers IPv4 server creation, import, discovery, CLI deletion drift repair, address replacement, deletion, empty plans, and persistence across reboot. Serial checks verified both running and saved configuration, preservation of the existing server and unrelated settings, and exact cleanup.
+
 Import an existing server:
 
 ```sh

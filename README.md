@@ -31,7 +31,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Static routes | Partial | [Default-VRF IPv4 gateway routes](docs/guides/routes.md), native queries and drift recovery. Lifecycle and reboot persistence verified. IPv6 and other route types remain. |
 | OSPF | Partial | Default-VRF areas, VE/Ethernet/LAG/loopback bindings, and single/all-area queries. Routed binding creation and deletion verified; VE reboot persistence verified; additional routing options remain. |
 | Spanning tree | Partial | [Native queries, VLAN STP/RSTP mode and priority, and Ethernet/LAG protection flags](docs/guides/spanning-tree.md), with lifecycle, drift recovery and reboot validation. Global STP and MST remain. |
-| DNS servers | Partial | [IPv4 server configuration and native IPv4/IPv6 discovery](docs/guides/dns.md). The tested RESTCONF endpoint rejected IPv6 server writes. |
+| DNS servers | Partial | [IPv4 server configuration and native IPv4/IPv6 discovery](docs/guides/dns.md), with drift repair, replacement and reboot persistence verified. The tested RESTCONF endpoint rejected IPv6 server writes; domain search lists remain. |
 | LLDP | Partial | [Global and Ethernet enable state, MED policies, and native queries](docs/guides/lldp.md), with lifecycle and reboot validation. Neighbor discovery remains. |
 | PoE | Implemented RESTCONF scope | [Enable state, priority, allocation class and power limits](docs/guides/poe.md), including LAG members, native queries and reported power measurements. Lifecycle and reboot persistence verified; measurements under load remain unvalidated. |
 | Local users | Implemented | Usernames, privileges and passwords; privilege discovery. External password changes cannot currently be detected. |

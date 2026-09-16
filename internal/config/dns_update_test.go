@@ -2,11 +2,26 @@ package config_test
 
 import (
 	"net/netip"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
+
+func TestCapturedDNSServerUpdate(t *testing.T) {
+	before, err := os.ReadFile("testdata/dns/baseline.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile("testdata/dns/created.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := configtest.Parse(t, string(after)).CheckDNSServerUpdate(configtest.Parse(t, string(before)), netip.MustParseAddr("198.18.62.53")); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestDNSServerUpdate(t *testing.T) {
 	const before = `ver 09.0.10k
