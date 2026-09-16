@@ -23,7 +23,7 @@ Hardware testing has used FastIron `09.0.10kT213` (image label `SPR09010k`, buil
 | Routed VLAN interface | [VE existence, VLAN binding, port name and native configuration query](guides/ve.md); lifecycle, child guards and reboot persistence verified |
 | Interface addresses | Individual IPv4/IPv6 addresses on VE and management interfaces |
 | Spanning tree | Per-VLAN STP/RSTP mode and bridge priority; Ethernet and LAG admin-edge, BPDU guard and root guard |
-| OSPF | Default-VRF area existence and interface bindings; VE lifecycle, drift repair, replacement and reboot persistence verified |
+| OSPF | Default-VRF areas and VE, routed Ethernet and static LAG bindings; creation, saved configuration and deletion verified; VE drift repair, replacement and reboot persistence verified |
 | Static routing | One IPv4 prefix and gateway relationship in the default VRF |
 | DNS | Individual server addresses |
 | Local users | Individual usernames, privileges and passwords |
