@@ -3,13 +3,11 @@ package route
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"path"
 	"slices"
-	"strings"
 
 	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 
@@ -223,19 +221,21 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 }
 
 func routeOptions(document *nativeconfig.Document, v route) error {
-	expected := fmt.Sprintf("ip route %s %s", v.Prefix, v.NextHop)
-	for _, command := range document.Commands {
-		line := command.Text
-		if command.Parent != -1 {
+	routes, err := document.IPv4Routes()
+	if err != nil {
+		return err
+	}
+	for _, current := range routes {
+		if current.Prefix != v.Prefix || current.NextHop != v.NextHop {
 			continue
 		}
-		line = strings.TrimSpace(line)
-		if line == expected || line == fmt.Sprintf("%s distance %d", expected, v.Distance) {
-			return nil
-		}
-		if strings.HasPrefix(line, expected+" ") {
+		if current.HasOptions {
 			return errors.New("route has additional native options; remove them before destroying the route")
 		}
+		if current.Distance != v.Distance {
+			return errors.New("native route distance changed; refresh before destroying the route")
+		}
+		return nil
 	}
 	return errors.New("static route was not found in native configuration")
 }

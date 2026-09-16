@@ -15,6 +15,7 @@ import (
  stp_edge = ('no' h+)? 'spanning-tree' h+ '802-1w' h+ 'admin-edge-port' tail;
  stp_root = ('no' h+)? 'spanning-tree' h+ 'root-protect' tail;
  main := (
+  ('ip' h+ 'route' tail) @{ kind = staticRoute } |
   stp_edge @{ kind = stpEdge } |
   stp_root @{ kind = stpRoot } |
   (('no' h+)? 'stp-bpdu-guard' tail) @{ kind = stpBPDU } |
@@ -169,6 +170,7 @@ func commandFields(data string) (fields []string) {
 
 func parseCommand(data string) (parsed parsedCommand) {
  parsed.kind = commandKind(data)
+ if parsed.kind == staticRoute { parsed.route, parsed.valid = parseRoute(data); return parsed }
  if parsed.kind == spanningTree { parsed.family = "stp"; parsed.number = 32768 }
  if parsed.kind == inlinePower || parsed.kind == inlinePowerPort { parsed.poe = PoEPolicy{Enabled: true, Priority: 3} }
  if parsed.kind == unknown { return parsed }

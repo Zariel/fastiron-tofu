@@ -8,7 +8,8 @@ import (
 
 //go:generate ragel -Z -o parser.go config.rl
 //go:generate ragel -Z -o command_parser.go command.rl
-//go:generate gofumpt -w parser.go command_parser.go
+//go:generate ragel -Z -o route_parser.go route.rl
+//go:generate gofumpt -w parser.go command_parser.go route_parser.go
 
 type kind uint8
 
@@ -38,6 +39,7 @@ const (
 	stpEdge
 	stpRoot
 	stpBPDU
+	staticRoute
 )
 
 type portRange struct{ first, last [3]uint64 }
@@ -55,6 +57,7 @@ type parsedCommand struct {
 	med                MEDPolicy
 	poe                PoEPolicy
 	poeFields          uint8
+	route              routeSyntax
 }
 
 // Command retains the original command text and its indentation scope. Unknown
