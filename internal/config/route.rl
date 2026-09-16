@@ -29,13 +29,15 @@ import "strconv"
   _, err := strconv.ParseUint(data[start:p], 10, 32)
   valid = valid && err == nil
  };
- name = 'name' h+ token %options;
+ name_value = '"' (any - '"' - '\n')* '"' | (any - space - '"')+;
+ name = 'name' h+ name_value %options;
+ labels = (h+ name (h+ tag)? | h+ tag (h+ name)?)?;
  next_vrf = ('next-hop-vrf' h+ token | 'default-vrf') h+ %options;
  gateway = next_vrf? address >mark %gateway (h+ cost)? (h+ 'bfd' %options)?;
  other_hop = ('null0' | ('ethernet' | 'lag' | 'tunnel' | 've') h+ token (h+ cost)?) %{ route.ignored = true };
  main := 'ip' h+ 'route' h+ (
   'vrf' h+ token h+ (any - '\n')+ %{ route.ignored = true } |
-  destination h+ (gateway | other_hop) (h+ distance)? (h+ name)? (h+ tag)?
+  destination h+ (gateway | other_hop) (h+ distance)? labels
  ) '\n';
 }%%
 %% write data;

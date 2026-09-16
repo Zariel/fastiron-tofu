@@ -23,6 +23,9 @@ func TestIPv4Routes(t *testing.T) {
 		{"metric", 200, true},
 		{"name", 1, true},
 		{"tag", 1, true},
+		{"distance255", 255, false},
+		{"combined", 200, true},
+		{"quoted-name", 1, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join("testdata", "routes", tc.name+".conf"))
@@ -60,6 +63,9 @@ func TestIPv4RouteSyntax(t *testing.T) {
 		{"unusable", "ip route 198.18.53.0/24 192.0.2.2 distance 255", 255, false},
 		{"bfd", "ip route 198.18.53.0/24 192.0.2.2 bfd", 1, true},
 		{"combined", "ip route 198.18.53.0/24 192.0.2.2 7 bfd distance 200 name ROUTE tag 4294967295", 200, true},
+		{"quoted keyword", `ip route 198.18.53.0/24 192.0.2.2 name "tag 4294967296"`, 1, true},
+		{"tag before name", `ip route 198.18.53.0/24 192.0.2.2 tag 53 name "TOFU ROUTE"`, 1, true},
+		{"tag after name", `ip route 198.18.53.0/24 192.0.2.2 name "TOFU ROUTE" tag 53`, 1, true},
 		{"next-hop VRF", "ip route 198.18.53.0/24 next-hop-vrf blue 192.0.2.2", 1, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -82,6 +88,9 @@ func TestIPv4RouteMalformed(t *testing.T) {
 		"ip route 198.18.53.0/24 192.0.2.2 distance 256", "ip route 198.18.53.0/24 192.0.2.2 distance 0",
 		"ip route 198.18.53.0/24 192.0.2.2 17", "ip route 198.18.53.0/24 192.0.2.2 tag 4294967296",
 		"ip route 198.18.53.0/24 192.0.2.2 distance 200 distance 201", "ip route 198.18.53.0/24 192.0.2.2 unknown",
+		`ip route 198.18.53.0/24 192.0.2.2 name "unterminated`,
+		`ip route 198.18.53.0/24 192.0.2.2 name "TOFU" extra`,
+		`ip route 198.18.53.0/24 192.0.2.2 tag 53 name ROUTE tag 54`,
 	} {
 		t.Run(line, func(t *testing.T) {
 			if _, err := configtest.Parse(t, "ver 09.0.10k\n"+line+"\nend").IPv4Routes(); err == nil {

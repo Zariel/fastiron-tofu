@@ -15,6 +15,7 @@ func TestOpenTofuRouteQuery(t *testing.T) {
 		running:  map[string]int64{identity: 200, "198.18.53.0/24|192.0.2.3": 201},
 		cached:   map[string]int64{identity: 1},
 		startup:  map[string]int64{},
+		extra:    ` name "QUERY ROUTE"`,
 	}
 	write, run, base := tofuFixture(t, s)
 	choose := func(prefix, hop string) {
