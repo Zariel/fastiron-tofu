@@ -54,7 +54,7 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 				method = http.MethodDelete
 			}
 			writeErr := update.REST(method, endpoint, body)
-			observed, _, readErr := nativeAreas(ctx, d)
+			observed, after, readErr := nativeAreas(ctx, d)
 			if readErr != nil {
 				return nil, errors.Join(writeErr, readErr)
 			}
@@ -67,15 +67,8 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 			if (current != nil) != present {
 				return nil, errors.Join(writeErr, errors.New("OSPF area did not converge"))
 			}
-			// Area operations must preserve independent areas and their bindings.
-			for _, neighbor := range areas {
-				if neighbor.ID == id {
-					continue
-				}
-				index := slices.IndexFunc(observed, func(area area) bool { return area.ID == neighbor.ID })
-				if index < 0 || !slices.Equal(observed[index].Interfaces, neighbor.Interfaces) {
-					return nil, errors.New("OSPF area operation changed an unrelated area")
-				}
+			if err := after.CheckOSPFAreaUpdate(before, id); err != nil {
+				return current, err
 			}
 		}
 		return current, nil

@@ -9,6 +9,77 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
 
+func TestOSPFAreaUpdate(t *testing.T) {
+	const before = `ver 09.0.10k
+router ospf
+ area 0
+ area 53
+ area 54
+ area 54 range 198.51.100.0/24
+interface ve 5
+ ip ospf area 0
+ ip ospf network point-to-point
+ip route 192.0.2.0/24 192.0.2.1
+end`
+	removed := strings.Replace(before, " area 53\n", "", 1)
+	for _, tc := range []struct {
+		name, after string
+		allowed     bool
+	}{
+		{"unchanged", before, true},
+		{"removed", removed, true},
+		{"reordered", strings.Replace(removed, " area 0\n area 54\n", " area 54\n area 0\n", 1), true},
+		{"neighbor options", strings.Replace(removed, "198.51.100.0/24", "198.51.101.0/24", 1), false},
+		{"interface options", strings.Replace(removed, "point-to-point", "broadcast", 1), false},
+		{"unrelated route", strings.Replace(removed, "192.0.2.1", "192.0.2.2", 1), false},
+		{"added target option", strings.Replace(before, " area 53\n", " area 53\n area 53 stub\n", 1), false},
+		{"added neighbor", strings.Replace(removed, " area 0\n", " area 0\n area 55\n", 1), false},
+		{"other VRF", strings.Replace(removed, "end", "router ospf vrf blue\n area 53\nend", 1), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			old := configtest.Parse(t, before)
+			next := configtest.Parse(t, tc.after)
+			if err := next.CheckOSPFAreaUpdate(old, "0.0.0.53"); (err == nil) != tc.allowed {
+				t.Fatalf("update=%v; allowed=%v", err, tc.allowed)
+			}
+		})
+	}
+}
+
+func TestOSPFAreaProcess(t *testing.T) {
+	absent := configtest.Parse(t, "ver 09.0.10k\nend")
+	empty := configtest.Parse(t, "ver 09.0.10k\nrouter ospf\nend")
+	area := configtest.Parse(t, "ver 09.0.10k\nrouter ospf\n area 53\nend")
+	if err := area.CheckOSPFAreaUpdate(absent, "0.0.0.53"); err != nil {
+		t.Fatal(err)
+	}
+	if err := empty.CheckOSPFAreaUpdate(area, "0.0.0.53"); err != nil {
+		t.Fatal(err)
+	}
+	if err := absent.CheckOSPFAreaUpdate(area, "0.0.0.53"); err == nil {
+		t.Fatal("area deletion removed the process")
+	}
+}
+
+func TestCapturedOSPFAreaUpdate(t *testing.T) {
+	read := func(name string) string {
+		t.Helper()
+		raw, err := os.ReadFile(filepath.Join("testdata", "ospf", name+".conf"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	before := configtest.Parse(t, read("cli-before"))
+	after := configtest.Parse(t, read("cli-area"))
+	if err := after.CheckOSPFAreaUpdate(before, "0.0.0.56"); err != nil {
+		t.Fatal(err)
+	}
+	if err := before.CheckOSPFAreaUpdate(after, "0.0.0.56"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestOSPFBindingUpdate(t *testing.T) {
 	const before = `ver 09.0.10k
 router ospf

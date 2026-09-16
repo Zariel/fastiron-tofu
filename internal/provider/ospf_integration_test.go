@@ -17,6 +17,7 @@ type ospfSwitch struct {
 	ignoreWrites                                 bool
 	missingProtocol                              bool
 	corruptBinding                               bool
+	corruptArea                                  bool
 	numeric                                      bool
 	areaOptions, interfaceOptions, hiddenBinding bool
 }
@@ -85,6 +86,9 @@ func (s *ospfSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "PATCH" && endpoint == protocols {
+		if s.corruptArea {
+			s.areaOptions = true
+		}
 		var body struct {
 			Protocols struct {
 				Protocol []struct {
