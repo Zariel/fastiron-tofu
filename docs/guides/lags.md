@@ -50,6 +50,8 @@ On tested FastIron `09.0.10kT213`, a deleted aggregate can also remain in RESTCO
 
 A CLI-restored LAG with disabled members and separately managed STP flags has passed reboot persistence checks: running and saved configuration remained identical, queries matched and OpenTofu reported an empty plan. Subsequent LAG deletion returned RESTCONF 404. Separate checks reproduced this refusal for a CLI-created LAG even after a successful RESTCONF rename, while deleting a REST-created LAG succeeded. When DELETE reports absence but the native LAG remains, the provider reports the limitation without saving. Remove the LAG through CLI, then retry apply to finish persistence and state cleanup. RESTCONF deletion of such native aggregates remains unsupported on this tested firmware.
 
+Creation through RESTCONF does not guarantee later deletion will succeed: a mode-replacement workflow also encountered this refusal after removing the aggregate's STP policy. The interaction remains under investigation; replacement can stop after deleting child policy while leaving the original LAG in place.
+
 ## VLAN membership
 
 Use `fastiron_vlan_membership` to manage individual tagged or untagged relationships on an existing LAG:
