@@ -25,7 +25,7 @@ Remove VLAN relationships and independent interface or protocol settings before 
 
 ## Discovery
 
-`fastiron_lags` reports configured link aggregation groups and their Ethernet members through RESTCONF.
+`fastiron_lags` reports native aggregate names, modes and Ethernet membership, checked against the RESTCONF physical-interface inventory. Stale cached aggregates are excluded, and incomplete member ranges produce a diagnostic rather than truncated membership.
 
 ```hcl
 data "fastiron_lags" "switch" {}
@@ -45,6 +45,8 @@ The `lags` map is keyed by canonical interface name, such as `lag 1`. Each entry
 Membership describes configuration, including disconnected members. It does not indicate link health or whether LACP has formed a working aggregate.
 
 Immediately after an external LAG change, RESTCONF may briefly report a member referencing a deleted LAG. Discovery waits for this inconsistency to clear within `operation_timeout`. If synchronization does not finish, discovery reports an error; allow the switch to synchronize, then rerun the plan.
+
+On tested FastIron `09.0.10kT213`, a deleted aggregate can also remain in RESTCONF without any member references. Recreating that identity through POST returns 409; PATCH may acknowledge the request without creating the native LAG, and DELETE may return 404 without clearing the cache. The provider reports this condition before attempting creation. Restore the parent through CLI before retrying.
 
 ## VLAN membership
 

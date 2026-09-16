@@ -34,10 +34,14 @@ func (s *lagSwitch) configuration() string {
 			mode = "static"
 		}
 		fmt.Fprintf(&text, "lag %s %s id %s\n", s.names[name], mode, strings.TrimPrefix(name, "lag "))
+		var members []string
 		for _, port := range []string{"ethernet 1/1/7", "ethernet 1/1/8", "ethernet 1/1/9"} {
 			if s.ports[port].aggregate == name {
-				fmt.Fprintf(&text, " ports ethe %s\n", strings.TrimPrefix(port, "ethernet "))
+				members = append(members, strings.TrimPrefix(port, "ethernet "))
 			}
+		}
+		if len(members) > 0 {
+			fmt.Fprintf(&text, " ports ethe %s\n", strings.Join(members, " ethe "))
 		}
 		text.WriteString("!\n")
 	}

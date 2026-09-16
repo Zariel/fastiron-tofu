@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -54,9 +55,54 @@ func TestLAGCaptures(t *testing.T) {
 			if err != nil || got != want {
 				t.Fatalf("LAG 11 present=%v error=%v; want %v", got, err, want)
 			}
+			expected := []LAG{{ID: 1, Name: "uplink", Mode: "dynamic", Members: []string{"ethernet 1/2/1", "ethernet 1/2/2"}}}
+			if want {
+				expected = append(expected, LAG{ID: 11, Name: "TOFU-STP", Mode: "static", Members: []string{"ethernet 1/1/10", "ethernet 1/1/9"}})
+			}
+			lags, err := document.LAGs([]string{"ethernet 1/1/9", "ethernet 1/1/10", "ethernet 1/2/1", "ethernet 1/2/2"})
+			if err != nil || !reflect.DeepEqual(lags, expected) {
+				t.Fatalf("native LAGs=%#v err=%v; want %#v", lags, err, expected)
+			}
 			got, err = document.HasLAG(1)
 			if err != nil || !got {
 				t.Fatalf("neighbor LAG missing: present=%v error=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestLAGs(t *testing.T) {
+	ports := []string{"ethernet 1/1/9", "ethernet 1/1/10", "ethernet 1/2/1"}
+	for _, tc := range []struct {
+		name, body string
+		want       []LAG
+		invalid    bool
+	}{
+		{name: "empty", want: []LAG{}},
+		{name: "empty aggregate", body: "lag backup static id 53", want: []LAG{{ID: 53, Name: "backup", Mode: "static", Members: []string{}}}},
+		{name: "spaces in name", body: "lag storage name dynamic id 11", want: []LAG{{ID: 11, Name: "storage name", Mode: "dynamic", Members: []string{}}}},
+		{name: "syntax in name", body: "lag test static id 9 dynamic id 11", want: []LAG{{ID: 11, Name: "test static id 9", Mode: "dynamic", Members: []string{}}}},
+		{name: "members", body: "lag storage dynamic id 11\n ports ethe 1/1/9 to 1/1/10 ethernet 1/2/1\n primary-port 1/1/9", want: []LAG{{ID: 11, Name: "storage", Mode: "dynamic", Members: []string{"ethernet 1/1/10", "ethernet 1/1/9", "ethernet 1/2/1"}}}},
+		{name: "overlap", body: "lag storage static id 11\n ports ethe 1/1/9 to 1/1/10 ethe 1/1/9", invalid: true},
+		{name: "shared member", body: "lag first static id 11\n ports ethe 1/1/9\nlag second static id 12\n ports ethe 1/1/9", invalid: true},
+		{name: "repeated ports", body: "lag storage static id 11\n ports ethe 1/1/9\n ports ethe 1/1/10", invalid: true},
+		{name: "missing member", body: "lag storage static id 11\n ports ethe 1/1/9 to 1/1/11", invalid: true},
+		{name: "cross-slot range", body: "lag storage static id 11\n ports ethe 1/1/9 to 1/2/1", invalid: true},
+		{name: "malformed members", body: "lag storage static id 11\n ports ethe 1/1/9 to", invalid: true},
+		{name: "duplicate name", body: "lag same static id 11\nlag same dynamic id 12", invalid: true},
+		{name: "duplicate identity", body: "lag first static id 11\nlag second dynamic id 11", invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			document, err := Parse("ver 09.0.10k\n" + tc.body + "\nend")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := document.LAGs(ports)
+			if (err != nil) != tc.invalid {
+				t.Fatalf("LAGs=%v error=%v", got, err)
+			}
+			if !tc.invalid && !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("LAGs=%#v; want %#v", got, tc.want)
 			}
 		})
 	}

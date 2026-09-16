@@ -33,6 +33,7 @@ import (
   ('default-vlan-id' (any - '\n')*) @{ kind = defaultVLAN } |
   ('vlan' tail) @{ kind = vlanHeader } |
   ('lag' tail) @{ kind = lagHeader } |
+  ('ports' tail) @{ kind = lagPorts } |
   ('interface' tail) @{ kind = interfaceStanza } |
   (('ip' h+ 'access-list' | 'ipv6' h+ 'access-list' | 'mac' h+ 'access-list') (any - '\n')*) @{ kind = aclHeader } |
   ((('ip' h+)? 'multicast' tail) - ('multicast' h+ 'limit' tail)) @{ kind = multicastConfig } |
@@ -154,10 +155,12 @@ func commandFields(data string) (fields []string) {
        ('inline' h+ 'power' (h+ poe_target)? (h+ (poe_priority | poe_class | poe_limit))*);
  stp = 'spanning-tree' (h+ '802-1w' %{ parsed.family = "rstp" })?
        (h+ 'priority' h+ number >mark %value %options)?;
- lag = 'lag' h+ (any - space) (any - '\n')* h+ ('static' | 'dynamic') h+ 'id' h+ digit+ >mark %value;
+ lag = 'lag' h+ ((any - space) (any - '\n')*) >{ lagStart = p }
+       h+ ('static' | 'dynamic') >mark %{ parsed.family = data[start:p]; parsed.name = strings.TrimRight(data[lagStart:start], " \t") } h+ 'id' h+ digit+ >mark %value;
+ lag_ports = 'ports' h+ port_range (h+ port_range)*;
  stp_flag = ('no' h+ %{ parsed.negated = true })?
             ('spanning-tree' h+ ('802-1w' h+ 'admin-edge-port' | 'root-protect') | 'stp-bpdu-guard');
- main := (lag | stp_flag | stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
+ main := (lag_ports | lag | stp_flag | stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%
@@ -170,7 +173,7 @@ func parseCommand(data string) (parsed parsedCommand) {
  if parsed.kind == unknown { return parsed }
  data += "\n"
  p, pe := 0, len(data)
- cs, start := 0, 0
+ cs, start, lagStart := 0, 0, 0
  numberValid := true
  %% write init;
  %% write exec;

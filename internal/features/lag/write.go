@@ -118,6 +118,17 @@ func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error
 				}
 			}
 		}
+		if current == nil {
+			cached, err := readCollection(ctx, d)
+			if err != nil {
+				return nil, err
+			}
+			for _, lag := range cached.lags {
+				if lag.ID == v.ID {
+					return nil, fmt.Errorf("RESTCONF retains deleted lag %d; restore the parent through CLI before retrying", v.ID)
+				}
+			}
+		}
 		if current != nil && current.Mode != v.Mode {
 			return nil, errors.New("changing LAG mode requires replacement")
 		}

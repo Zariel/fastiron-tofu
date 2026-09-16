@@ -24,6 +24,7 @@ const (
 	defaultVLAN
 	vlanHeader
 	lagHeader
+	lagPorts
 	interfaceStanza
 	aclHeader
 	multicastConfig
