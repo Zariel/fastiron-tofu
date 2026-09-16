@@ -29,7 +29,7 @@ Plugin binary: `terraform-provider-fastiron`.
 | Other interface configuration | Not yet | Dedicated management interfaces, loopbacks, group-VE and tunnels remain. LAG interface description and administrative state are covered above. |
 | Interface IP addresses | Implemented | Individual IPv4/IPv6 addresses on VE and management interfaces. |
 | Static routes | Partial | [Default-VRF IPv4 gateway routes](docs/guides/routes.md), native queries and drift recovery. Lifecycle and reboot persistence verified. IPv6 and other route types remain. |
-| OSPF | Partial | Default-VRF areas and interface bindings. Additional routing options remain. |
+| OSPF | Partial | Default-VRF areas, interface bindings, and single/all-area queries. VE lifecycle and reboot persistence verified; additional routing options remain. |
 | Spanning tree | Partial | [Native queries, VLAN STP/RSTP mode and priority, and Ethernet/LAG protection flags](docs/guides/spanning-tree.md), with lifecycle, drift recovery and reboot validation. Global STP and MST remain. |
 | DNS servers | Partial | IPv4 servers and discovery. The tested firmware rejected IPv6 DNS addresses. |
 | LLDP | Partial | [Global and Ethernet enable state, MED policies, and native queries](docs/guides/lldp.md), with lifecycle and reboot validation. Neighbor discovery remains. |
