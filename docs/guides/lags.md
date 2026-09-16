@@ -27,6 +27,8 @@ On tested FastIron `09.0.10kT213`, removing a member through CLI can leave its o
 
 Direct hardware checks confirmed that both PUT and PATCH of the cached aggregate reference could return success without attaching the port. Clearing the cached reference with an empty value returned an error. The provider does not use that failing write as a repair step.
 
+A complete OpenTofu workflow also successfully repaired an externally detached member on the same firmware, with native and saved membership verified, the port still disabled, unrelated configuration preserved and an empty plan. The stale-cache failure is therefore intermittent; an external detach does not always require CLI recovery.
+
 Deleting a LAG through CLI on tested FastIron `09.0.10kT213` copies its STP protection flags onto the detached Ethernet ports. Those settings become independent port policy; removing the former LAG policy must not clear them. RESTCONF can retain the deleted aggregate entry, so interface policy resources check native LAG existence.
 
 If saving fails, `persistence_pending` remains true so a subsequent apply can finish saving the observed configuration.
