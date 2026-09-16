@@ -2,6 +2,8 @@
 
 `fastiron_ip_dns_server` owns one configured DNS server address. Other addresses remain independently managed. Changing the address replaces the resource.
 
+The [complete DNS example](../../examples/dns/main.tf) configures a set of individually owned servers and reads the resulting native server list.
+
 ```hcl
 resource "fastiron_ip_dns_server" "primary" {
   address = "192.0.2.53"
