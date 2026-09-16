@@ -64,7 +64,8 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	if _, err := device.Discover(ctx); err != nil {
 		return nativeState{}, err
 	}
-	if err := device.CheckL2Owner(ctx, name); err != nil {
+	document, err := device.L2Config(ctx, name)
+	if err != nil {
 		return nativeState{}, err
 	}
 	var response struct {
@@ -77,10 +78,6 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 		return nativeState{}, errors.New("RESTCONF storm-control response omitted its container")
 	}
 	// REST metadata can omit native settings or retain old rates after CLI changes.
-	document, err := device.RunningConfig(ctx)
-	if err != nil {
-		return nativeState{}, err
-	}
 	return parse(document, name)
 }
 

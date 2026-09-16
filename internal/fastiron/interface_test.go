@@ -15,7 +15,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/transport/ssh"
 )
 
-func TestL2Owner(t *testing.T) {
+func TestL2Config(t *testing.T) {
 	const port = `{"name":"ethernet 1/1/9","config":{"name":"ethernet 1/1/9"}}`
 	const lag = `{"name":"lag 53","config":{"name":"lag 53"}}`
 	const member = `{"name":"ethernet 1/1/9","config":{"name":"ethernet 1/1/9"},"openconfig-if-ethernet:ethernet":{"config":{"openconfig-if-aggregate:aggregate-id":"lag 53"}}}`
@@ -64,7 +64,7 @@ func TestL2Owner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err = device.CheckL2Owner(context.Background(), tc.target)
+			_, err = device.L2Config(context.Background(), tc.target)
 			switch tc.outcome {
 			case "valid":
 				if err != nil {

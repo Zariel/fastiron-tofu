@@ -36,7 +36,8 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 		return nativeState{}, err
 	}
 	// Protection defaults are meaningful only after confirming the parent exists.
-	if err := device.CheckL2Owner(ctx, name); err != nil {
+	document, err := device.L2Config(ctx, name)
+	if err != nil {
 		return nativeState{}, err
 	}
 	var response struct {
@@ -50,10 +51,6 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	}
 	// This endpoint caches configured entries and omits native-only protection.
 	// Native configuration determines drift; the GET establishes RESTCONF availability.
-	document, err := device.RunningConfig(ctx)
-	if err != nil {
-		return nativeState{}, err
-	}
 	return parse(document, name)
 }
 

@@ -28,10 +28,14 @@ func readInterface(ctx context.Context, d *fastiron.Device, name string) (interf
 		return interfaceConfig{}, err
 	}
 	// An omitted STP entry denotes defaults only for an existing interface.
-	if err := d.CheckL2Owner(ctx, name); err != nil {
+	document, err := d.L2Config(ctx, name)
+	if err != nil {
 		return interfaceConfig{}, err
 	}
-	interfaces, err := readInterfaces(ctx, d)
+	if _, err := readRESTInterfaces(ctx, d); err != nil {
+		return interfaceConfig{}, err
+	}
+	interfaces, err := document.STPInterfaces()
 	return interfaces[name], err
 }
 
@@ -43,7 +47,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 		desired = interfaceConfig{}
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*interfaceConfig, error) {
-		err := d.CheckL2Owner(ctx, name)
+		document, err := d.L2Config(ctx, name)
 		if errors.Is(err, fastiron.ErrNotFound) && !present {
 			// A missing parent needs no policy write, but a failed save must still be retried.
 			return &desired, nil
@@ -55,7 +59,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, name string, desire
 		if err != nil {
 			return nil, err
 		}
-		current, unowned, err := readNativeInterface(ctx, d, name)
+		current, unowned, err := document.STPInterface(name)
 		if err != nil {
 			return nil, err
 		}
@@ -133,19 +137,6 @@ func waitInterfaceCache(ctx context.Context, d *fastiron.Device, name string, cu
 		case <-timer.C:
 		}
 	}
-}
-
-func readInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {
-	if _, err := readRESTInterfaces(ctx, d); err != nil {
-		return nil, err
-	}
-	document, err := d.RunningConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache-only identities disappear across reboot without any native policy change.
-	return document.STPInterfaces()
 }
 
 func readRESTInterfaces(ctx context.Context, d *fastiron.Device) (map[string]interfaceConfig, error) {

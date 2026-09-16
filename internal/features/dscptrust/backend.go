@@ -28,7 +28,8 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 		return nativeState{}, err
 	}
 	// Trust defaults are meaningful only after confirming the parent exists.
-	if err := device.CheckL2Owner(ctx, name); err != nil {
+	document, err := device.L2Config(ctx, name)
+	if err != nil {
 		return nativeState{}, err
 	}
 	var response struct {
@@ -46,10 +47,6 @@ func read(ctx context.Context, device *fastiron.Device, name string) (nativeStat
 	}
 	// REST configuration can disagree with native state after CLI changes.
 
-	document, err := device.RunningConfig(ctx)
-	if err != nil {
-		return nativeState{}, err
-	}
 	return parse(document, name)
 }
 
