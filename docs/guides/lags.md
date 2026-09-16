@@ -53,6 +53,8 @@ Import with `tofu import fastiron_interface_lag.storage 'lag 5'`. Import and ref
 
 Failed updates can retry persistence without repeating configuration writes when native settings already match. OpenTofu can taint a failed creation and replace that policy on retry.
 
+On FastIron `09.0.10kT213`, hardware validation covered combined aggregate and interface creation, CLI description drift repair, administrative transitions, import, omitted defaults, forced policy replacement, parent mode replacement and parent identity replacement. Independent serial checks verified running and saved configuration, individual member names and unrelated settings. The replaced aggregate and interface policy survived reboot with identical running and saved configuration, matching queries and an empty OpenTofu plan. Independently disabled members remained disabled while the virtual interface was enabled.
+
 ## Discovery
 
 `fastiron_lags` reports native aggregate names, modes and Ethernet membership, checked against the RESTCONF physical-interface inventory. Stale cached aggregates are excluded, and incomplete member ranges produce a diagnostic rather than truncated membership.
