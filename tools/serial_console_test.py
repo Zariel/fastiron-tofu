@@ -38,6 +38,7 @@ class ConsoleTest(unittest.TestCase):
             ("end", "end\r\nswitch#"),
             ("configure terminal", "configure terminal\r\nswitch(config)#"),
             ("ipv6 router pim", "ipv6 router pim\r\nipv6 unicast-routing must be enabled before ipv6 PIM can be enabled\r\nswitch(config)#"),
+            ("interface ethernet 1/1/9", "interface ethernet 1/1/9\r\nreceived NULL prompt string for interface ethernet 1/1/9 \r\nAnother configuration is in-progress. Please try again.\r\nswitch(config)#"),
             ("bad command", "bad command\r\n% Invalid input: private-value\r\nswitch#"),
         ]
 
@@ -78,6 +79,8 @@ class ConsoleTest(unittest.TestCase):
                     self.assertEqual(console.command("configure terminal"), "")
                     with self.assertRaisesRegex(ConsoleError, "must be enabled before"):
                         console.command("ipv6 router pim")
+                    with self.assertRaisesRegex(ConsoleError, "Another configuration"):
+                        console.command("interface ethernet 1/1/9")
                     with self.assertRaisesRegex(ConsoleError, "batch stopped"):
                         console.command("bad command")
                 finally:

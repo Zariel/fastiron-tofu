@@ -94,6 +94,8 @@ func switchServer(t *testing.T) (Config, <-chan string) {
 								io.WriteString(channel, ":ABC123\r\nSSH@switch(config)#")
 							case "bad command":
 								io.WriteString(channel, "bad command\r\n% Invalid input: secret-marker\r\nSSH@switch#")
+							case "interface ethernet 1/1/9":
+								io.WriteString(channel, "interface ethernet 1/1/9\r\nreceived NULL prompt string for interface ethernet 1/1/9 \r\nAnother configuration is in-progress. Please try again.\r\nSSH@switch(config)#")
 							case "stall":
 								<-channelDone(channel)
 								return
@@ -171,6 +173,25 @@ func TestCommandFailure(t *testing.T) {
 	_, err = c.Run(context.Background(), true, "show version\nwrite memory")
 	if err == nil {
 		t.Fatal("accepted command injection")
+	}
+}
+
+func TestConfigurationBusy(t *testing.T) {
+	cfg, commands := switchServer(t)
+	c, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.Run(context.Background(), true, "configure terminal", "interface ethernet 1/1/9", "port-name changed", "write memory")
+	if err == nil {
+		t.Fatal("accepted a rejected interface selection")
+	}
+	for len(commands) > 0 {
+		command := <-commands
+		if command == "port-name changed" || command == "write memory" {
+			t.Fatalf("continued after rejected interface selection: %s", command)
+		}
 	}
 }
 

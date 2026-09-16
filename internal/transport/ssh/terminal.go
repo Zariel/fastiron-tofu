@@ -11,7 +11,7 @@ import (
 var (
 	promptPattern   = regexp.MustCompile(`(?m)^([A-Za-z0-9_.:/ @-]+(?:\([^\r\n()]*\))?[>#])\s*$`)
 	ansiPattern     = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
-	cliErrorPattern = regexp.MustCompile(`(?im)^\s*(?:%\s*(?:error|invalid|unknown|incomplete|ambiguous)|error\s*[:\-]|invalid (?:input|command)|unknown command|incomplete command|ambiguous command|not authorized|permission denied)`)
+	cliErrorPattern = regexp.MustCompile(`(?im)^\s*(?:%\s*(?:error|invalid|unknown|incomplete|ambiguous)|error\s*[:\-]|invalid (?:input|command)|unknown command|incomplete command|ambiguous command|not authorized|permission denied|another configuration is in-progress)`)
 )
 
 type chunk struct {
