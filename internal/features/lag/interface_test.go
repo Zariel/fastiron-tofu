@@ -117,10 +117,9 @@ func (s *interfaceSwitch) device(t *testing.T) *fastiron.Device {
 				s.cached.Enabled = *value
 			}
 		case r.Method == http.MethodDelete && r.URL.Path == endpoint+"/description":
-			s.cached.PortName = ""
-			if !s.ignore {
-				s.current.PortName = ""
-			}
+			// The leaf deletion can stall after reboot without changing native state.
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
 		case r.Method == http.MethodDelete && r.URL.Path == endpoint+"/enabled":
 			s.cached.Enabled = true
 			if !s.ignore {
@@ -224,6 +223,7 @@ func TestInterfaceDefaults(t *testing.T) {
 	}{
 		{name: "name only", current: interfaceConfig{Enabled: true}, disabled: "1/1/9", present: true, desired: interfaceConfig{PortName: "NAME", Enabled: true}},
 		{name: "delete", current: interfaceConfig{PortName: "OLD", Enabled: false}, disabled: "1/1/9 to 1/1/10"},
+		{name: "clear name", current: interfaceConfig{PortName: "OLD", Enabled: true}, disabled: "1/1/9", present: true, desired: interfaceConfig{Enabled: true}},
 		{name: "absent parent deletion", absent: true},
 		{name: "empty defaults", empty: true, current: interfaceConfig{Enabled: true}, present: true, desired: interfaceConfig{Enabled: true}},
 		{name: "empty nondefaults", empty: true, current: interfaceConfig{Enabled: true}, present: true, desired: interfaceConfig{PortName: "NAME", Enabled: true}, failure: true},

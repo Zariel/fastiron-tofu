@@ -123,11 +123,9 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id int64, desired i
 		var writeErr error
 		if before.config.PortName != desired.PortName {
 			writeErr = update.REST(http.MethodPatch, endpoint, map[string]any{"config": map[string]any{"description": before.config.PortName}})
-			if desired.PortName == "" {
-				writeErr = update.DeleteIfPresent(path.Join(endpoint, "description"))
-			} else {
-				writeErr = update.REST(http.MethodPatch, endpoint, map[string]any{"config": map[string]any{"description": desired.PortName}})
-			}
+			// Empty description resets the native name without the leaf DELETE
+			// that can stall FastIron configuration after a reboot.
+			writeErr = update.REST(http.MethodPatch, endpoint, map[string]any{"config": map[string]any{"description": desired.PortName}})
 		}
 		if before.config.Enabled != desired.Enabled {
 			if desired.Enabled {
