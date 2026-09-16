@@ -47,7 +47,7 @@ func (d *DataSource) Configure(_ context.Context, req datasource.ConfigureReques
 }
 
 func (d *DataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
-	routes, err := readRoutes(ctx, d.device)
+	routes, _, err := readRoutes(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read static routes", err.Error())
 		return

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"slices"
 )
 
 type routeSyntax struct {
@@ -30,32 +31,86 @@ func (d *Document) IPv4Routes() ([]IPv4Route, error) {
 	routes := []IPv4Route{}
 	seen := map[identity]bool{}
 	for _, command := range d.Commands {
-		if command.Parent != -1 || command.kind != staticRoute {
-			continue
-		}
-		if !command.valid {
-			return nil, errors.New("native IPv4 route is malformed")
-		}
-		raw := command.route
-		if raw.ignored {
-			continue
-		}
-		prefix, err := routePrefix(raw.prefix, raw.mask)
+		current, present, err := command.ipv4Route()
 		if err != nil {
 			return nil, err
 		}
-		gateway, err := netip.ParseAddr(raw.gateway)
-		if err != nil || !gateway.Is4() || gateway.IsUnspecified() || gateway.IsMulticast() {
-			return nil, errors.New("native IPv4 route gateway is invalid")
+		if !present {
+			continue
 		}
+		prefix, gateway := current.Prefix, current.NextHop
 		key := identity{prefix: prefix, gateway: gateway}
 		if seen[key] {
 			return nil, errors.New("native IPv4 route repeats a prefix and gateway")
 		}
 		seen[key] = true
-		routes = append(routes, IPv4Route{Prefix: prefix, NextHop: gateway, Distance: raw.distance, HasOptions: raw.options})
+		routes = append(routes, current)
 	}
 	return routes, nil
+}
+
+func (c Command) ipv4Route() (IPv4Route, bool, error) {
+	if c.Parent != -1 || c.kind != staticRoute {
+		return IPv4Route{}, false, nil
+	}
+	if !c.valid {
+		return IPv4Route{}, false, errors.New("native IPv4 route is malformed")
+	}
+	raw := c.route
+	if raw.ignored {
+		return IPv4Route{}, false, nil
+	}
+	prefix, err := routePrefix(raw.prefix, raw.mask)
+	if err != nil {
+		return IPv4Route{}, false, err
+	}
+	gateway, err := netip.ParseAddr(raw.gateway)
+	if err != nil || !gateway.Is4() || gateway.IsUnspecified() || gateway.IsMulticast() {
+		return IPv4Route{}, false, errors.New("native IPv4 route gateway is invalid")
+	}
+	return IPv4Route{Prefix: prefix, NextHop: gateway, Distance: raw.distance, HasOptions: raw.options}, true, nil
+}
+
+// CheckIPv4RouteUpdate verifies that only the selected gateway route changed.
+func (d *Document) CheckIPv4RouteUpdate(before *Document, prefix netip.Prefix, gateway netip.Addr) error {
+	previous, err := before.routeRemaining(prefix, gateway)
+	if err != nil {
+		return err
+	}
+	current, err := d.routeRemaining(prefix, gateway)
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(previous, current) {
+		return errors.New("static route operation changed unrelated native configuration")
+	}
+	return nil
+}
+
+func (d *Document) routeRemaining(prefix netip.Prefix, gateway netip.Addr) ([]string, error) {
+	var remaining, routes []string
+	found := false
+	for _, command := range d.Commands {
+		current, present, err := command.ipv4Route()
+		if err != nil {
+			return nil, err
+		}
+		if present && current.Prefix == prefix && current.NextHop == gateway {
+			if found || current.HasOptions {
+				return nil, errors.New("static route operation encountered repeated identity or additional native options")
+			}
+			found = true
+			continue
+		}
+		if command.Parent == -1 && command.kind == staticRoute {
+			routes = append(routes, command.Text)
+			continue
+		}
+		remaining = append(remaining, command.Text)
+	}
+	// Route display order can change when adding a gateway; each unowned line must remain intact.
+	slices.Sort(routes)
+	return append(remaining, routes...), nil
 }
 
 func routePrefix(raw, mask string) (netip.Prefix, error) {

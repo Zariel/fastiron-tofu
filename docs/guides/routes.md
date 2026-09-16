@@ -43,4 +43,6 @@ Refresh, queries and mutation readback use parsed native running configuration f
 
 Deletion refuses to erase additional native route options, such as a name, tag, or BFD setting. Remove those options before destroying the route. IPv6 routes, interface or null next hops, non-default VRFs, and additional native options are not yet supported; discovery reports an error for route representations it cannot safely interpret.
 
+After a route mutation, the provider verifies that unrelated native configuration remains unchanged, including neighboring routes' names and tags. A failed check prevents saving; it does not roll back changes already applied to running configuration.
+
 Create, import, no-change planning, distance replacement, and deletion have been exercised on FastIron `09.0.10kT213`. Running and saved configuration were checked over serial, including preservation of another next hop for the same prefix. Reboot persistence has not yet been verified.

@@ -189,7 +189,7 @@ func (s *testSwitch) command(command string) (output string) {
 			text = strings.TrimSuffix(text, "end") + ospfConfiguration(s.ospf.areas, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"
 		}
 		if s.routes != nil {
-			text = strings.TrimSuffix(text, "end") + routeConfiguration(s.routes.running, s.routes.extra) + "end"
+			text = strings.TrimSuffix(text, "end") + routeConfiguration(s.routes.running, s.routes.extra, s.routes.extraTarget) + "end"
 		}
 		if s.lags != nil {
 			text = strings.TrimSuffix(text, "end") + s.lags.configuration() + "end"
@@ -218,7 +218,7 @@ func (s *testSwitch) command(command string) (output string) {
 			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + ospfConfiguration(s.ospf.startup, s.ospf.areaOptions, s.ospf.interfaceOptions, s.ospf.hiddenBinding) + "end"
 		}
 		if s.routes != nil {
-			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + routeConfiguration(s.routes.startup, s.routes.extra) + "end"
+			return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + routeConfiguration(s.routes.startup, s.routes.extra, s.routes.extraTarget) + "end"
 		}
 		return strings.TrimSuffix(s.configuration(s.startup, s.startupEthernet, s.startupMemberships), "end") + s.startupLAG + managementConfiguration(s.startupManagementAddresses) + "end"
 	case "skip-page-display":

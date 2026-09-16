@@ -87,7 +87,7 @@ func (r *Resource) ModifyPlan(ctx context.Context, req resource.ModifyPlanReques
 	}
 	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("persistence_pending"), false)...)
 	if r.device != nil {
-		if _, err := readRoutes(ctx, r.device); err != nil {
+		if _, _, err := readRoutes(ctx, r.device); err != nil {
 			resp.Diagnostics.AddError("Cannot read static route capability", err.Error())
 		}
 	}
@@ -139,7 +139,7 @@ func (r *Resource) Read(ctx context.Context, req resource.ReadRequest, resp *res
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	routes, err := readRoutes(ctx, r.device)
+	routes, _, err := readRoutes(ctx, r.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read static routes", err.Error())
 		return

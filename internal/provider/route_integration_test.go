@@ -18,14 +18,20 @@ type routeSwitch struct {
 	ignoreWrites     bool
 	mutations        int
 	extra            string
+	extraTarget      string
+	corruptNeighbor  bool
 }
 
-func routeConfiguration(routes map[string]int64, extra string) string {
+func routeConfiguration(routes map[string]int64, extra, extraTarget string) string {
 	keys := slices.Sorted(maps.Keys(routes))
 	var b strings.Builder
 	for _, key := range keys {
 		prefix, gateway, _ := strings.Cut(key, "|")
-		fmt.Fprintf(&b, "ip route %s %s distance %d%s\n", prefix, gateway, routes[key], extra)
+		options := extra
+		if extraTarget != "" && extraTarget != key {
+			options = ""
+		}
+		fmt.Fprintf(&b, "ip route %s %s distance %d%s\n", prefix, gateway, routes[key], options)
 	}
 	return b.String()
 }
@@ -64,6 +70,9 @@ func (s *routeSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mutations++
+	if s.corruptNeighbor {
+		s.extra = " name CHANGED"
+	}
 	if s.ignoreWrites {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -293,5 +302,34 @@ output "routes" { value = data.fastiron_static_routes.test.routes }
 	defer s.mu.Unlock()
 	if !maps.Equal(s.routes.running, map[string]int64{target: 200, neighbor: 201}) || !maps.Equal(s.routes.running, s.routes.startup) {
 		t.Fatal("retry did not persist repaired route and preserve neighbor")
+	}
+}
+
+func TestOpenTofuRoutePreservation(t *testing.T) {
+	const target = "198.18.53.0/24|192.0.2.2"
+	const neighbor = "198.18.53.0/24|192.0.2.3"
+	s := newSwitch(t)
+	s.routes = &routeSwitch{protocol: true, running: map[string]int64{neighbor: 201}, startup: map[string]int64{neighbor: 201}, extra: " name KEEP", extraTarget: neighbor, corruptNeighbor: true}
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base+`resource "fastiron_ip_route" "test" {
+ prefix = "198.18.53.0/24"
+ next_hop = "192.0.2.2"
+ distance = 200
+}
+`)
+	run(0, "init", "-no-color")
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "changed unrelated native configuration") {
+		t.Fatalf("missing preservation diagnostic: %s", out)
+	}
+	if out := run(0, "state", "show", "fastiron_ip_route.test"); !strings.Contains(out, "persistence_pending = true") {
+		t.Fatalf("partial creation lost pending state: %s", out)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !maps.Equal(s.routes.running, map[string]int64{target: 200, neighbor: 201}) || s.routes.extra != " name CHANGED" {
+		t.Fatal("fixture did not expose the applied route and changed neighbor option")
+	}
+	if !maps.Equal(s.routes.startup, map[string]int64{neighbor: 201}) {
+		t.Fatal("failed preservation check saved the partial write")
 	}
 }

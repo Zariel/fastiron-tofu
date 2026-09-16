@@ -61,7 +61,7 @@ func (d *singleDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		resp.Diagnostics.AddError("Invalid route identity", "Use a canonical IPv4 network prefix and unicast IPv4 next_hop.")
 		return
 	}
-	routes, err := readRoutes(ctx, d.device)
+	routes, _, err := readRoutes(ctx, d.device)
 	if err != nil {
 		resp.Diagnostics.AddError("Cannot read static route", err.Error())
 		return

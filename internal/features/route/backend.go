@@ -38,10 +38,10 @@ func validateRoute(v route) error {
 	return nil
 }
 
-func readRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
+func readRoutes(ctx context.Context, d *fastiron.Device) ([]route, *nativeconfig.Document, error) {
 	// Missing or stale REST objects do not establish native route absence.
 	if _, err := cachedRoutes(ctx, d); err != nil && !errors.Is(err, fastiron.ErrNotFound) {
-		return nil, err
+		return nil, nil, err
 	}
 	return nativeRoutes(ctx, d)
 }
@@ -131,14 +131,14 @@ func cachedRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
 	return routes, nil
 }
 
-func nativeRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
+func nativeRoutes(ctx context.Context, d *fastiron.Device) ([]route, *nativeconfig.Document, error) {
 	document, err := d.RunningConfig(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	configured, err := document.IPv4Routes()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	routes := make([]route, 0, len(configured))
 	for _, current := range configured {
@@ -153,7 +153,7 @@ func nativeRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
 		}
 		return a.NextHop.Compare(b.NextHop)
 	})
-	return routes, nil
+	return routes, document, nil
 }
 
 func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) (*route, error) {
@@ -168,7 +168,7 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 		if err != nil && !createProtocol {
 			return nil, err
 		}
-		routes, err := nativeRoutes(ctx, d)
+		routes, before, err := nativeRoutes(ctx, d)
 		if err != nil {
 			return nil, err
 		}
@@ -205,18 +205,14 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 			} else {
 				// Deleting the next hop also removes native options absent from this API.
 				// Refuse to erase those options until their owner has removed them.
-				document, err := d.RunningConfig(ctx)
-				if err != nil {
-					return current, err
-				}
-				if err := routeOptions(document, v); err != nil {
+				if err := routeOptions(before, v); err != nil {
 					return current, err
 				}
 				method = http.MethodDelete
 				endpoint = path.Join(staticRoutesPath, "static="+url.PathEscape(v.Prefix.String()), "next-hops", "next-hop="+url.PathEscape(v.NextHop.String()))
 			}
 			writeErr := update.REST(method, endpoint, body)
-			observed, readErr := readRoutes(ctx, d)
+			observed, after, readErr := readRoutes(ctx, d)
 			if readErr != nil {
 				return current, errors.Join(writeErr, readErr)
 			}
@@ -229,13 +225,8 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 			if (current != nil) != present || (current != nil && *current != v) {
 				return current, errors.Join(writeErr, errors.New("static route did not converge"))
 			}
-			for _, neighbor := range routes {
-				if neighbor.Prefix == v.Prefix && neighbor.NextHop == v.NextHop {
-					continue
-				}
-				if !slices.Contains(observed, neighbor) {
-					return current, errors.New("static route operation changed an unrelated next hop")
-				}
+			if err := after.CheckIPv4RouteUpdate(before, v.Prefix, v.NextHop); err != nil {
+				return current, err
 			}
 		}
 		return current, nil
