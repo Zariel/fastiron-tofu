@@ -118,7 +118,8 @@ func applyVLAN(ctx context.Context, d *fastiron.Device, v vlan, present bool) (*
 }
 
 func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) (*vlan, []string, error) {
-	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+	// Bound retries without shortening the independent RESTCONF and SSH operations.
+	retryCtx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
 	defer cancel()
 
 	for {
@@ -144,9 +145,9 @@ func waitVLAN(ctx context.Context, d *fastiron.Device, id int64) (*vlan, []strin
 		// agreeing native and RESTCONF observations establish the next mutation.
 		timer := time.NewTimer(500 * time.Millisecond)
 		select {
-		case <-ctx.Done():
+		case <-retryCtx.Done():
 			timer.Stop()
-			return native, remaining, fmt.Errorf("native and RESTCONF spanning-tree state did not converge: %w", ctx.Err())
+			return native, remaining, fmt.Errorf("native and RESTCONF spanning-tree state did not converge: %w", retryCtx.Err())
 		case <-timer.C:
 		}
 	}

@@ -67,7 +67,8 @@ func readLAG(ctx context.Context, d *fastiron.Device, id int64) (config, error) 
 }
 
 func waitLAG(ctx context.Context, d *fastiron.Device, id int64, matches func(*config) bool) (*config, error) {
-	ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+	// Bound retries without shortening the independent RESTCONF and SSH operations.
+	retryCtx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
 	defer cancel()
 	for {
 		lag, err := readLAG(ctx, d, id)
@@ -82,9 +83,9 @@ func waitLAG(ctx context.Context, d *fastiron.Device, id int64, matches func(*co
 		}
 		timer := time.NewTimer(500 * time.Millisecond)
 		select {
-		case <-ctx.Done():
+		case <-retryCtx.Done():
 			timer.Stop()
-			return current, fmt.Errorf("LAG configuration did not converge: %w", ctx.Err())
+			return current, fmt.Errorf("LAG configuration did not converge: %w", retryCtx.Err())
 		case <-timer.C:
 		}
 	}

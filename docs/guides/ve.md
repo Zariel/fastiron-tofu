@@ -18,7 +18,7 @@ Import with `tofu import fastiron_interface_ve.transit 've 3053'`. The resource 
 
 Reads require SSH access to native configuration as well as RESTCONF. Native configuration determines VE existence and its port name because RESTCONF can retain an old name or interface after CLI changes. An unreadable or malformed interface collection is an error. Duplicate VE entries or inconsistent VLAN bindings are also rejected.
 
-Name updates wait for RESTCONF configuration to synchronize with native state before writing: a request that matches a stale cached name can return success without changing the switch. Omission uses the narrow description DELETE operation, which also removes names configured only through the CLI. The provider verifies native convergence and preservation of unrelated configuration before saving. Synchronization and convergence are bounded by the RESTCONF timeout.
+Name updates wait for RESTCONF configuration to synchronize with native state before writing: a request that matches a stale cached name can return success without changing the switch. Omission uses the narrow description DELETE operation, which also removes names configured only through the CLI. The provider verifies native convergence and preservation of unrelated configuration before saving. Synchronization and convergence retries are bounded by the RESTCONF timeout; in-flight RESTCONF and SSH reads retain their own transport deadlines. Verification after a write has a fresh retry budget.
 
 Use the data source to inspect an existing VE without taking ownership:
 

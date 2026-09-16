@@ -68,14 +68,14 @@ func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*observa
 		}
 
 		before := current
-		ctx, cancel := context.WithTimeout(ctx, device.RESTCONFTimeout())
+		retryCtx, cancel := context.WithTimeout(ctx, device.RESTCONFTimeout())
 		defer cancel()
 		// A cached desired value can suppress the native callback. Wait for the
 		// firmware to synchronize it; rewriting the current native value can fail.
 		for current.cached != current.enabled && current.enabled != enabled {
 			select {
-			case <-ctx.Done():
-				return &current, errors.Join(errors.New("RESTCONF jumbo configuration did not synchronize with native state"), ctx.Err())
+			case <-retryCtx.Done():
+				return &current, errors.Join(errors.New("RESTCONF jumbo configuration did not synchronize with native state"), retryCtx.Err())
 			case <-time.After(250 * time.Millisecond):
 			}
 			next, err := read(ctx, device)
@@ -91,8 +91,12 @@ func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*observa
 			return &current, nil
 		}
 
+		cancel()
+
 		body := map[string]any{"icx-openconfig-jumbo:jumbo": map[string]any{"config": map[string]bool{"enabled": enabled}}}
 		writeErr := update.REST(http.MethodPut, "/jumbo", body)
+		verifyCtx, cancelVerify := context.WithTimeout(ctx, device.RESTCONFTimeout())
+		defer cancelVerify()
 		for {
 			next, readErr := readNative(ctx, device)
 			if readErr != nil {
@@ -112,8 +116,8 @@ func apply(ctx context.Context, device *fastiron.Device, enabled bool) (*observa
 				return &current, nil
 			}
 			select {
-			case <-ctx.Done():
-				return &current, errors.Join(errors.New("native jumbo configuration did not converge"), ctx.Err())
+			case <-verifyCtx.Done():
+				return &current, errors.Join(errors.New("native jumbo configuration did not converge"), verifyCtx.Err())
 			case <-time.After(250 * time.Millisecond):
 			}
 		}

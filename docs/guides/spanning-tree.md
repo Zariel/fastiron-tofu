@@ -76,7 +76,7 @@ Global spanning-tree mode, MST, timers, path costs and port priorities are not y
 
 On that firmware, the `/stp/global`, `/stp/rstp` and `/stp/mstp` RESTCONF containers return “unknown resource”. Per-VLAN RSTP is available through `/stp/rapid-pvst`.
 
-VLAN updates wait for RESTCONF and native configuration to agree before writing: a priority update matching stale RESTCONF state can otherwise be ignored, and stale presence can reject recreation. Synchronization is bounded by the configured RESTCONF timeout; a timeout or ignored update returns an error without saving, and a later apply can retry.
+VLAN updates wait for RESTCONF and native configuration to agree before writing: a priority update matching stale RESTCONF state can otherwise be ignored, and stale presence can reject recreation. Synchronization retries are bounded by the configured RESTCONF timeout. In-flight RESTCONF and SSH reads retain their own transport deadlines so native verification can finish. A failed verification or ignored update returns an error without saving, and a later apply can retry.
 
 On non-default VLANs, validation covers creation, default and boundary priorities, classic STP and RSTP priority drift repair, import, mode replacement, recreation after external deletion, replacement onto another VLAN and deletion. RSTP configuration survived reboot with unchanged running and saved configuration and an empty plan afterward. Relocated default VLAN 4095 has also passed import, priority updates and default reset, replacement from classic STP to RSTP, deletion and a fresh query after deletion; unrelated configuration was preserved.
 

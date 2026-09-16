@@ -26,7 +26,7 @@ This query requires an available RESTCONF jumbo endpoint and SSH access to nativ
 
 Jumbo mode is global, not an interface setting. The query reports configured support; it does not measure forwarding, set per-interface MTUs, or establish a supported maximum frame size. FastIron excludes the out-of-band management port and switch-access protocols from jumbo mode.
 
-The tested firmware rejected RESTCONF DELETE with HTTP 501, so removal writes `enabled = false`. Before changing the mode, the provider waits for RESTCONF configuration to synchronize with native state; otherwise an acknowledged request can be skipped. It then verifies native convergence and preservation of unrelated configuration before saving. Synchronization and convergence are bounded by the configured RESTCONF timeout.
+The tested firmware rejected RESTCONF DELETE with HTTP 501, so removal writes `enabled = false`. Before changing the mode, the provider waits for RESTCONF configuration to synchronize with native state; otherwise an acknowledged request can be skipped. It then verifies native convergence and preservation of unrelated configuration before saving. Synchronization and convergence retries are bounded by the configured RESTCONF timeout. Each in-flight read retains its own transport deadline, and post-write verification has a fresh retry budget.
 
 Failed operations retain observed state and `persistence_pending` so a later apply or destroy can retry reconciliation or saving. Setting the already configured native value avoids an unnecessary RESTCONF write.
 

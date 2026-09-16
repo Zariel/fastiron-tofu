@@ -162,7 +162,8 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 			}
 			return &config{ID: v.ID, VLANID: v.ID, PortName: current.PortName}
 		}
-		ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+		// Retry budgets must not cancel a transport operation or its native verification.
+		retryCtx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
 		defer cancel()
 
 		for {
@@ -179,8 +180,8 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 			}
 			// PUT can acknowledge an unchanged cached value without invoking native configuration.
 			select {
-			case <-ctx.Done():
-				return observed(), errors.Join(errors.New("VE configuration cache did not synchronize"), ctx.Err())
+			case <-retryCtx.Done():
+				return observed(), errors.Join(errors.New("VE configuration cache did not synchronize"), retryCtx.Err())
 			case <-time.After(250 * time.Millisecond):
 			}
 			cached, cacheErr = readCached(ctx, d, v.ID)
@@ -197,6 +198,8 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 			}
 		}
 
+		cancel()
+
 		name := "ve " + strconv.FormatInt(v.ID, 10)
 		target := path.Join("/openconfig-interfaces:interfaces/interface", url.PathEscape(name), "config/description")
 		method := http.MethodPut
@@ -210,6 +213,8 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 			body = map[string]any{"interface": []any{entry}}
 		}
 		writeErr := update.REST(method, target, body)
+		verifyCtx, cancelVerify := context.WithTimeout(ctx, d.RESTCONFTimeout())
+		defer cancelVerify()
 		for {
 			next, readErr := readNative(ctx, d, v.ID)
 			if readErr != nil {
@@ -227,8 +232,8 @@ func apply(ctx context.Context, d *fastiron.Device, v config) (*config, error) {
 				return observed(), nil
 			}
 			select {
-			case <-ctx.Done():
-				return observed(), errors.Join(errors.New("native VE configuration did not converge"), ctx.Err())
+			case <-verifyCtx.Done():
+				return observed(), errors.Join(errors.New("native VE configuration did not converge"), verifyCtx.Err())
 			case <-time.After(250 * time.Millisecond):
 			}
 		}
@@ -252,13 +257,13 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 		if before.HasChildren {
 			return errors.New("VE has child configuration; remove addresses, routing bindings, and other settings before destroying it")
 		}
-		ctx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
-		defer cancel()
 		var writeErr error
 		if before.Exists {
 			name := "ve " + strconv.FormatInt(id, 10)
 			writeErr = update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
 		}
+		retryCtx, cancel := context.WithTimeout(ctx, d.RESTCONFTimeout())
+		defer cancel()
 		for {
 			current, readErr := readNative(ctx, d, id)
 			if readErr != nil {
@@ -279,8 +284,8 @@ func remove(ctx context.Context, d *fastiron.Device, id int64) error {
 				return nil
 			}
 			select {
-			case <-ctx.Done():
-				return errors.Join(errors.New("VE absence could not be verified"), ctx.Err())
+			case <-retryCtx.Done():
+				return errors.Join(errors.New("VE absence could not be verified"), retryCtx.Err())
 			case <-time.After(250 * time.Millisecond):
 			}
 		}
