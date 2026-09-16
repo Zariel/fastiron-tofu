@@ -3,13 +3,10 @@ package ospf
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"path"
 	"slices"
-
-	nativeconfig "github.com/zariel/fastiron-tofu/internal/config"
 
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 )
@@ -49,7 +46,7 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 				if err != nil {
 					return current, err
 				}
-				if err := ospfAreaChildren(document, id); err != nil {
+				if err := document.CheckOSPFAreaDelete(id); err != nil {
 					return current, err
 				}
 				endpoint = path.Join(ospfAreasPath, "area="+url.PathEscape(current.key))
@@ -82,48 +79,6 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 		}
 		return current, nil
 	})
-}
-
-func ospfAreaChildren(document *nativeconfig.Document, id string) error {
-	inside, found := false, false
-	for _, command := range document.Commands {
-		line := command.Text
-		fields := command.Fields
-		if len(fields) == 4 && fields[0] == "ip" && fields[1] == "ospf" && fields[2] == "area" {
-			bound, err := normalizeAreaID(fields[3])
-			if err != nil || bound == id {
-				return errors.New("native OSPF configuration still contains an area binding")
-			}
-		}
-		if line == "router ospf" {
-			inside = true
-			continue
-		}
-		if command.Parent == -1 {
-			inside = false
-		}
-		if !inside {
-			continue
-		}
-		if len(fields) < 2 || fields[0] != "area" {
-			continue
-		}
-		areaID, err := normalizeAreaID(fields[1])
-		if err != nil {
-			return fmt.Errorf("cannot identify native OSPF area: %w", err)
-		}
-		if areaID != id {
-			continue
-		}
-		found = true
-		if len(fields) > 2 {
-			return errors.New("OSPF area has additional native options; remove them before destroying the area")
-		}
-	}
-	if !found {
-		return errors.New("OSPF area was not found in native configuration")
-	}
-	return nil
 }
 
 func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, present bool) (bool, error) {
@@ -161,7 +116,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 				if err != nil {
 					return exists, err
 				}
-				if err := ospfInterfaceOptions(document, id, name); err != nil {
+				if err := document.CheckOSPFBindingDelete(id, name); err != nil {
 					return exists, err
 				}
 				endpoint = path.Join(endpoint, "interface="+url.PathEscape(name))
@@ -199,37 +154,4 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 		}
 		return exists, nil
 	})
-}
-
-func ospfInterfaceOptions(document *nativeconfig.Document, id, name string) error {
-	inside, found := false, false
-	for _, command := range document.Commands {
-		line := command.Text
-		if line == "interface "+name {
-			inside = true
-			continue
-		}
-		if command.Parent == -1 {
-			inside = false
-		}
-		if !inside {
-			continue
-		}
-		fields := command.Fields
-		if len(fields) < 2 || fields[0] != "ip" || fields[1] != "ospf" {
-			continue
-		}
-		if len(fields) != 4 || fields[2] != "area" {
-			return errors.New("interface has additional OSPF options; remove them before destroying its area binding")
-		}
-		areaID, err := normalizeAreaID(fields[3])
-		if err != nil || areaID != id {
-			return errors.New("native OSPF interface binding differs from RESTCONF")
-		}
-		found = true
-	}
-	if !found {
-		return errors.New("OSPF interface binding was not found in native configuration")
-	}
-	return nil
 }

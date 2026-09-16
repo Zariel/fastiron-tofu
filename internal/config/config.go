@@ -40,6 +40,10 @@ const (
 	stpRoot
 	stpBPDU
 	staticRoute
+	ospfRouter
+	ospfArea
+	ospfBinding
+	ospfOption
 )
 
 type portRange struct{ first, last [3]uint64 }
