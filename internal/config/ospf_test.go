@@ -1,12 +1,53 @@
 package config_test
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/zariel/fastiron-tofu/internal/config/configtest"
 )
+
+func TestOSPFAreas(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		want       map[netip.Addr][]string
+	}{
+		{"empty", "", map[netip.Addr][]string{}},
+		{"process only", "router ospf", map[netip.Addr][]string{}},
+		{"areas and options", "router ospf\n area 0\n area 53\n area 53 range 198.51.100.0/24\ninterface ve 5\n ip ospf area 0\n ip ospf network point-to-point", map[netip.Addr][]string{netip.MustParseAddr("0.0.0.0"): {"ve 5"}, netip.MustParseAddr("0.0.0.53"): {}}},
+		{"full range", "router ospf\n area 4294967295\ninterface ve 5\n ip ospf area 255.255.255.255", map[netip.Addr][]string{netip.MustParseAddr("255.255.255.255"): {"ve 5"}}},
+		{"VRF isolation", "router ospf\n area 53\nrouter ospf vrf blue\n area 53\ninterface ve 5\n ip ospf area 53\n vrf forwarding blue", map[netip.Addr][]string{netip.MustParseAddr("0.0.0.53"): {}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := configtest.Parse(t, "ver 09.0.10k\n"+tc.body+"\nend")
+			got, err := d.OSPFAreas()
+			if err != nil || !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("areas=%v error=%v; want=%v", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestOSPFAreasMalformed(t *testing.T) {
+	for _, body := range []string{
+		"router ospf\n area 53\n area 0.0.0.53",
+		"router ospf\n area 4294967296",
+		"router ospf\n area",
+		"router ospf\n area 53\nrouter ospf",
+		"router ospf unexpected\n area 53",
+		"router ospf\n area 53\ninterface ve 5\n ip ospf area 53\n ip ospf area 53",
+		"router ospf\n area 53\ninterface ve 5\n ip ospf area 54",
+		"router ospf\n area 53\ninterface ve 5\n ip ospf area 53\n vrf forwarding",
+	} {
+		d := configtest.Parse(t, "ver 09.0.10k\n"+body+"\nend")
+		if got, err := d.OSPFAreas(); err == nil {
+			t.Errorf("accepted %q: %v", body, got)
+		}
+	}
+}
 
 func TestCapturedOSPFDelete(t *testing.T) {
 	for _, tc := range []struct {
@@ -92,6 +133,30 @@ func TestOSPFBindingDelete(t *testing.T) {
 			d := configtest.Parse(t, "ver 09.0.10k\ninterface ve 3053\n"+tc.body+"\nend")
 			if err := d.CheckOSPFBindingDelete("0.0.0.53", "ve 3053"); (err == nil) != tc.allowed {
 				t.Fatalf("delete: %v; allowed=%v", err, tc.allowed)
+			}
+		})
+	}
+}
+
+func TestCapturedOSPFAreas(t *testing.T) {
+	for _, tc := range []struct {
+		name, id   string
+		interfaces []string
+	}{
+		{"area-created", "0.0.0.53", []string{}},
+		{"binding-created", "0.0.0.53", []string{"ve 3053"}},
+		{"binding-deleted", "0.0.0.53", []string{}},
+		{"cli-area", "0.0.0.56", []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("testdata", "ospf", tc.name+".conf"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := configtest.Parse(t, string(raw)).OSPFAreas()
+			want := map[netip.Addr][]string{netip.MustParseAddr("0.0.0.0"): {"ve 5"}, netip.MustParseAddr(tc.id): tc.interfaces}
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("areas=%v error=%v; want=%v", got, err, want)
 			}
 		})
 	}

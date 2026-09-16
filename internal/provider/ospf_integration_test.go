@@ -13,6 +13,9 @@ import (
 
 type ospfSwitch struct {
 	areas, startup                               map[string][]string
+	cached                                       map[string][]string
+	ignoreWrites                                 bool
+	missingProtocol                              bool
 	numeric                                      bool
 	areaOptions, interfaceOptions, hiddenBinding bool
 }
@@ -48,9 +51,21 @@ func (s *ospfSwitch) rest(w http.ResponseWriter, r *http.Request) {
 	const protocols = "/restconf/data/network-instances/network-instance=default-vrf/protocols"
 	const collection = protocols + "/protocol=OSPF,icx-ospf/ospfv2/areas"
 	endpoint := r.URL.EscapedPath()
+	if r.Method == "GET" && s.missingProtocol {
+		if endpoint == protocols {
+			fmt.Fprint(w, `{"openconfig-network-instance:protocols":{}}`)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
 	if r.Method == "GET" && endpoint == collection {
 		areas := []any{}
-		for id, names := range s.areas {
+		observed := s.areas
+		if s.cached != nil {
+			observed = s.cached
+		}
+		for id, names := range observed {
 			var identifier any = id
 			if s.numeric && id == "0.0.0.53" {
 				identifier = 53
@@ -62,6 +77,10 @@ func (s *ospfSwitch) rest(w http.ResponseWriter, r *http.Request) {
 			areas = append(areas, map[string]any{"identifier": identifier, "config": map[string]any{"identifier": identifier}, "interfaces": map[string]any{"interface": bindings}})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"openconfig-network-instance:areas": map[string]any{"area": areas}})
+		return
+	}
+	if r.Method != "GET" && s.ignoreWrites {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method == "PATCH" && endpoint == protocols {

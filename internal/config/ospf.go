@@ -4,8 +4,70 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/netip"
+	"slices"
 	"strconv"
 )
+
+// OSPFAreas returns default-VRF area identities and their native interface bindings.
+// Area options and interface options remain independently owned.
+func (d *Document) OSPFAreas() (map[netip.Addr][]string, error) {
+	areas := map[netip.Addr][]string{}
+	declared := map[netip.Addr]bool{}
+	vrfs := map[int]bool{}
+	process := -1
+	for i, c := range d.Commands {
+		if c.kind == interfaceVRF && c.Parent >= 0 {
+			if !c.valid || vrfs[c.Parent] {
+				return nil, errors.New("native interface VRF is malformed or repeated")
+			}
+			vrfs[c.Parent] = true
+		}
+		if c.kind == ospfRouter && c.Parent == -1 {
+			if !c.valid {
+				return nil, errors.New("native OSPF process is malformed")
+			}
+			if c.name != "" {
+				continue
+			}
+			if process >= 0 {
+				return nil, errors.New("native configuration repeats the default OSPF process")
+			}
+			process = i
+		}
+		if process < 0 || c.Parent != process || c.kind != ospfArea {
+			continue
+		}
+		id, err := ospfID(c.name)
+		if !c.valid || err != nil || declared[id] && !c.options {
+			return nil, errors.New("native OSPF area is malformed or repeated")
+		}
+		declared[id] = declared[id] || !c.options
+		areas[id] = []string{}
+	}
+	bindings := map[string]bool{}
+	for _, c := range d.Commands {
+		if c.kind != ospfBinding || c.Parent < 0 || vrfs[c.Parent] {
+			continue
+		}
+		parent := d.Commands[c.Parent]
+		if parent.kind != interfaceStanza {
+			continue
+		}
+		id, err := ospfID(c.name)
+		if !parent.valid || !c.valid || err != nil || bindings[parent.name] {
+			return nil, errors.New("native OSPF interface binding is malformed or repeated")
+		}
+		if _, exists := areas[id]; !exists {
+			return nil, errors.New("native OSPF interface references an undeclared area")
+		}
+		bindings[parent.name] = true
+		areas[id] = append(areas[id], parent.name)
+	}
+	for _, names := range areas {
+		slices.Sort(names)
+	}
+	return areas, nil
+}
 
 func ospfID(raw string) (netip.Addr, error) {
 	if id, err := netip.ParseAddr(raw); err == nil && id.Is4() {

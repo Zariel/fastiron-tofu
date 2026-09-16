@@ -44,6 +44,7 @@ const (
 	ospfArea
 	ospfBinding
 	ospfOption
+	interfaceVRF
 )
 
 type portRange struct{ first, last [3]uint64 }

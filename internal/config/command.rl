@@ -15,6 +15,7 @@ import (
  stp_edge = ('no' h+)? 'spanning-tree' h+ '802-1w' h+ 'admin-edge-port' tail;
  stp_root = ('no' h+)? 'spanning-tree' h+ 'root-protect' tail;
  main := (
+  ('vrf' h+ 'forwarding' tail) @{ kind = interfaceVRF } |
   ('router' h+ 'ospf' tail) @{ kind = ospfRouter } |
   ('area' tail) @{ kind = ospfArea } |
   ('ip' h+ 'ospf' h+ 'area' tail) @{ kind = ospfBinding } |
@@ -170,7 +171,7 @@ func commandFields(data string) (fields []string) {
  ospf = 'router' h+ 'ospf' (h+ 'vrf' h+ token >mark %name)? |
         ('area' | 'ip' h+ 'ospf' h+ 'area') h+ ospf_id (h+ token (h+ token)* %options)? |
         'ip' h+ 'ospf' h+ (token - 'area') (h+ token)*;
- main := (ospf | member_disable | lag_ports | lag | stp_flag | stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
+ main := ('vrf' h+ 'forwarding' h+ token >mark %name | ospf | member_disable | lag_ports | lag | stp_flag | stp | poe | med | lldp | flag | voice | storm | vlan | interface | acl | multicast |
           'port-name' h+ (any - '\n')+ >mark %name |
           'symmetrical-flow-control' h+ token (h+ token)*) '\n';
 }%%

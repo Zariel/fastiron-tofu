@@ -16,11 +16,16 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 		return nil, err
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*area, error) {
-		areas, err := configuredAreas(ctx, d)
+		cached, err := cachedAreas(ctx, d)
 		createProtocol := errors.Is(err, fastiron.ErrNotFound)
 		if err != nil && !createProtocol {
 			return nil, err
 		}
+		areas, before, err := nativeAreas(ctx, d)
+		if err != nil {
+			return nil, err
+		}
+		// REST identities select request paths; native configuration determines ownership and convergence.
 		var current *area
 		for _, area := range areas {
 			if area.ID == id {
@@ -42,19 +47,15 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 				if len(current.Interfaces) > 0 {
 					return current, errors.New("OSPF area still has interface bindings; remove them before destroying the area")
 				}
-				document, err := d.RunningConfig(ctx)
-				if err != nil {
+				if err := before.CheckOSPFAreaDelete(id); err != nil {
 					return current, err
 				}
-				if err := document.CheckOSPFAreaDelete(id); err != nil {
-					return current, err
-				}
-				endpoint = path.Join(ospfAreasPath, "area="+url.PathEscape(current.key))
+				endpoint = path.Join(ospfAreasPath, "area="+url.PathEscape(areaKey(cached, id)))
 				method = http.MethodDelete
 			}
 			writeErr := update.REST(method, endpoint, body)
-			observed, readErr := configuredAreas(ctx, d)
-			if readErr != nil && !errors.Is(readErr, fastiron.ErrNotFound) {
+			observed, _, readErr := nativeAreas(ctx, d)
+			if readErr != nil {
 				return nil, errors.Join(writeErr, readErr)
 			}
 			current = nil
@@ -89,8 +90,12 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 		return false, err
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (bool, error) {
-		areas, err := configuredAreas(ctx, d)
+		cached, err := cachedAreas(ctx, d)
 		if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
+			return false, err
+		}
+		areas, before, err := nativeAreas(ctx, d)
+		if err != nil {
 			return false, err
 		}
 		var target *area
@@ -107,16 +112,12 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 			return false, errors.New("OSPF area does not exist; create it before binding the interface")
 		}
 		if exists != present {
-			endpoint := path.Join(ospfAreasPath, "area="+url.PathEscape(target.key), "interfaces")
+			endpoint := path.Join(ospfAreasPath, "area="+url.PathEscape(areaKey(cached, id)), "interfaces")
 			method := http.MethodPost
 			var body any = map[string]any{"interface": []any{map[string]any{"id": name, "config": map[string]any{"id": name}}}}
 			if !present {
 				// Unbinding must not erase independently configured OSPF interface options.
-				document, err := d.RunningConfig(ctx)
-				if err != nil {
-					return exists, err
-				}
-				if err := document.CheckOSPFBindingDelete(id, name); err != nil {
+				if err := before.CheckOSPFBindingDelete(id, name); err != nil {
 					return exists, err
 				}
 				endpoint = path.Join(endpoint, "interface="+url.PathEscape(name))
@@ -124,7 +125,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 				body = nil
 			}
 			writeErr := update.REST(method, endpoint, body)
-			observed, readErr := configuredAreas(ctx, d)
+			observed, _, readErr := nativeAreas(ctx, d)
 			if readErr != nil {
 				return exists, errors.Join(writeErr, readErr)
 			}
@@ -154,4 +155,13 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 		}
 		return exists, nil
 	})
+}
+
+func areaKey(cached []area, id string) string {
+	for _, entry := range cached {
+		if entry.ID == id {
+			return entry.key
+		}
+	}
+	return id
 }

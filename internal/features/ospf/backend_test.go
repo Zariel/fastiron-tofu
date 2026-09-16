@@ -35,7 +35,7 @@ func TestOSPFAreas(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			areas, err := readAreas(context.Background(), d)
+			areas, err := cachedAreas(context.Background(), d)
 			if (err != nil) != tc.failure {
 				t.Fatalf("areas=%v error=%v", areas, err)
 			}

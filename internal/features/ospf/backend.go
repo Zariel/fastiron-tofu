@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zariel/fastiron-tofu/internal/config"
 	"github.com/zariel/fastiron-tofu/internal/fastiron"
 	"github.com/zariel/fastiron-tofu/internal/features/address"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
@@ -56,14 +57,31 @@ func normalizeAreaID(value string) (string, error) {
 }
 
 func readAreas(ctx context.Context, d *fastiron.Device) ([]area, error) {
-	areas, err := configuredAreas(ctx, d)
-	if errors.Is(err, fastiron.ErrNotFound) {
-		return []area{}, nil
+	if _, err := cachedAreas(ctx, d); err != nil && !errors.Is(err, fastiron.ErrNotFound) {
+		return nil, err
 	}
+	areas, _, err := nativeAreas(ctx, d)
 	return areas, err
 }
 
-func configuredAreas(ctx context.Context, d *fastiron.Device) ([]area, error) {
+func nativeAreas(ctx context.Context, d *fastiron.Device) ([]area, *config.Document, error) {
+	document, err := d.RunningConfig(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	native, err := document.OSPFAreas()
+	if err != nil {
+		return nil, document, err
+	}
+	areas := []area{}
+	for id, names := range native {
+		areas = append(areas, area{ID: id.String(), Interfaces: names})
+	}
+	slices.SortFunc(areas, func(a, b area) int { return strings.Compare(a.ID, b.ID) })
+	return areas, document, nil
+}
+
+func cachedAreas(ctx context.Context, d *fastiron.Device) ([]area, error) {
 	if !d.RESTCONFEnabled() {
 		return nil, errors.New("OSPF areas currently require RESTCONF")
 	}
