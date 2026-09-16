@@ -70,6 +70,7 @@ func (p *fastironProvider) Resources(context.Context) []func() resource.Resource
 		func() resource.Resource { return address.NewIPv4Resource() },
 		func() resource.Resource { return address.NewIPv6Resource() },
 		func() resource.Resource { return &lag.Resource{} },
+		func() resource.Resource { return lag.NewInterfaceResource() },
 		func() resource.Resource { return &route.Resource{} },
 		func() resource.Resource { return &ospf.AreaResource{} },
 		func() resource.Resource { return &ospf.InterfaceResource{} },

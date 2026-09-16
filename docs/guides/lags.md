@@ -13,7 +13,7 @@ resource "fastiron_lag" "storage" {
 
 Use `dynamic` for LACP or `static` for a static aggregate. Changing `mode` or `lag_id` requires replacement; renaming updates the existing aggregate. An explicit empty `members` set creates an empty aggregate. Import with `tofu import fastiron_lag.storage 'lag 5'`.
 
-Writing aggregate interface descriptions and administrative state is not yet implemented. The LAG name above identifies the aggregate; it is not an interface description.
+The LAG name above identifies the aggregate; it is not an interface description.
 
 Members must satisfy FastIron's LAG formation rules, including matching speeds and compatible port attributes. Remove independent VLAN memberships and routed configuration before adding a port. The provider rejects members already belonging to another LAG.
 
@@ -24,6 +24,32 @@ Deleting a LAG through CLI on tested FastIron `09.0.10kT213` copies its STP prot
 If saving fails, `persistence_pending` remains true so a subsequent apply can finish saving the observed configuration.
 
 Remove VLAN relationships and independent interface or protocol settings before destroying the LAG. Deletion rejects remaining independent child configuration. Member-name and member-disable clauses do not block removal: names survive detach and detached members remain disabled.
+
+## Interface settings
+
+`fastiron_interface_lag` owns the virtual interface's description and administrative state. It does not create the aggregate or manage its membership:
+
+```hcl
+resource "fastiron_interface_lag" "storage" {
+  lag_id    = fastiron_lag.storage.lag_id
+  port_name = "Storage network"
+  enabled   = true
+
+  lifecycle {
+    replace_triggered_by = [fastiron_lag.storage.id]
+  }
+}
+```
+
+The lifecycle rule replaces the interface policy when its parent is replaced, including mode changes that retain the same numeric ID. A numeric `lag_id` reference alone does not establish that replacement behavior. Parent renaming retains the interface policy. Changing `lag_id` replaces the policy and resets the old interface first.
+
+`port_name` defaults to an empty string and `enabled` defaults to true. Omission and destruction restore those defaults. Non-default settings require at least one member; RESTCONF can acknowledge writes to an empty aggregate without creating native interface settings.
+
+An administrative transition enables or disables all members using FastIron's native behavior. Previous member states are not restored. When the virtual interface is already enabled, description changes and no-change applies preserve independently disabled members. Individual member names, STP policy, VLAN relationships and other interface configuration remain independently owned.
+
+Import with `tofu import fastiron_interface_lag.storage 'lag 5'`. Import and refresh read native configuration without writing or saving. If the parent disappears, refresh removes ordinary policy state without clearing settings left on detached ports. A failed deletion remains addressable while `persistence_pending` is true so another apply can finish saving.
+
+Failed updates can retry persistence without repeating configuration writes when native settings already match. OpenTofu can taint a failed creation and replace that policy on retry.
 
 ## Discovery
 
