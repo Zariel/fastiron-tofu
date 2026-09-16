@@ -2,6 +2,8 @@
 
 `fastiron_router_ospf_area` owns an OSPF area in the default VRF. `fastiron_router_ospf_interface` independently owns one interface's binding to an area.
 
+The [complete OSPF example](../../examples/ospf/main.tf) includes provider configuration, area and binding dependencies, and both discovery queries. It expects an existing interface with IP configuration.
+
 ```hcl
 resource "fastiron_router_ospf_area" "transit" {
   area_id = "0.0.0.53"
