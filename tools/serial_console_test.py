@@ -39,6 +39,7 @@ class ConsoleTest(unittest.TestCase):
             ("configure terminal", "configure terminal\r\nswitch(config)#"),
             ("ipv6 router pim", "ipv6 router pim\r\nipv6 unicast-routing must be enabled before ipv6 PIM can be enabled\r\nswitch(config)#"),
             ("interface ethernet 1/1/9", "interface ethernet 1/1/9\r\nreceived NULL prompt string for interface ethernet 1/1/9 \r\nAnother configuration is in-progress. Please try again.\r\nswitch(config)#"),
+            ("route-only", "route-only\r\nRoute-only cannot be applied on a physical port that is part of a VE\r\nswitch(config-if-e1000-1/1/9)#"),
             ("bad command", "bad command\r\n% Invalid input: private-value\r\nswitch#"),
         ]
 
@@ -81,6 +82,8 @@ class ConsoleTest(unittest.TestCase):
                         console.command("ipv6 router pim")
                     with self.assertRaisesRegex(ConsoleError, "Another configuration"):
                         console.command("interface ethernet 1/1/9")
+                    with self.assertRaisesRegex(ConsoleError, "Route-only cannot be applied"):
+                        console.command("route-only")
                     with self.assertRaisesRegex(ConsoleError, "batch stopped"):
                         console.command("bad command")
                 finally:
