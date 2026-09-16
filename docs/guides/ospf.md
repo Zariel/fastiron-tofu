@@ -28,6 +28,8 @@ Use dotted area identifiers, including `0.0.0.0` for the backbone. The provider 
 
 Reads, imports, drift detection, and write verification use native running configuration. FastIron's RESTCONF cache can omit a newly configured area or retain outdated bindings. RESTCONF supplies write paths and capability checks, but its cached contents do not establish native presence or absence. A successful REST response without the requested native change fails reconciliation and is not saved.
 
+On the tested firmware, deleting an area through the CLI can leave a cached RESTCONF area. Recreation requests can then return success without creating native configuration. The provider identifies this mismatch and does not save. A later provider apply succeeded in testing, so a failed recreation does not establish that the area is permanently unavailable; inspect the native configuration and retry rather than assuming the earlier REST response created it.
+
 Create the interface and its IP configuration before binding it to OSPF. Interface names use native forms such as `ve 53`, `ethernet 1/1/3`, or `lag 5`; availability depends on the firmware and interface configuration. Changing an area ID or binding replaces that resource. An interface already bound to another area must be unbound first.
 
 For routed Ethernet or LAG interfaces, ensure the physical ports are not members of a VLAN with a VE before enabling `route-only` and assigning IP addresses. FastIron can reject `route-only` while a port belongs to a VE; IP address configuration may then be unavailable. OSPF resources do not manage these routing prerequisites.

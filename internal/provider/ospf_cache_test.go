@@ -66,7 +66,7 @@ resource "fastiron_router_ospf_interface" "test" {
 	delete(s.ospf.areas, "0.0.0.53")
 	s.ospf.ignoreWrites = true
 	s.mu.Unlock()
-	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "OSPF area did not converge") {
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "OSPF area did not converge") || !strings.Contains(out, "RESTCONF already listed the area") {
 		t.Fatalf("missing area convergence diagnostic: %s", out)
 	}
 	s.mu.Lock()

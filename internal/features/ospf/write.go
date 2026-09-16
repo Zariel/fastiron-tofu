@@ -65,6 +65,9 @@ func applyArea(ctx context.Context, d *fastiron.Device, id string, present bool)
 				}
 			}
 			if (current != nil) != present {
+				if present && slices.ContainsFunc(cached, func(area area) bool { return area.ID == id }) {
+					return nil, errors.Join(writeErr, errors.New("OSPF area did not converge: RESTCONF already listed the area, but it is still absent from native configuration"))
+				}
 				return nil, errors.Join(writeErr, errors.New("OSPF area did not converge"))
 			}
 			if err := after.CheckOSPFAreaUpdate(before, id); err != nil {
