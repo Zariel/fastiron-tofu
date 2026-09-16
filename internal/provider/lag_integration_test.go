@@ -17,6 +17,7 @@ type lagPort struct {
 
 type lagSwitch struct {
 	names, modes                      map[string]string
+	cachedNames                       map[string]string
 	ports                             map[string]lagPort
 	child                             bool
 	deleteMissing                     bool
@@ -77,6 +78,9 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 			entries = append(entries, map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:ethernetCsmacd", "description": "preserved", "enabled": port.enabled}, "openconfig-if-ethernet:ethernet": map[string]any{"config": config}})
 		}
 		for name, label := range s.names {
+			if s.cachedNames != nil {
+				label = s.cachedNames[name]
+			}
 			entries = append(entries, map[string]any{"name": name, "config": map[string]any{"name": name, "type": "iana-if-type:ieee8023adLag"}, "openconfig-if-aggregate:aggregation": map[string]any{"config": map[string]any{"lag-type": s.modes[name], "openconfig-if-aggregate-aug:lag-name": label}}})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"openconfig-interfaces:interfaces": map[string]any{"interface": entries}})
@@ -125,7 +129,13 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(404)
 				return
 			}
-			s.names[entry.Name] = entry.Aggregation.Config["openconfig-if-aggregate-aug:lag-name"]
+			label := entry.Aggregation.Config["openconfig-if-aggregate-aug:lag-name"]
+			if !exists || s.cachedNames == nil || s.cachedNames[entry.Name] != label {
+				s.names[entry.Name] = label
+			}
+			if s.cachedNames != nil {
+				s.cachedNames[entry.Name] = label
+			}
 			if !exists {
 				s.modes[entry.Name] = entry.Aggregation.Config["lag-type"]
 			}
@@ -171,6 +181,7 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		}
 		name := strings.TrimPrefix(path, "/interface=")
 		delete(s.names, name)
+		delete(s.cachedNames, name)
 		delete(s.modes, name)
 		for key, port := range s.ports {
 			if port.aggregate == name {
@@ -188,8 +199,10 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 func TestOpenTofuLAG(t *testing.T) {
 	s := newSwitch(t)
 	s.lags = &lagSwitch{names: map[string]string{"lag 54": "neighbor"}, modes: map[string]string{"lag 54": "STATIC"}, ports: map[string]lagPort{"ethernet 1/1/7": {enabled: true}, "ethernet 1/1/8": {enabled: false}, "ethernet 1/1/9": {enabled: true, aggregate: "lag 54"}}}
+	s.lags.cachedNames = map[string]string{"lag 54": "neighbor"}
 	s.startupLAG = s.lags.configuration()
 	write, run, base := tofuFixture(t, s)
+	base = strings.Replace(base, `provider "fastiron" {`, "provider \"fastiron\" {\n operation_timeout = \"2s\"", 1)
 	config := func(name, mode string, members ...string) {
 		values := []string{}
 		for _, member := range members {

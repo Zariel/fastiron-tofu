@@ -163,6 +163,12 @@ func applyLAG(ctx context.Context, d *fastiron.Device, v config) (*config, error
 				aggregation["lag-type"] = mode
 				method = http.MethodPost
 				body = map[string]any{"interface": []any{entry}}
+			} else {
+				// A cached desired name can mask CLI drift. Prime with the native
+				// name without intervening reads; Update retains any mutation error.
+				aggregation["openconfig-if-aggregate-aug:lag-name"] = current.Name
+				update.REST(method, "/interfaces", body)
+				aggregation["openconfig-if-aggregate-aug:lag-name"] = v.Name
 			}
 			writeErr := update.REST(method, "/interfaces", body)
 			observed, readErr := waitLAG(ctx, d, v.ID, func(lag *config) bool { return lag != nil && lag.Name == v.Name && lag.Mode == v.Mode })
