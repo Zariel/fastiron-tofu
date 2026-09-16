@@ -39,6 +39,8 @@ data "fastiron_static_route" "network" {
 
 It returns those selectors, the canonical `id` and native `distance`, without writing or saving. A missing native route is an error even if RESTCONF retains its entry.
 
+The single-route query has been verified through OpenTofu on FastIron `09.0.10kT213` against an unsaved CLI-created route with an independently owned name. The output matched native configuration, the plan was empty, and serial snapshots confirmed that the query neither changed nor saved configuration.
+
 Refresh, queries and mutation readback use parsed native running configuration for route existence and distance. RESTCONF responses are still validated, but cached entries do not override native configuration. Both RESTCONF and SSH access are required. On tested FastIron `09.0.10kT213`, RESTCONF retained an old distance after a CLI route change; native observations expose that drift. An accepted RESTCONF write that does not produce the intended native route is an error and is not saved.
 
 Deletion refuses to erase additional native route options, such as a name, tag, or BFD setting. Remove those options before destroying the route. IPv6 routes, interface or null next hops, non-default VRFs, and additional native options are not yet supported; discovery reports an error for route representations it cannot safely interpret.
