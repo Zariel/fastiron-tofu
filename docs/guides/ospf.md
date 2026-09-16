@@ -23,6 +23,8 @@ Create the interface and its IP configuration before binding it to OSPF. Interfa
 
 Area deletion requires all interface bindings and additional native area options to be removed first. Binding deletion also refuses to erase additional OSPF interface options, such as a configured network type. Other areas and their bindings remain independently managed. Removing the last managed area does not remove the OSPF process.
 
+Binding writes also verify that unrelated native commands remain unchanged, including interface options and non-OSPF settings. If this check fails, the provider reports an error without saving or automatically rolling back the change. Inspect and repair the unexpected configuration before retrying; a partially created binding remains in state with `persistence_pending = true`.
+
 Import existing configuration:
 
 ```sh

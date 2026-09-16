@@ -16,6 +16,7 @@ type ospfSwitch struct {
 	cached                                       map[string][]string
 	ignoreWrites                                 bool
 	missingProtocol                              bool
+	corruptBinding                               bool
 	numeric                                      bool
 	areaOptions, interfaceOptions, hiddenBinding bool
 }
@@ -137,6 +138,9 @@ func (s *ospfSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "POST" && suffix == "interfaces" {
+		if s.corruptBinding {
+			s.interfaceOptions = true
+		}
 		var body struct {
 			Interface []struct {
 				ID string `json:"id"`

@@ -125,7 +125,7 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 				body = nil
 			}
 			writeErr := update.REST(method, endpoint, body)
-			observed, _, readErr := nativeAreas(ctx, d)
+			observed, after, readErr := nativeAreas(ctx, d)
 			if readErr != nil {
 				return exists, errors.Join(writeErr, readErr)
 			}
@@ -138,19 +138,8 @@ func applyInterface(ctx context.Context, d *fastiron.Device, id, name string, pr
 			if exists != present {
 				return exists, errors.Join(writeErr, errors.New("OSPF interface binding did not converge"))
 			}
-			for _, neighbor := range areas {
-				index := slices.IndexFunc(observed, func(area area) bool { return area.ID == neighbor.ID })
-				if index < 0 {
-					return exists, errors.New("OSPF binding operation removed an area")
-				}
-				for _, other := range neighbor.Interfaces {
-					if neighbor.ID == id && other == name {
-						continue
-					}
-					if !slices.Contains(observed[index].Interfaces, other) {
-						return exists, errors.New("OSPF binding operation changed an unrelated interface")
-					}
-				}
+			if err := after.CheckOSPFBindingUpdate(before, id, name); err != nil {
+				return exists, err
 			}
 		}
 		return exists, nil
