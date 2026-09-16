@@ -113,6 +113,8 @@ It returns `lag_id`, canonical `name`, `port_name` and `enabled`. An omitted int
 
 The query also returns RESTCONF observations in `ifindex`, `admin_status`, `oper_status` and `counters`. Omitted values are null; counters retain unsigned 64-bit precision. These fields are not managed by the interface resource. Reported operational status does not describe individual LACP partners or prove that every member is forwarding. Native `enabled` and reported `admin_status` come from separate observations and can differ while the switch synchronizes.
 
+Status and counter queries have been verified through OpenTofu against an existing dynamic LAG on FastIron `09.0.10kT213`. RESTCONF snapshots confirmed the reported index, statuses and 16 counter fields; serial `show interfaces lag` independently confirmed the operational state. Running and saved configuration remained unchanged. That LAG was operationally down, so counter movement under traffic has not been validated.
+
 On tested FastIron `09.0.10kT213`, query validation covers individual disabled members, interface description and disable state, CLI default resets, empty plans and parent deletion. Independent serial checks confirmed unchanged running and saved configuration across queries.
 
 Immediately after an external LAG change, RESTCONF may briefly report a member referencing a deleted LAG. Discovery waits for this inconsistency to clear within `operation_timeout`. If synchronization does not finish, discovery reports an error; allow the switch to synchronize, then rerun the plan.
