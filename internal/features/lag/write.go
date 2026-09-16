@@ -255,6 +255,12 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 		if err := document.CheckLAGRemoval(id, current.Members); err != nil {
 			return err
 		}
+		// FastIron can rebuild default STP references after policy cleanup.
+		// The native child guard above confirms there is no policy to erase;
+		// remove the reference immediately before its parent, without readback between them.
+		if err := update.DeleteIfPresent(path.Join("/stp/interfaces", "interface="+url.PathEscape(name))); err != nil {
+			return err
+		}
 		writeErr := update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
 		if errors.Is(writeErr, restconf.ErrNotFound) {
 			// RESTCONF can expose a native aggregate it cannot delete. Confirm

@@ -312,6 +312,11 @@ func (s *testSwitch) restconf(w http.ResponseWriter, r *http.Request) {
 		s.lags.rest(w, r)
 		return
 	}
+	if s.lags != nil && r.Method == "DELETE" && r.URL.Path == "/restconf/data/stp/interfaces/interface=lag 53" {
+		s.lags.stpReference = false
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if s.routes != nil && strings.HasPrefix(r.URL.Path, "/restconf/data/network-instances/network-instance=default-vrf/protocols") {
 		s.routes.rest(w, r)
 		return

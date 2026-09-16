@@ -16,10 +16,11 @@ type lagPort struct {
 }
 
 type lagSwitch struct {
-	names, modes  map[string]string
-	ports         map[string]lagPort
-	child         bool
-	deleteMissing bool
+	names, modes                      map[string]string
+	ports                             map[string]lagPort
+	child                             bool
+	deleteMissing                     bool
+	stpReference, restoreSTPReference bool
 }
 
 func (s *lagSwitch) configuration() string {
@@ -64,6 +65,9 @@ func (s *lagSwitch) configuration() string {
 func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/restconf/data/interfaces")
 	if r.Method == "GET" && path == "" {
+		if s.restoreSTPReference && s.names["lag 53"] != "" {
+			s.stpReference = true
+		}
 		entries := []any{}
 		for name, port := range s.ports {
 			config := map[string]any{}
@@ -161,7 +165,7 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.HasPrefix(path, "/interface=lag ") && r.Method == "DELETE" {
-		if s.deleteMissing {
+		if s.deleteMissing || s.stpReference {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -335,5 +339,40 @@ func TestOpenTofuLAGDeleteMissing(t *testing.T) {
 	defer s.mu.Unlock()
 	if s.startupLAG != s.lags.configuration() || s.lags.ports["ethernet 1/1/7"].enabled {
 		t.Fatal("cleanup did not persist native disabled-member state")
+	}
+}
+
+func TestOpenTofuLAGReference(t *testing.T) {
+	s := newSwitch(t)
+	s.lags = &lagSwitch{
+		names:               map[string]string{"lag 53": "test", "lag 54": "neighbor"},
+		modes:               map[string]string{"lag 53": "STATIC", "lag 54": "STATIC"},
+		ports:               map[string]lagPort{"ethernet 1/1/7": {enabled: true, aggregate: "lag 53"}, "ethernet 1/1/9": {enabled: true, aggregate: "lag 54"}},
+		restoreSTPReference: true,
+	}
+	s.startupLAG = s.lags.configuration()
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base+`resource "fastiron_lag" "test" {
+ lag_id = 53
+ name = "test"
+ mode = "static"
+ members = ["ethernet 1/1/7"]
+}`)
+	run(0, "init", "-no-color")
+	run(0, "import", "-no-color", "fastiron_lag.test", "lag 53")
+	write("main.tf", base)
+
+	run(0, "apply", "-auto-approve", "-no-color")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lags.names["lag 53"] != "" || s.lags.ports["ethernet 1/1/7"] != (lagPort{}) {
+		t.Fatal("LAG was not removed with its member disabled")
+	}
+	if s.lags.names["lag 54"] != "neighbor" || s.lags.ports["ethernet 1/1/9"] != (lagPort{enabled: true, aggregate: "lag 54"}) {
+		t.Fatal("deletion changed the neighboring LAG")
+	}
+	if s.startupLAG != s.lags.configuration() {
+		t.Fatal("deletion was not persisted")
 	}
 }
