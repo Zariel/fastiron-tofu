@@ -64,7 +64,7 @@ A failed configuration request remains an error even if readback shows that the 
 - Management-VLAN selection is not exposed. On the tested router image, the documented RESTCONF management-VLAN paths returned HTTP 400 with `unknown resource`, and the native `management-vlan` command was rejected. The command reference limits this feature to switch images.
 - Spanning tree currently manages per-VLAN STP/RSTP mode and priority, plus Ethernet and LAG admin-edge, BPDU guard and root guard; see [spanning-tree ownership and limits](guides/spanning-tree.md).
 - OSPF currently manages area existence and interface bindings; see [OSPF ownership and limits](guides/ospf.md).
-- Static routes currently support IPv4 gateways in the default VRF; see [route ownership and limits](guides/routes.md).
+- Static routes currently support IPv4 gateways in the default VRF. Lifecycle, native drift recovery, guarded deletion and reboot persistence passed independent running/saved checks while preserving a neighboring next hop's CLI-only name; see [route ownership and limits](guides/routes.md).
 - VE administrative enable state is not currently managed.
 - DNS IPv4 succeeded on the tested build; its endpoint rejected IPv6 DNS addresses.
 - PoE enable, priority, allocation class and explicit limit workflows passed native and saved configuration checks, drift repair, import, defaults, replacement, deletion and reboot persistence. Secondary LAG-member priority, limit, class, import and default deletion also passed native, saved-state and query checks. Tests used disconnected ports; reported power measurements under load have not been validated.
