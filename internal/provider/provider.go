@@ -113,6 +113,7 @@ func (p *fastironProvider) DataSources(context.Context) []func() datasource.Data
 		func() datasource.DataSource { return stormcontrol.NewDataSource() },
 		func() datasource.DataSource { return &address.DataSource{} },
 		func() datasource.DataSource { return &lag.DataSource{} },
+		func() datasource.DataSource { return lag.NewSingleDataSource() },
 		func() datasource.DataSource { return lag.NewInterfaceDataSource() },
 		func() datasource.DataSource { return &route.DataSource{} },
 		func() datasource.DataSource { return &ospf.DataSource{} },

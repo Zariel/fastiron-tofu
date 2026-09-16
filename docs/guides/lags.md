@@ -72,6 +72,17 @@ The `lags` map is keyed by canonical interface name, such as `lag 1`. Each entry
 
 Membership describes configuration, including disconnected members. It does not indicate link health or whether LACP has formed a working aggregate.
 
+`fastiron_lag` selects one aggregate by its numeric identity:
+
+```hcl
+data "fastiron_lag" "storage" {
+  lag_id     = fastiron_lag.storage.lag_id
+  depends_on = [fastiron_lag.storage]
+}
+```
+
+It returns `lag_id`, canonical `id`, configured aggregate `name`, `mode` and the complete `members` set. An empty aggregate has an empty member set; a missing native aggregate is an error, even if RESTCONF retains its entry. Both aggregate queries use native configuration and validate membership against the physical-interface inventory without writing or saving.
+
 Use `fastiron_interface_lag` to read a single aggregate's native interface description and administrative state:
 
 ```hcl
