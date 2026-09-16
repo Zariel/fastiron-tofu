@@ -16,9 +16,10 @@ type lagPort struct {
 }
 
 type lagSwitch struct {
-	names, modes map[string]string
-	ports        map[string]lagPort
-	child        bool
+	names, modes  map[string]string
+	ports         map[string]lagPort
+	child         bool
+	deleteMissing bool
 }
 
 func (s *lagSwitch) configuration() string {
@@ -160,6 +161,10 @@ func (s *lagSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.HasPrefix(path, "/interface=lag ") && r.Method == "DELETE" {
+		if s.deleteMissing {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		name := strings.TrimPrefix(path, "/interface=")
 		delete(s.names, name)
 		delete(s.modes, name)
@@ -282,4 +287,53 @@ func TestOpenTofuLAG(t *testing.T) {
 	write("main.tf", base)
 	run(0, "apply", "-auto-approve", "-no-color")
 	check(false, false)
+}
+
+func TestOpenTofuLAGDeleteMissing(t *testing.T) {
+	s := newSwitch(t)
+	s.lags = &lagSwitch{names: map[string]string{"lag 53": "imported"}, modes: map[string]string{"lag 53": "STATIC"}, ports: map[string]lagPort{"ethernet 1/1/7": {enabled: true, aggregate: "lag 53"}}, deleteMissing: true}
+	original := s.lags.configuration()
+	write, run, base := tofuFixture(t, s)
+	base = strings.Replace(base, `provider "fastiron" {`, `provider "fastiron" {
+ operation_timeout = "2s"`, 1)
+	write("main.tf", base+`resource "fastiron_lag" "test" {
+ lag_id = 53
+ name = "imported"
+ mode = "static"
+ members = ["ethernet 1/1/7"]
+}
+`)
+	run(0, "init", "-no-color")
+	run(0, "import", "-no-color", "fastiron_lag.test", "lag 53")
+	write("main.tf", base)
+	for range 2 {
+		out := run(1, "apply", "-auto-approve", "-no-color")
+		if !strings.Contains(out, "RESTCONF cannot delete native lag 53") {
+			t.Fatalf("missing native deletion diagnostic: %s", out)
+		}
+		s.mu.Lock()
+		unchanged := s.lags.configuration() == original && s.startupLAG == ""
+		s.mu.Unlock()
+		if !unchanged {
+			t.Fatal("refused deletion changed running or saved configuration")
+		}
+	}
+	if out := run(0, "state", "show", "fastiron_lag.test"); !strings.Contains(out, "persistence_pending = true") {
+		t.Fatalf("failed deletion did not retain pending state: %s", out)
+	}
+	// External CLI removal lets a later apply finish the pending deletion.
+	s.mu.Lock()
+	delete(s.lags.names, "lag 53")
+	delete(s.lags.modes, "lag 53")
+	s.lags.ports["ethernet 1/1/7"] = lagPort{enabled: false}
+	s.mu.Unlock()
+	run(0, "apply", "-auto-approve", "-no-color")
+	if out := run(0, "state", "list"); strings.Contains(out, "fastiron_lag.test") {
+		t.Fatalf("retained deleted LAG: %s", out)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.startupLAG != s.lags.configuration() || s.lags.ports["ethernet 1/1/7"].enabled {
+		t.Fatal("cleanup did not persist native disabled-member state")
+	}
 }

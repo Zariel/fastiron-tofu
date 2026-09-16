@@ -16,6 +16,7 @@ import (
 	"github.com/zariel/fastiron-tofu/internal/features/ethernet"
 	"github.com/zariel/fastiron-tofu/internal/features/vlan"
 	"github.com/zariel/fastiron-tofu/internal/interfaceid"
+	"github.com/zariel/fastiron-tofu/internal/transport/restconf"
 )
 
 func validate(v config) error {
@@ -233,30 +234,46 @@ func deleteLAG(ctx context.Context, d *fastiron.Device, id int64) error {
 
 	return d.Update(ctx, func(update *fastiron.Update) error {
 		current, err := readLAG(ctx, d, id)
-		if err != nil && !errors.Is(err, fastiron.ErrNotFound) {
+		if errors.Is(err, fastiron.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
-		if err == nil {
-			name := "lag " + strconv.FormatInt(id, 10)
-			port, err := vlan.ReadSwitchport(ctx, d, name)
-			if err != nil {
-				return err
-			}
-			if port.Access > 1 || len(port.Trunks) > 0 {
-				return errors.New("LAG has VLAN memberships; remove them before destroying it")
-			}
+		name := "lag " + strconv.FormatInt(id, 10)
+		port, err := vlan.ReadSwitchport(ctx, d, name)
+		if err != nil {
+			return err
+		}
+		if port.Access > 1 || len(port.Trunks) > 0 {
+			return errors.New("LAG has VLAN memberships; remove them before destroying it")
+		}
+		document, err := d.RunningConfig(ctx)
+		if err != nil {
+			return err
+		}
+		if err := document.CheckLAGRemoval(id, current.Members); err != nil {
+			return err
+		}
+		writeErr := update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
+		if errors.Is(writeErr, restconf.ErrNotFound) {
+			// RESTCONF can expose a native aggregate it cannot delete. Confirm
+			// existence after the request before directing the operator to CLI.
 			document, err := d.RunningConfig(ctx)
 			if err != nil {
 				return err
 			}
-			if err := document.CheckLAGRemoval(id, current.Members); err != nil {
+			present, err := document.HasLAG(id)
+			if err != nil {
 				return err
 			}
-			writeErr := update.REST(http.MethodDelete, path.Join("/interfaces", "interface="+url.PathEscape(name)), nil)
-			_, readErr := waitLAG(ctx, d, id, func(lag *config) bool { return lag == nil })
-			if readErr != nil {
-				return errors.Join(writeErr, readErr)
+			if present {
+				return fmt.Errorf("RESTCONF cannot delete native lag %d; remove the LAG through CLI, then retry apply to finish persistence", id)
 			}
+		}
+		_, readErr := waitLAG(ctx, d, id, func(lag *config) bool { return lag == nil })
+		if readErr != nil {
+			return errors.Join(writeErr, readErr)
 		}
 
 		return nil
