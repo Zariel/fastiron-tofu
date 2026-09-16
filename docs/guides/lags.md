@@ -55,6 +55,8 @@ Failed updates can retry persistence without repeating configuration writes when
 
 On FastIron `09.0.10kT213`, hardware validation covered combined aggregate and interface creation, CLI description drift repair, administrative transitions, import, omitted defaults, forced policy replacement, parent mode replacement and parent identity replacement. Independent serial checks verified running and saved configuration, individual member names and unrelated settings. The replaced aggregate and interface policy survived reboot with identical running and saved configuration, matching queries and an empty OpenTofu plan. Independently disabled members remained disabled while the virtual interface was enabled.
 
+A subsequent post-reboot interface-policy deletion timed out without changing native or saved configuration, leaving RESTCONF reads timing out and CLI interface configuration blocked. Interface-policy deletion is therefore not yet reliable on this tested build. The synchronization-stall recovery described below requires serial access; successful reboot persistence does not establish reliable cleanup.
+
 ## Discovery
 
 `fastiron_lags` reports native aggregate names, modes and Ethernet membership, checked against the RESTCONF physical-interface inventory. Stale cached aggregates are excluded, and incomplete member ranges produce a diagnostic rather than truncated membership.
