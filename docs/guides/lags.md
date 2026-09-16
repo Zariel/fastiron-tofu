@@ -13,7 +13,7 @@ resource "fastiron_lag" "storage" {
 
 Use `dynamic` for LACP or `static` for a static aggregate. Changing `mode` or `lag_id` requires replacement; renaming updates the existing aggregate. An explicit empty `members` set creates an empty aggregate. Import with `tofu import fastiron_lag.storage 'lag 5'`.
 
-Aggregate interface descriptions and administrative-state management are not yet implemented. The LAG name above identifies the aggregate; it is not an interface description.
+Writing aggregate interface descriptions and administrative state is not yet implemented. The LAG name above identifies the aggregate; it is not an interface description.
 
 Members must satisfy FastIron's LAG formation rules, including matching speeds and compatible port attributes. Remove independent VLAN memberships and routed configuration before adding a port. The provider rejects members already belonging to another LAG.
 
@@ -45,6 +45,18 @@ The `lags` map is keyed by canonical interface name, such as `lag 1`. Each entry
 - `members`: a set of canonical Ethernet names, such as `ethernet 1/2/1`.
 
 Membership describes configuration, including disconnected members. It does not indicate link health or whether LACP has formed a working aggregate.
+
+Use `fastiron_interface_lag` to read a single aggregate's native interface description and administrative state:
+
+```hcl
+data "fastiron_interface_lag" "storage" {
+  lag_id = fastiron_lag.storage.lag_id
+}
+```
+
+It returns `lag_id`, canonical `name`, `port_name` and `enabled`. An omitted interface description is an empty string. `enabled` describes the virtual interface: individual members can remain disabled while it is true. Member names and the aggregate's configured LAG name are separate settings. The query requires RESTCONF and SSH access, performs no writes or saves, and reports an error if the native LAG is missing even when RESTCONF retains its entry.
+
+On tested FastIron `09.0.10kT213`, query validation covers individual disabled members, interface description and disable state, CLI default resets, empty plans and parent deletion. Independent serial checks confirmed unchanged running and saved configuration across queries.
 
 Immediately after an external LAG change, RESTCONF may briefly report a member referencing a deleted LAG. Discovery waits for this inconsistency to clear within `operation_timeout`. If synchronization does not finish, discovery reports an error; allow the switch to synchronize, then rerun the plan.
 
