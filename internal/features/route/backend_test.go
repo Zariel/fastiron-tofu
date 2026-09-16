@@ -2,6 +2,7 @@ package route
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -35,7 +36,7 @@ func TestStaticRoutes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			routes, err := readRoutes(context.Background(), d)
+			routes, err := cachedRoutes(context.Background(), d)
 			if (err != nil) != tc.failure || len(routes) != tc.count {
 				t.Fatalf("routes=%v error=%v", routes, err)
 			}
@@ -69,7 +70,10 @@ func TestStaticProtocolAbsence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			routes, err := readRoutes(context.Background(), d)
+			routes, err := cachedRoutes(context.Background(), d)
+			if errors.Is(err, fastiron.ErrNotFound) {
+				err = nil
+			}
 			if len(routes) != 0 || (err != nil) != tc.failure {
 				t.Fatalf("routes=%v error=%v", routes, err)
 			}

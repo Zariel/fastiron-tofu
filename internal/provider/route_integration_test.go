@@ -14,6 +14,8 @@ import (
 type routeSwitch struct {
 	protocol         bool
 	running, startup map[string]int64
+	cached           map[string]int64
+	ignoreWrites     bool
 	extra            string
 }
 
@@ -45,7 +47,11 @@ func (s *routeSwitch) rest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		prefixes := map[string][]any{}
-		for key, distance := range s.running {
+		routes := s.running
+		if s.cached != nil {
+			routes = s.cached
+		}
+		for key, distance := range routes {
 			prefix, gateway, _ := strings.Cut(key, "|")
 			prefixes[prefix] = append(prefixes[prefix], map[string]any{"index": gateway, "config": map[string]any{"index": gateway, "next-hop": gateway, "metric": distance}})
 		}
@@ -54,6 +60,10 @@ func (s *routeSwitch) rest(w http.ResponseWriter, r *http.Request) {
 			entries = append(entries, map[string]any{"prefix": prefix, "config": map[string]any{"prefix": prefix}, "next-hops": map[string]any{"next-hop": hops}})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"openconfig-network-instance:static-routes": map[string]any{"static": entries}})
+		return
+	}
+	if s.ignoreWrites {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method == "DELETE" {
@@ -66,6 +76,7 @@ func (s *routeSwitch) rest(w http.ResponseWriter, r *http.Request) {
 		prefix, _ = url.PathUnescape(prefix)
 		gateway, _ = url.PathUnescape(gateway)
 		delete(s.running, prefix+"|"+gateway)
+		delete(s.cached, prefix+"|"+gateway)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -131,6 +142,9 @@ func (s *routeSwitch) rest(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.running[key] = hop.Config.Metric
+			if s.cached != nil {
+				s.cached[key] = hop.Config.Metric
+			}
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -202,4 +216,80 @@ output "routes" { value = data.fastiron_static_routes.test.routes }
 	run(0, "apply", "-auto-approve", "-no-color")
 	check(map[string]int64{"198.18.53.0/24|192.0.2.3": 201})
 	run(0, "plan", "-detailed-exitcode", "-no-color")
+}
+
+func TestOpenTofuRouteCache(t *testing.T) {
+	const target = "198.18.53.0/24|192.0.2.2"
+	const neighbor = "198.18.53.0/24|192.0.2.3"
+	s := newSwitch(t)
+	s.routes = &routeSwitch{
+		protocol: true,
+		running:  map[string]int64{target: 200, neighbor: 201},
+		startup:  map[string]int64{target: 200, neighbor: 201},
+		cached:   map[string]int64{target: 1, neighbor: 201},
+	}
+	write, run, base := tofuFixture(t, s)
+	write("main.tf", base+`resource "fastiron_ip_route" "test" {
+ prefix = "198.18.53.0/24"
+ next_hop = "192.0.2.2"
+ distance = 200
+}
+data "fastiron_static_routes" "test" { depends_on = [fastiron_ip_route.test] }
+output "routes" { value = data.fastiron_static_routes.test.routes }
+`)
+	run(0, "init", "-no-color")
+	run(0, "import", "-no-color", "fastiron_ip_route.test", target)
+	if out := run(0, "state", "show", "fastiron_ip_route.test"); !strings.Contains(out, "distance            = 200") {
+		t.Fatalf("import did not report native distance: %s", out)
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+
+	// Native presence remains authoritative while the RESTCONF entry is missing.
+	s.mu.Lock()
+	delete(s.routes.cached, target)
+	s.mu.Unlock()
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.routes.protocol = false
+	s.mu.Unlock()
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	s.routes.protocol = true
+	s.routes.cached[target] = 1
+	s.routes.running[target] = 202
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	run(0, "apply", "-auto-approve", "-no-color")
+	s.mu.Lock()
+	restored := maps.Equal(s.routes.running, map[string]int64{target: 200, neighbor: 201}) && maps.Equal(s.routes.running, s.routes.startup)
+	s.mu.Unlock()
+	if !restored {
+		t.Fatal("distance replacement did not persist native state and preserve neighbor")
+	}
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+
+	// A cached desired route must not hide native deletion or an ignored repair.
+	s.mu.Lock()
+	delete(s.routes.running, target)
+	s.routes.ignoreWrites = true
+	saved := maps.Clone(s.routes.startup)
+	s.mu.Unlock()
+	run(2, "plan", "-detailed-exitcode", "-no-color")
+	if out := run(1, "apply", "-auto-approve", "-no-color"); !strings.Contains(out, "static route did not converge") {
+		t.Fatalf("missing native convergence failure: %s", out)
+	}
+	s.mu.Lock()
+	unchanged := maps.Equal(s.routes.running, map[string]int64{neighbor: 201}) && maps.Equal(s.routes.startup, saved)
+	s.routes.ignoreWrites = false
+	s.mu.Unlock()
+	if !unchanged {
+		t.Fatal("ignored write changed or persisted native configuration")
+	}
+	run(0, "apply", "-auto-approve", "-no-color")
+	run(0, "plan", "-detailed-exitcode", "-no-color")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !maps.Equal(s.routes.running, map[string]int64{target: 200, neighbor: 201}) || !maps.Equal(s.routes.running, s.routes.startup) {
+		t.Fatal("retry did not persist repaired route and preserve neighbor")
+	}
 }

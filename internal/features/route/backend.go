@@ -39,14 +39,14 @@ func validateRoute(v route) error {
 }
 
 func readRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
-	routes, err := configuredRoutes(ctx, d)
-	if errors.Is(err, fastiron.ErrNotFound) {
-		return []route{}, nil
+	// Missing or stale REST objects do not establish native route absence.
+	if _, err := cachedRoutes(ctx, d); err != nil && !errors.Is(err, fastiron.ErrNotFound) {
+		return nil, err
 	}
-	return routes, err
+	return nativeRoutes(ctx, d)
 }
 
-func configuredRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
+func cachedRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
 	if !d.RESTCONFEnabled() {
 		return nil, errors.New("static routes currently require RESTCONF")
 	}
@@ -128,6 +128,22 @@ func configuredRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) 
 			routes = append(routes, route)
 		}
 	}
+	return routes, nil
+}
+
+func nativeRoutes(ctx context.Context, d *fastiron.Device) ([]route, error) {
+	document, err := d.RunningConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	configured, err := document.IPv4Routes()
+	if err != nil {
+		return nil, err
+	}
+	routes := make([]route, 0, len(configured))
+	for _, current := range configured {
+		routes = append(routes, route{Prefix: current.Prefix, NextHop: current.NextHop, Distance: current.Distance})
+	}
 	slices.SortFunc(routes, func(a, b route) int {
 		if n := a.Prefix.Addr().Compare(b.Prefix.Addr()); n != 0 {
 			return n
@@ -145,9 +161,15 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 		return nil, err
 	}
 	return fastiron.Reconcile(ctx, d, func(update *fastiron.Update) (*route, error) {
-		routes, err := configuredRoutes(ctx, d)
+		// Cached containers select the REST request shape; native configuration
+		// determines whether a mutation is needed and whether it took effect.
+		cached, err := cachedRoutes(ctx, d)
 		createProtocol := errors.Is(err, fastiron.ErrNotFound)
 		if err != nil && !createProtocol {
+			return nil, err
+		}
+		routes, err := nativeRoutes(ctx, d)
+		if err != nil {
 			return nil, err
 		}
 		var current *route
@@ -169,7 +191,7 @@ func applyRoute(ctx context.Context, d *fastiron.Device, v route, present bool) 
 				body = map[string]any{"static": []any{route}}
 
 				// POST creates a prefix; PATCH merges a new next hop into an existing one.
-				for _, existing := range routes {
+				for _, existing := range cached {
 					if existing.Prefix == v.Prefix {
 						method = http.MethodPatch
 						body = map[string]any{"openconfig-network-instance:static-routes": body}
