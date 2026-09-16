@@ -89,41 +89,34 @@ func (d *Document) CheckOSPFAreaDelete(id string) error {
 	if err != nil {
 		return err
 	}
-	found := false
+	areas, err := d.OSPFAreas()
+	if err != nil {
+		return err
+	}
+	bindings, found := areas[wanted]
+	if !found {
+		return errors.New("OSPF area was not found in native configuration")
+	}
+	if len(bindings) > 0 {
+		return errors.New("native OSPF configuration still contains an area binding")
+	}
 	for _, c := range d.Commands {
-		if c.Parent < 0 {
+		if c.Parent < 0 || c.kind != ospfArea || !c.options {
 			continue
 		}
 		parent := d.Commands[c.Parent]
-		binding := c.kind == ospfBinding && parent.kind == interfaceStanza
-		area := c.kind == ospfArea && parent.kind == ospfRouter && parent.valid && parent.name == ""
-		if !binding && !area {
+		if parent.kind != ospfRouter || parent.name != "" {
 			continue
-		}
-		if !c.valid {
-			return errors.New("native OSPF area or binding is malformed")
 		}
 		current, err := ospfID(c.name)
 		if err != nil {
 			return err
 		}
-		if current != wanted {
-			continue
-		}
-		if binding {
-			return errors.New("native OSPF configuration still contains an area binding")
-		}
-		if c.options {
+		if current == wanted {
 			return errors.New("OSPF area has additional native options; remove them before destroying the area")
 		}
-		if found {
-			return errors.New("native OSPF configuration repeats the area")
-		}
-		found = true
 	}
-	if !found {
-		return errors.New("OSPF area was not found in native configuration")
-	}
+
 	return nil
 }
 
@@ -141,6 +134,9 @@ func (d *Document) CheckOSPFBindingDelete(id, name string) error {
 	for _, c := range d.Commands {
 		if header < 0 || c.Parent != header {
 			continue
+		}
+		if c.kind == interfaceVRF {
+			return errors.New("OSPF interface belongs to another VRF; default-VRF binding deletion is not permitted")
 		}
 		if c.kind == ospfOption || c.kind == ospfBinding && c.options {
 			return errors.New("interface has additional OSPF options; remove them before destroying its area binding")
