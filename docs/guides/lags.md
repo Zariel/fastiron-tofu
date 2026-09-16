@@ -13,6 +13,8 @@ resource "fastiron_lag" "storage" {
 
 Use `dynamic` for LACP or `static` for a static aggregate. Changing `mode` or `lag_id` requires replacement; renaming updates the existing aggregate. An explicit empty `members` set creates an empty aggregate. Import with `tofu import fastiron_lag.storage 'lag 5'`.
 
+Aggregate interface descriptions and administrative-state management are not yet implemented. The LAG name above identifies the aggregate; it is not an interface description.
+
 Members must satisfy FastIron's LAG formation rules, including matching speeds and compatible port attributes. Remove independent VLAN memberships and routed configuration before adding a port. The provider rejects members already belonging to another LAG.
 
 Removing a member or deleting a LAG disables its detached Ethernet ports, following FastIron's native behavior. This also applies during LAG replacement. The provider does not restore prior port settings. A separately managed Ethernet resource can re-enable a port on a subsequent apply; do not assume this happens within the same apply that detaches it.
@@ -47,6 +49,8 @@ Membership describes configuration, including disconnected members. It does not 
 Immediately after an external LAG change, RESTCONF may briefly report a member referencing a deleted LAG. Discovery waits for this inconsistency to clear within `operation_timeout`. If synchronization does not finish, discovery reports an error; allow the switch to synchronize, then rerun the plan.
 
 On tested FastIron `09.0.10kT213`, a deleted aggregate can also remain in RESTCONF without any member references. Recreating that identity through POST returns 409; PATCH may acknowledge the request without creating the native LAG, and DELETE may return 404 without clearing the cache. The provider reports this condition before attempting creation. Restore the parent through CLI before retrying.
+
+Deleting a cached parent after external CLI removal and STP reference cleanup has also timed out, leaving RESTCONF synchronization in progress and blocking CLI interface configuration. The provider does not attempt this cache-deletion workaround for an absent native LAG.
 
 A CLI-restored LAG with disabled members and separately managed STP flags has passed reboot persistence checks: running and saved configuration remained identical, queries matched and OpenTofu reported an empty plan.
 
